@@ -1,5 +1,11 @@
 # Changelog
 
+## Phase 7A — Complete UI/UX Overhaul (2026-11-11)
+- New game UI replaces the test shell: sticky header, left menu, 17 pages, right panel, special screens (combat, dungeon, events, NPC dialogue, gate travel).
+- Location Scene component (16:9) with themed placeholders. Real art plugs in through the asset manifest.
+- Responsive: desktop, tablet, mobile (bottom nav and drawer). Toasts, confirm modal, tooltips, loading and empty states. Debug only in developer mode.
+- No changes to src/core, src/systems, data or the save format.
+
 ## Phase 6 — Economy, B-Rank Content & Playstyle Balance (2026-11-11)
 - Economy system: services (once/repeat/plan) priced by rank, gear wear and repair, B upgrades to +5, home upgrades, lifestyle, insurance, guild investment and sponsorship, monthly ledger. No debt: unpaid fees pause the service, safety cash floor.
 - Missions v2: Association merit with tiers and decay, repeat-mission pay cut, solo EXP bonus, party member abilities.

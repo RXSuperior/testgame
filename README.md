@@ -4,7 +4,8 @@ Private project. A new build, separate from the old game "ต่างโลก�
 
 - Build: `python3 tools/build.py` → `dist/index.html`
 - Unit tests: `node tests/core.test.js`
-- Browser tests: `python3 tests/smoke.py` (Playwright)
+- Browser tests: `python3 tests/smoke.py` (Playwright) and `python3 tests/ui_smoke.py` (UI pages, modals, responsive)
+- Debug panel: open `dist/index.html?debug=1` or turn on developer mode in Settings
 - Balance sim: `node tests/sim.js 10 [active|idle]`
 - NPC performance: `node tests/perf.js`
 - Phase 5 performance (combat, dungeon, tower, party): `node tests/perf5.js`
@@ -17,7 +18,7 @@ Private project. A new build, separate from the old game "ต่างโลก�
 ```
 src/core/     engine core: ns, rng, bus, state, loop, worldtime, save, registry, assets, debug, engine
 src/systems/  worlds, player, rules, ranks, combat, events, missions, npcs, relations, family, health, life, gates, party, dungeon, tower, underground, economy
-src/ui/       shell.js (test page)
+src/ui/       game UI: theme.css, util, scene, layout, screens, pages_play, pages_world, app (docs/phase7a/COMPONENTS.md)
 src/template.html
 data/assets/  manifest.js (asset ids per world, all placeholders for now)
 data/shared/  people.js (tempers, traits, illnesses)

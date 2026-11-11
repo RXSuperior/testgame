@@ -1,7 +1,161 @@
-<!DOCTYPE html><html lang="th"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Multiverse Hunter (Phase 3)</title>
-<style>body{margin:0;background:#0d1118;color:#e6e8ee;font:14px/1.5 sans-serif}#app{max-width:900px;margin:auto;padding:12px}header{display:flex;flex-direction:column;margin-bottom:8px}header span{color:#9ab}
-canvas{width:100%;image-rendering:pixelated;background:#000;border:1px solid #2a3344}.row{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0}button{background:#1a2230;color:#e6e8ee;border:1px solid #2a3344;border-radius:6px;padding:6px 10px;cursor:pointer}
-pre{background:#0a0d13;padding:8px;max-height:220px;overflow:auto;font-size:11px}.err{color:#ff8a8a}.ok{color:#8fe3a0}.panel{background:#121a26;border:1px solid #2a3344;border-radius:8px;padding:8px;margin:6px 0}.card{background:#18233a;border:1px solid #4a6aa0;border-radius:8px;padding:10px;margin:6px 0}.card button{display:block;width:100%;text-align:left;margin:4px 0}button:disabled{opacity:.45;cursor:default}input,select{background:#0a0d13;color:#e6e8ee;border:1px solid #2a3344;border-radius:6px;padding:6px}</style></head><body><div id="app"></div>
+<!DOCTYPE html><html lang="th"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#0b0f1a"><title>Multiverse Hunter</title>
+<style>/* Multiverse Hunter UI theme (Phase 7A): Modern Hunter + Dark Fantasy + Korean Manhwa
+   สีทั้งหมดอยู่ในตัวแปรด้านล่าง เปลี่ยนธีมได้ที่เดียว · ไม่มี gameplay ในไฟล์นี้ */
+:root{
+ --bg:#0b0f1a;--bg2:#10162a;--panel:#141b2e;--panel2:#1a2340;--line:#27325a;--line2:#34427a;
+ --text:#e8ebf5;--muted:#9aa5c4;--dim:#6b7699;
+ --blue:#4cc3ff;--violet:#9b7bff;--gold:#f2c14e;--red:#ff5c6c;--green:#5fe3a1;
+ --glow:0 0 0 1px rgba(76,195,255,.35),0 0 18px rgba(76,195,255,.18);
+ --r:12px;--hdr:64px;--side:220px;--right:300px;
+ --font:"Sarabun","Noto Sans Thai","Leelawadee UI","Tahoma",system-ui,sans-serif;
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:radial-gradient(1200px 600px at 70% -10%,#1b1640 0,transparent 60%),radial-gradient(900px 500px at 0% 0%,#0e2340 0,transparent 55%),var(--bg);color:var(--text);font:15px/1.6 var(--font);min-height:100%}
+body{overflow-x:hidden}
+button{font:inherit;color:var(--text);background:var(--panel2);border:1px solid var(--line2);border-radius:10px;padding:8px 12px;cursor:pointer;min-height:38px;transition:border-color .15s,background .15s,transform .05s}
+button:hover:not(:disabled){border-color:var(--blue);background:#1f2a50}
+button:active:not(:disabled){transform:translateY(1px)}
+button:disabled{opacity:.45;cursor:not-allowed}
+button.pri{background:linear-gradient(135deg,#2a5bd7,#6a3fd6);border-color:transparent}
+button.danger,.err{color:var(--red)}
+button.danger{border-color:rgba(255,92,108,.5)}
+button.gold{border-color:rgba(242,193,78,.6);color:var(--gold)}
+button.ghost{background:transparent}
+button.sm{min-height:30px;padding:4px 10px;font-size:13px}
+button:focus-visible,[tabindex]:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+input,select,textarea{font:inherit;background:#0a0e1a;color:var(--text);border:1px solid var(--line2);border-radius:10px;padding:8px 10px;max-width:100%}
+.ok{color:var(--green)} .gold-t{color:var(--gold)} .muted{color:var(--muted)} .dim{color:var(--dim)} small{color:var(--muted)}
+pre{background:#080b14;border:1px solid var(--line);border-radius:10px;padding:10px;max-height:240px;overflow:auto;font-size:12px;white-space:pre-wrap;word-break:break-word}
+h2,h3,h4{margin:0 0 8px;font-weight:700;letter-spacing:.2px} h2{font-size:20px} h3{font-size:16px} h4{font-size:14px;color:var(--muted)}
+
+/* ---------- layout ---------- */
+.app{display:grid;grid-template-columns:var(--side) minmax(0,1fr) var(--right);grid-template-rows:var(--hdr) 1fr;grid-template-areas:"hdr hdr hdr" "side main right";min-height:100vh}
+.hdr{grid-area:hdr;position:sticky;top:0;z-index:30;display:flex;align-items:center;gap:14px;padding:8px 16px;background:rgba(11,15,26,.92);backdrop-filter:blur(8px);border-bottom:1px solid var(--line);min-width:0}
+.side{grid-area:side;position:sticky;top:var(--hdr);height:calc(100vh - var(--hdr));overflow-y:auto;padding:12px 10px;border-right:1px solid var(--line);background:rgba(16,22,42,.6)}
+.main{grid-area:main;padding:16px;min-width:0}
+.right{grid-area:right;position:sticky;top:var(--hdr);height:calc(100vh - var(--hdr));overflow-y:auto;padding:12px;border-left:1px solid var(--line);background:rgba(16,22,42,.5)}
+.bnav{display:none}
+.app.no-right{grid-template-columns:var(--side) minmax(0,1fr) 0}
+.app.no-right .right{display:none}
+
+/* ---------- header ---------- */
+.brand{font-weight:800;letter-spacing:.5px;white-space:nowrap;background:linear-gradient(90deg,var(--blue),var(--violet));-webkit-background-clip:text;background-clip:text;color:transparent}
+.hstats{display:flex;align-items:center;gap:14px;flex:1;min-width:0;overflow:hidden}
+.hstat{display:flex;flex-direction:column;min-width:0;font-size:12px;color:var(--muted);white-space:nowrap}
+.hstat b{color:var(--text);font-size:14px;overflow:hidden;text-overflow:ellipsis}
+.hctl{display:flex;gap:4px;align-items:center;flex-wrap:nowrap}
+.hctl button{min-height:32px;padding:4px 9px;font-size:13px}
+.hctl button.on{border-color:var(--blue);box-shadow:var(--glow)}
+.bar{position:relative;height:6px;width:90px;background:#0a0e1a;border-radius:6px;overflow:hidden;margin-top:3px}
+.bar>i{position:absolute;inset:0 auto 0 0;border-radius:6px}
+.bar.hp>i{background:linear-gradient(90deg,#ff5c6c,#ff9a6c)} .bar.mp>i{background:linear-gradient(90deg,#4cc3ff,#9b7bff)} .bar.xp>i{background:linear-gradient(90deg,#f2c14e,#ffe08a)}
+.rank{display:inline-flex;align-items:center;justify-content:center;min-width:28px;height:28px;padding:0 6px;border-radius:8px;font-weight:800;color:#1b1300;background:linear-gradient(135deg,#f2c14e,#ffe9a8);box-shadow:0 0 12px rgba(242,193,78,.35)}
+.rank.none{background:var(--panel2);color:var(--muted);box-shadow:none}
+.ap i{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:3px;background:#24304f;border:1px solid var(--line2)}
+.ap i.on{background:var(--blue);box-shadow:0 0 8px var(--blue)}
+#status{display:none} #world{font-size:12px;color:var(--muted);white-space:nowrap}
+.menu-btn{display:none}
+
+/* ---------- side nav ---------- */
+.nav{display:flex;flex-direction:column;gap:2px}
+.nav button{display:flex;align-items:center;gap:10px;width:100%;text-align:left;background:transparent;border-color:transparent;min-height:40px;color:var(--muted)}
+.nav button .ic{width:22px;text-align:center;font-size:16px}
+.nav button.active{color:var(--text);background:linear-gradient(90deg,rgba(76,195,255,.18),rgba(155,123,255,.08));border-color:rgba(76,195,255,.4)}
+.nav .sep{margin:10px 8px 4px;font-size:11px;color:var(--dim);text-transform:uppercase;letter-spacing:1px}
+
+/* ---------- cards & panels ---------- */
+.card,.panel{background:linear-gradient(180deg,rgba(26,35,64,.85),rgba(20,27,46,.92));border:1px solid var(--line);border-radius:var(--r);padding:14px;margin:0 0 12px}
+.panel.compact{padding:10px}
+.card.event{border-color:rgba(155,123,255,.55);box-shadow:0 0 30px rgba(155,123,255,.15)}
+.card.danger{border-color:rgba(255,92,108,.55)}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:6px 0}
+.grid{display:grid;gap:10px;grid-template-columns:repeat(auto-fill,minmax(220px,1fr))}
+.grid.sm{grid-template-columns:repeat(auto-fill,minmax(160px,1fr))}
+.tile{background:rgba(10,14,26,.6);border:1px solid var(--line);border-radius:10px;padding:10px;min-width:0}
+.tile .t{font-weight:700} .tile .s{font-size:13px;color:var(--muted)}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;font-size:14px} .kv span:nth-child(odd){color:var(--muted)}
+.badge{display:inline-block;padding:1px 8px;border-radius:999px;font-size:12px;border:1px solid var(--line2);color:var(--muted);white-space:nowrap}
+.badge.gold{color:var(--gold);border-color:rgba(242,193,78,.5)} .badge.red{color:var(--red);border-color:rgba(255,92,108,.5)} .badge.blue{color:var(--blue);border-color:rgba(76,195,255,.5)} .badge.vio{color:var(--violet);border-color:rgba(155,123,255,.5)}
+.sec-title{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:4px 0 10px}
+.empty{padding:18px;text-align:center;color:var(--dim);border:1px dashed var(--line2);border-radius:10px}
+.todo{padding:8px 10px;border:1px dashed rgba(242,193,78,.5);color:var(--gold);border-radius:10px;font-size:13px}
+.list>div{padding:8px 0;border-bottom:1px solid var(--line)} .list>div:last-child{border-bottom:0}
+.actions{display:flex;flex-wrap:wrap;gap:8px}
+.actions button{flex:0 1 auto}
+.choice-list{display:flex;flex-direction:column;gap:8px}
+.choice-list button{text-align:left;width:100%}
+
+/* ---------- scene ---------- */
+.scene{position:relative;width:100%;aspect-ratio:16/9;max-height:40vh;border-radius:var(--r);overflow:hidden;border:1px solid var(--line2);background:#000;margin-bottom:12px}
+.scene canvas{width:100%;height:100%;object-fit:cover;image-rendering:pixelated;display:block}
+.scene .cap{position:absolute;left:0;right:0;bottom:0;padding:24px 14px 10px;background:linear-gradient(transparent,rgba(5,8,16,.9))}
+.scene .cap b{font-size:18px} .scene .tag{position:absolute;top:10px;right:10px}
+
+/* ---------- special screens ---------- */
+.screen{border:1px solid rgba(155,123,255,.45);border-radius:var(--r);background:linear-gradient(180deg,rgba(28,22,58,.95),rgba(16,20,40,.95));padding:16px;margin-bottom:12px;box-shadow:0 10px 40px rgba(0,0,0,.35)}
+.screen.combat{border-color:rgba(255,92,108,.55)}
+.screen h2{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.vs{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.unit{background:rgba(10,14,26,.6);border:1px solid var(--line);border-radius:10px;padding:8px 10px;margin-bottom:6px}
+.unit .bar{width:100%}
+.unit.down{opacity:.5}
+.app.focus .page{display:none!important}
+.app.focus .page.show-in-focus{display:block!important}
+.focus-note{margin-bottom:10px}
+.page{display:none}
+.page.active{display:block}
+
+/* ---------- right panel ---------- */
+.right .panel{padding:10px} .right h4{margin-bottom:6px}
+.feed small{display:block;padding:3px 0;border-bottom:1px solid rgba(39,50,90,.6)}
+
+/* ---------- overlays ---------- */
+#modal:empty,#combat:empty,#adv:empty,#create:empty{display:none}
+.backdrop{position:fixed;inset:0;z-index:60;background:rgba(3,5,12,.7);display:flex;align-items:center;justify-content:center;padding:16px}
+.dialog{width:min(480px,100%);max-height:90vh;overflow:auto;background:var(--panel);border:1px solid var(--line2);border-radius:var(--r);padding:16px;box-shadow:0 20px 60px rgba(0,0,0,.5)}
+.dialog.wide{width:min(640px,100%)}
+#toasts{position:fixed;right:16px;bottom:16px;z-index:80;display:flex;flex-direction:column;gap:8px;max-width:min(360px,calc(100vw - 32px))}
+.toast{background:var(--panel2);border:1px solid var(--line2);border-left:4px solid var(--blue);border-radius:10px;padding:10px 12px;box-shadow:0 8px 24px rgba(0,0,0,.4);animation:tin .2s ease-out}
+.toast.bad{border-left-color:var(--red)} .toast.good{border-left-color:var(--green)}
+@keyframes tin{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+.loading{padding:40px;text-align:center;color:var(--muted)}
+
+/* ---------- debug ---------- */
+.devp{border-color:rgba(242,193,78,.4)}
+.devp summary{cursor:pointer;color:var(--gold)}
+
+/* ---------- tablet ---------- */
+@media (max-width:1199px){
+ .app{grid-template-columns:200px minmax(0,1fr);grid-template-areas:"hdr hdr" "side main" "side right"}
+ .right{position:static;height:auto;border-left:0;border-top:1px solid var(--line)}
+ .app.no-right{grid-template-columns:200px minmax(0,1fr)}
+ .hstat.opt{display:none}
+}
+/* ---------- mobile ---------- */
+@media (max-width:767px){
+ :root{--hdr:auto}
+ .app,.app.no-right{grid-template-columns:minmax(0,1fr);grid-template-areas:"hdr" "main" "right";padding-bottom:72px}
+ .hdr{flex-wrap:wrap;gap:8px;padding:8px 10px}
+ .brand{display:none}
+ .hstats{order:2;width:100%;gap:10px;overflow-x:auto;flex:1 1 100%}
+ .hstat.opt,.hstat.opt2{display:none}
+ .hctl{order:1;margin-left:auto;flex-wrap:wrap}
+ .menu-btn{display:inline-flex}
+ .opt-right{display:none}
+ .side{position:fixed;inset:0 25% 0 0;z-index:70;height:100vh;transform:translateX(-105%);transition:transform .2s;background:var(--bg2);top:0}
+ .side.open{transform:none;box-shadow:0 0 0 100vw rgba(3,5,12,.6)}
+ .main{padding:10px}
+ .bnav{display:flex;position:fixed;left:0;right:0;bottom:0;z-index:40;background:rgba(11,15,26,.96);border-top:1px solid var(--line);padding:6px 4px calc(6px + env(safe-area-inset-bottom))}
+ .bnav button{flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;gap:0;background:transparent;border-color:transparent;font-size:11px;min-height:52px;padding:4px 2px;color:var(--muted)}
+ .bnav button .ic{font-size:18px}
+ .bnav button.active{color:var(--blue)}
+ .vs{grid-template-columns:1fr}
+ .grid{grid-template-columns:1fr}
+ .scene{max-height:none}
+ button{min-height:44px}
+ #toasts{left:12px;right:12px;bottom:80px;max-width:none}
+}
+</style></head><body><div id="app" class="app"><div class="loading">กำลังโหลดโลกฮันเตอร์…</div></div>
 <script>// ==== src/core/ns.js ====
 // Namespace กลาง: ทุกโมดูลลงทะเบียนที่ AW ไม่สร้างตัวแปร global อื่น
 (function(g){g.AW=g.AW||{core:{},systems:{},data:{worlds:[],assets:[]},ui:{}}})(globalThis);
@@ -3007,147 +3161,403 @@ AW.data.worlds.push({
 });
 })(globalThis.AW);
 
-// ==== src/ui/shell.js ====
-// หน้าเล่น Phase 4 (ชีวิต คน ครอบครัว งาน สุขภาพ) + เครื่องมือทดสอบ (เวลา เซฟ debug gate)
-// UI อ่าน state และเรียก API ของระบบเท่านั้น ไม่มีกติกาเกมในไฟล์นี้
-// ปุ่มที่สร้างใหม่ทุกครั้งใช้ event delegation (data-*) จึงกดได้แม้เวลาเดินเร็ว
+// ==== src/ui/util.js ====
+// UI helpers (Phase 7A): escape, bars, badges, toast, confirm modal, page registry
+// UI ทุกไฟล์อ่าน state และเรียก API ของระบบเท่านั้น ไม่มีกติกาเกมใน src/ui
 (function(AW){
-const $=s=>document.querySelector(s),esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-let result=null,_last=0;
+'use strict';
+const U=AW.ui.u={};
+U.$=s=>document.querySelector(s);
+U.esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+U.n=v=>Number(v||0).toLocaleString('th-TH');
+U.pct=(v,m)=>Math.max(0,Math.min(100,m?Math.round(v/m*100):0));
+U.bar=(kind,v,m,label)=>`<div class="bar ${kind}" title="${U.esc(label||'')} ${Math.max(0,Math.round(v))}/${m}"><i style="width:${U.pct(v,m)}%"></i></div>`;
+U.badge=(t,c='')=>`<span class="badge ${c}">${U.esc(t)}</span>`;
+U.rank=r=>r?`<span class="rank" title="แรงก์ฮันเตอร์">${U.esc(r)}</span>`:'<span class="rank none" title="ยังไม่มีแรงก์">-</span>';
+U.empty=t=>`<div class="empty">${U.esc(t)}</div>`;
+U.todo=t=>`<div class="todo">TODO: ${U.esc(t)}</div>`;
+U.RISK={normal:'',high:' ⚠ เสี่ยงสูง (อาจวิกฤต)',lethal:' ☠ อันตรายถึงชีวิต (อาจตายถาวร)'};
+U.RISKB={normal:'',high:'<span class="badge red">เสี่ยงสูง</span>',lethal:'<span class="badge red">☠ ถึงชีวิต</span>'};
+U.SLOT={morning:'เช้า',day:'กลางวัน',evening:'เย็น',night:'กลางคืน'};
+U.STAT_TIP={str:'กาย: พลังโจมตีระยะประชิดและการแบกรับ',agi:'ความเร็ว: หลบหลีกและลงมือก่อน',int:'ปัญญา: เวทมนตร์ การวิเคราะห์ และงานสำนักงาน',vit:'ความอึด: พลังชีวิตสูงสุดและการฟื้นตัว',cha:'เสน่ห์: การเจรจาและความสัมพันธ์',luk:'โชค: โอกาสสำเร็จเล็กน้อยในทุกการทอย'};
+// ---- toast ----
+U.toast=(msg,kind='')=>{const box=U.$('#toasts');if(!box)return;const d=document.createElement('div');d.className='toast '+kind;d.setAttribute('role','status');d.textContent=msg;box.appendChild(d);setTimeout(()=>d.remove(),3200)};
+// ---- confirm modal (การกระทำสำคัญ) · ไม่ใช้ dialog ของเบราว์เซอร์ ----
+let pending=null;
+U.confirm=(title,text,fn,{yes='ยืนยัน',danger=false}={})=>{pending=fn;const el=U.$('#confirm');el.innerHTML=`<div class="backdrop" data-cf="no"><div class="dialog" role="dialog" aria-modal="true" aria-labelledby="cft"><h3 id="cft">${U.esc(title)}</h3><p>${U.esc(text)}</p><div class="row" style="justify-content:flex-end"><button data-cf="no" class="ghost">ยกเลิก</button><button data-cf="yes" class="${danger?'danger':'pri'}">${U.esc(yes)}</button></div></div></div>`;
+ const b=el.querySelector('[data-cf=yes]');if(b)b.focus()};
+U.confirmClick=(e)=>{const t=e.target.closest('[data-cf]');if(!t)return false;if(t.dataset.cf==='no'&&t!==e.target&&t.classList.contains('backdrop'))return true;
+ const fn=pending;pending=null;U.$('#confirm').innerHTML='';if(t.dataset.cf==='yes'&&fn)fn();return true};
+// ---- page registry ----
+AW.ui.pages=AW.ui.pages||[];
+U.page=(id,o)=>AW.ui.pages.push(Object.assign({id},o));
+})(globalThis.AW);
+
+// ==== src/ui/scene.js ====
+// Location Scene component (Phase 7A): เลือกภาพฉากจากสถานที่/กิจกรรมปัจจุบัน แล้ววาดลง canvas 16:9 (576x324)
+// ภาพมาจาก asset manifest ทั้งหมด: ใส่ src+license ใน data/assets/manifest.js แล้วฉากเปลี่ยนเป็นภาพจริงเอง ไม่ต้องแก้ไฟล์นี้
+(function(AW){
+'use strict';
+const U=AW.ui.u;
+// ฉากพิเศษ (ไม่ได้มาจาก location.bg): ใช้เมื่ออยู่ในดันเจี้ยน/หอคอย/การต่อสู้
+const SPECIAL={dungeon:'bg.dungeon_cave',dungeonB:'bg.dungeon_ruins',combat:'bg.gate_red',night:'bg.city_night'};
+function sceneOf(E){const p=E.player.get(),w=p.location.world||E.worlds.current,c=w&&E.worlds.ctx(w);
+ if(!c)return{asset:'hunter.bg.city_day',title:'-',sub:''};const ns=c.def.assetNs,loc=c.locations.get(p.location.loc)||c.locations.get(c.def.entry);
+ const slot=E.npcs&&p.created?E.npcs.clock(w).slot:'day',run=E.dungeon&&E.dungeon.run();let asset=ns+'.'+loc.bg,title=loc.name,sub=U.SLOT[slot]||'';
+ if(run&&run.status==='active'){const g=E.dungeon.def(run.dungeon);asset=ns+'.'+(g&&'BAS'.includes(g.rank)?SPECIAL.dungeonB:SPECIAL.dungeon);title=g?g.name:title;sub='ดันเจี้ยน'}
+ else if(E.combat&&E.combat.session()&&E.combat.session().status==='active')asset=ns+'.'+SPECIAL.combat;
+ else if((slot==='evening'||slot==='night')&&loc.bg==='bg.city_day'&&E.assets.defs.has(ns+'.'+SPECIAL.night))asset=ns+'.'+SPECIAL.night;
+ return{asset,title,sub,desc:loc.desc||'',world:c.def.name}}
+function html(E){const s=sceneOf(E);return `<div class="scene" id="scene" data-asset="${U.esc(s.asset)}" data-title="${U.esc(s.title)}"><canvas id="stage" width="576" height="324" aria-label="${U.esc(s.title)}"></canvas>
+ <span class="tag badge blue">${U.esc(s.world)}</span><div class="cap"><b>${U.esc(s.title)}</b> <span class="muted">· ${U.esc(s.sub)}</span>${s.desc?`<div class="muted" style="font-size:13px">${U.esc(s.desc)}</div>`:''}</div></div>`}
+// ยังไม่มีภาพจริง: วาดฉากชั่วคราวตามธีม (ขนาด 576x324 เท่าภาพจริง) พร้อมรหัส asset ที่ต้องสร้างใน Phase 7B
+function placeholder(g,id,title){const gr=g.createLinearGradient(0,0,576,324);gr.addColorStop(0,'#14204a');gr.addColorStop(.6,'#22164a');gr.addColorStop(1,'#0b0f1a');g.fillStyle=gr;g.fillRect(0,0,576,324);
+ g.strokeStyle='rgba(76,195,255,.12)';g.lineWidth=1;for(let x=0;x<=576;x+=32){g.beginPath();g.moveTo(x,0);g.lineTo(x,324);g.stroke()}for(let y=0;y<=324;y+=32){g.beginPath();g.moveTo(0,y);g.lineTo(576,y);g.stroke()}
+ g.fillStyle='rgba(10,14,26,.55)';g.beginPath();g.moveTo(0,250);for(let x=0;x<=576;x+=48)g.lineTo(x,200+((x*7)%60));g.lineTo(576,324);g.lineTo(0,324);g.fill();
+ g.fillStyle='rgba(242,193,78,.85)';g.font='12px monospace';g.fillText('PLACEHOLDER · '+id+' · 576x324',12,20);g.fillStyle='rgba(232,235,245,.25)';g.font='bold 28px sans-serif';g.fillText(title,12,60)}
+function draw(){const cv=U.$('#stage'),el=U.$('#scene');if(!cv||!el)return;const E=AW.engine,g=cv.getContext('2d'),id=el.dataset.asset,d=E.assets.defs.get(id);g.imageSmoothingEnabled=false;g.clearRect(0,0,576,324);
+ if(d&&E.assets.usable(d))g.drawImage(E.assets.get(id),0,0,576,324);else placeholder(g,id,el.dataset.title||'');
+ const ch=E.assets.defs.get('shared.char.base_m');if(E.player.get().created&&ch&&E.assets.usable(ch))g.drawImage(E.assets.get('shared.char.base_m'),248,250,80,64)}
+AW.ui.scene={sceneOf,html,draw,SPECIAL};
+})(globalThis.AW);
+
+// ==== src/ui/layout.js ====
+// Layout components (Phase 7A): sticky header · เมนูซ้าย · เมนูล่าง (มือถือ) · แผงขวา
+(function(AW){
+'use strict';
+const U=AW.ui.u,esc=U.esc;
+// ---- header: ชื่อ อายุ/เดือน HP MP เงิน แรงก์ เลเวล/EXP AP เวลา ความเร็ว ----
+function header(E){const P=E.player,p=P.get(),m=E.loop.month,rs=E.worlds.current&&E.worlds.ctx(E.worlds.current),rank=p.created&&rs&&rs.config.rankSystem?p.ranks[rs.config.rankSystem.id]:null;
+ const age=p.created?`${Math.floor(p.age/12)} ปี ${p.age%12} ด.`:'-',speed=E.loop.paused||!E.loop.speed?'หยุด':E.loop.speed+'x';
+ const stats=p.created?`<div class="hstat" title="ชื่อตัวละคร"><span>${esc(p.class?P.className(p.class):'ยังไม่ตื่นพลัง')}</span><b>${esc(p.name)}</b></div>
+  <div class="hstat" title="แรงก์ฮันเตอร์">${U.rank(rank)}</div>
+  <div class="hstat" title="พลังชีวิต"><span>HP ${Math.max(0,p.hp)}/${P.maxHp()}</span>${U.bar('hp',p.hp,P.maxHp(),'HP')}</div>
+  <div class="hstat opt2" title="มานาสูงสุดในการต่อสู้"><span>MP ${P.maxMp()}</span>${U.bar('mp',P.maxMp(),P.maxMp(),'MP')}</div>
+  <div class="hstat" title="เงิน"><span>เงิน</span><b class="gold-t">${U.n(p.money)}</b></div>
+  <div class="hstat opt" title="เลเวลและค่าประสบการณ์"><span>Lv ${p.level}</span>${U.bar('xp',p.exp,P.expNeed(),'EXP')}</div>
+  <div class="hstat" title="แรงกายต่อเดือน (AP) ใช้ทำกิจกรรม/ภารกิจ"><span>AP</span><span class="ap">${[0,1].map(i=>`<i class="${i<p.ap?'on':''}"></i>`).join('')}</span></div>
+  <div class="hstat opt" title="อายุ"><span>อายุ</span><b>${age}</b></div>`:'<div class="hstat"><b>ยังไม่สร้างตัวละคร</b></div>';
+ return `<button class="menu-btn ghost sm" data-nav-toggle="1" aria-label="เปิดเมนู">☰</button><span class="brand">MULTIVERSE HUNTER</span>
+ <div class="hstats">${stats}<div class="hstat opt" title="เดือนของเกม"><span>เดือน ${m} · ${esc(speed)}</span><span id="world"></span></div></div>
+ <div class="hctl" role="group" aria-label="ควบคุมเวลา">${[0,1,3,10].map(s=>`<button data-s="${s}" class="${(!E.loop.paused||s===0)&&E.loop.speed===s?'on':''}" title="${s?'ความเร็ว '+s+'x':'หยุดเวลา'}">${s?s+'x':'⏸'}</button>`).join('')}<button id="step" title="ข้ามไป 1 เดือน">+1 เดือน</button><button id="menu" class="${E.loop.reasons.has('menu')?'on':''}" title="หยุด/เดินเวลา (เมนู)">⏯</button><button data-a="toggleRight" class="opt-right ${AW.ui.state.right?'on':''}" title="แสดง/ซ่อนแผงข้าง" aria-label="แสดงหรือซ่อนแผงข้าง">▤</button></div><span id="status"></span>`}
+function worldLine(E){const cur=E.worlds.current,tr=E.state.get('worlds_time').traveling;
+ return `โลก: ${tr?'กำลังเดินทาง':cur?(E.worlds.ctx(cur)?E.worlds.ctx(cur).def.name:cur+' (ยังไม่ติดตั้ง)'):'-'}`}
+function statusLine(E){const m=E.loop.month,meta=E.state.get('meta');return `เดือน ${m} · seed ${meta.seed} · ${E.loop.paused?'หยุด: '+[...E.loop.reasons].join(', '):'ความเร็ว '+E.loop.speed+'x'}`}
+// ---- เมนู ----
+const NAV=[['dashboard','⌂','หน้าหลัก'],['character','☺','ตัวละคร'],['inventory','▣','กระเป๋า'],['skills','✦','สกิล'],['equipment','⚔','อุปกรณ์'],['party','⚑','ทีม'],['missions','✉','ภารกิจ'],['map','⌖','แผนที่ / โลก'],
+ ['relations','♡','ความสัมพันธ์'],['family','⌂','ครอบครัว'],['economy','¤','การเงิน'],['sep','','ฮันเตอร์'],['association','⛨','สมาคมฮันเตอร์'],['guild','⚜','กิลด์'],['dungeon','⛰','ดันเจี้ยน'],['tower','♜','หอคอย'],['market','☾','ตลาดมืด'],['sep','','ระบบ'],['settings','⚙','ระบบ / ตั้งค่า']];
+const BNAV=[['dashboard','⌂','หน้าหลัก'],['character','☺','ตัวละคร'],['missions','✉','ภารกิจ'],['map','⌖','แผนที่'],['more','☰','เมนู']];
+function side(cur){return `<nav class="nav" aria-label="เมนูหลัก">${NAV.map(([id,ic,t])=>id==='sep'?`<div class="sep">${esc(t)}</div>`:`<button data-nav="${id}" class="${id===cur?'active':''}" ${id===cur?'aria-current="page"':''}><span class="ic">${ic}</span>${esc(t)}</button>`).join('')}</nav>`}
+function bnav(cur){return BNAV.map(([id,ic,t])=>`<button ${id==='more'?'data-nav-toggle="1"':`data-nav="${id}"`} class="${id===cur?'active':''}"><span class="ic">${ic}</span>${esc(t)}</button>`).join('')}
+// ---- แผงขวา: NPC ที่พบ · งานที่ทำอยู่ · เหตุการณ์ล่าสุด · ข่าวโลก · บันทึกประจำเดือน ----
+function right(E){const p=E.player.get();if(!p.created)return '<div class="panel"><h4>ยินดีต้อนรับ</h4><small>สร้างตัวละครเพื่อเริ่มเล่น</small></div>';
+ const met=E.rels.list('player',{dir:'in'}).filter(x=>E.npcs.get(x.from)).sort((a,b)=>(b.last||0)-(a.last||0)).slice(0,6);
+ const active=[];const s=E.combat.session(),r=E.dungeon.run(),pm=E.missions.get().pending,ta=E.tower.get().attempt,ev=E.events.pending();
+ if(s&&s.status==='active')active.push(`การต่อสู้ รอบ ${s.round}`);if(pm)active.push('ภารกิจ: '+((E.missions.def(pm.q)||{}).name||pm.q));if(r&&r.status==='active')active.push('สำรวจ: '+((E.dungeon.def(r.dungeon)||{}).name||''));
+ if(ta)active.push('ปีนหอคอยชั้น '+ta.floor);if(ev)active.push('เหตุการณ์: '+ev.def.title);
+ const log=E.events.get().log,news=log.filter(l=>/ข่าว|เกต|หอคอย/.test(l.t)).slice(0,4),EL=E.economy.get().ledger[0],LL=E.life.get().ledger[0];
+ return `<div class="panel"><h4>งานที่กำลังทำ</h4>${active.length?active.map(a=>`<small>• ${esc(a)}</small>`).join('<br>'):'<small class="dim">ว่าง</small>'}</div>
+ <div class="panel"><h4>คนที่รู้จัก</h4>${met.length?met.map(x=>{const n=E.npcs.get(x.from);return `<div class="row" style="margin:2px 0"><button class="sm ghost" data-dlg="${x.from}" title="เปิดบทสนทนา">${esc(n.name)}</button><small>${esc(E.rels.typeName(E.rels.type(x.from,'player'))||'')} ${x.aff}</small></div>`}).join(''):'<small class="dim">ยังไม่รู้จักใคร</small>'}</div>
+ <div class="panel"><h4>เหตุการณ์ล่าสุด</h4><div class="feed" id="journal">${log.slice(0,8).map(l=>`<small>เดือน ${l.m}: ${esc(l.t)}</small>`).join('')||'<small class="dim">ยังไม่มี</small>'}</div></div>
+ <div class="panel"><h4>ข่าวสารโลก</h4><div class="feed">${news.map(l=>`<small>${esc(l.t)}</small>`).join('')||'<small class="dim">ยังไม่มีข่าว</small>'}</div></div>
+ <div class="panel"><h4>บันทึกประจำเดือน</h4>${EL?`<small>เดือน ${EL.m}: รับ <span class="ok">${U.n(EL.in)}</span> · จ่าย <span class="err">${U.n(EL.out)}</span></small>`:'<small class="dim">ยังไม่มี</small>'}${LL&&LL.note?`<br><small>${esc(LL.note)}</small>`:''}</div>`}
+AW.ui.layout={header,worldLine,statusLine,side,bnav,right,NAV};
+})(globalThis.AW);
+
+// ==== src/ui/screens.js ====
+// Special screens (Phase 7A): สร้างตัวละคร · เหตุการณ์/ผลลัพธ์/สิ้นชีวิต · การต่อสู้ · สำรวจดันเจี้ยน · บทสนทนา NPC · เดินทางผ่าน Gate
+// หน้าพิเศษแสดงแทนเนื้อหาปกติ (โหมด focus) เพื่อไม่ให้ Dashboard แย่งพื้นที่
+(function(AW){
+'use strict';
+const U=AW.ui.u,esc=U.esc,S=AW.ui.screens={};
+S.create=E=>{const p=E.player.get();return p.created?'':`<div class="screen"><h2>เริ่มชีวิตใหม่ในโลกฮันเตอร์</h2><p class="muted">อายุ 15 ปี นักเรียน ม.4 · เกตเปิดมาได้ 20 ปี วันหนึ่งท่านอาจตื่นพลัง</p>
+ <div class="row"><label>ชื่อ <input id="pname" maxlength="20" placeholder="ซอนอู" autocomplete="off"></label><label>เพศ <select id="pgender"><option value="m">ชาย</option><option value="f">หญิง</option></select></label></div>
+ <div class="row"><button id="pcreate" class="pri">เริ่มเล่น</button></div></div>`};
+// เหตุการณ์ที่ต้องตอบ · ผลลัพธ์ล่าสุด · สิ้นสุดชีวิต (ใช้ id #modal เดิม)
+S.modal=(E,result)=>{const pp=E.player.get();
+ if(pp.created&&!pp.alive&&!result){const L=E.health.get().lives.slice(-1)[0]||{};
+  return `<div class="screen card danger" role="dialog" aria-label="สิ้นสุดชีวิต"><h2>สิ้นสุดชีวิตของ ${esc(L.name||pp.name)}</h2><p>จากไปเมื่ออายุ ${L.ageY} ปี สาเหตุ: ${esc(L.cause||'')}</p>
+  <div class="kv"><span>อาชีพ</span><span>${L.class?esc(E.player.className(L.class)):'ไม่ได้ตื่นพลัง'}</span><span>แรงก์</span><span>${esc(Object.values(L.ranks||{}).join(' ')||'-')}</span><span>เลเวล</span><span>${L.level}</span><span>กรรม</span><span>${L.karma}</span><span>ทรัพย์สิน</span><span>${U.n(L.assets?L.assets.money:0)}</span></div>
+  <p>คนสำคัญ: ${(L.people||[]).slice(0,5).map(x=>esc(x.name)+' ('+esc(E.rels.typeName(x.type))+')').join(', ')||'-'}</p><p>ครอบครัว: ${L.family?L.family.members.map(m=>esc(m.name||'')+' '+esc(E.family.roleName(m.role))+(m.alive?'':' (จากไปแล้ว)')).join(', '):'-'}</p>
+  <p><small>ประวัติชีวิตถูกบันทึกไว้แล้ว (ยังไม่มีการเล่นต่อเป็นรุ่นลูก)</small></p><button id="new2" class="pri">เริ่มชีวิตใหม่</button></div>`}
+ if(result){const r=result;return `<div class="screen card event" role="dialog" aria-label="${esc(r.title)}"><h2>${esc(r.title)}</h2>${r.choice?`<p class="muted">› ${esc(r.choice)}</p>`:''}${r.fight?`<pre>${r.fight.lines.map(esc).join('\n')}</pre>`:''}
+  <p>${r.success===false?'<span class="err">ไม่สำเร็จ</span> ':''}${esc(r.text||'')}</p>${r.effects&&r.effects.length?`<p class="ok">${r.effects.map(esc).join(' · ')}</p>`:''}<div class="row"><button data-ok="1" class="pri">ตกลง</button></div></div>`}
+ const p=E.events.pending();if(!p)return '';const who=p.who&&E.npcs.get(p.who);
+ return `<div class="screen card event" role="dialog" aria-label="${esc(p.def.title)}"><h2>${esc(p.def.title)} ${who?U.badge(who.name,'vio'):''}</h2><p>${esc(E.events.fmt(p.def.text,p.who))}</p>
+ <div class="choice-list">${E.events.choices().map(c=>`<button data-choice="${c.i}" ${c.ok?'':'disabled'}>${esc(c.text)}${c.chance<1?` <span class="badge blue">${Math.round(c.chance*100)}%</span>`:''}${c.ok?'':' · '+esc(c.lockText||'เลือกไม่ได้')}</button>`).join('')}</div></div>`};
+// การต่อสู้แบบเลือกท่า
+S.combat=E=>{const s=E.combat.session();if(!s)return '';const RK={normal:'ปกติ',high:'เสี่ยงสูง',lethal:'อันตรายถึงชีวิต'};
+ const unit=(n,hp,max,extra='',down=false)=>`<div class="unit ${down?'down':''}"><div class="row" style="margin:0;justify-content:space-between"><b>${esc(n)}</b><small>${extra}</small></div>${U.bar('hp',hp,max,'HP')}<small>HP ${Math.max(0,Math.round(hp))}/${max}</small></div>`;
+ return `<div class="screen combat" role="region" aria-label="การต่อสู้"><h2>⚔ การต่อสู้ · รอบ ${s.round} ${U.badge('ความเสี่ยง: '+RK[s.risk],s.risk==='normal'?'':'red')}${s.me.critical?U.badge('อาการวิกฤต','red'):''}</h2>
+ <div class="vs"><div><h4>ฝ่ายเรา</h4>${unit(s.me.name,s.me.hp,s.me.max,`MP ${Math.round(s.me.mp)}/${s.me.maxMp}`)}${s.party.map(m=>unit(m.name,m.hp,m.max,E.party.roleName(m.role)+(m.down?' · หมดสภาพ':''),m.down)).join('')}</div>
+ <div><h4>ศัตรู</h4>${s.foes.map(f=>unit(f.name,f.hp,f.max,(f.enraged?'คลั่ง ':'')+(f.shield>0?'โล่ ':'')+(f.armor?'เกราะ':''),f.hp<=0)).join('')}</div></div>
+ <pre aria-live="polite">${s.log.slice(-6).map(esc).join('\n')}</pre>
+ ${s.status==='active'?`<div class="actions">${E.combat.options().map(o=>`<button data-cact="${o.type}" data-cid="${o.id||''}" ${o.why?'disabled':''} class="${o.type==='retreat'?'danger':o.type==='skill'?'pri':''}">${esc(o.name)}${o.why?' · '+esc(o.why):''}</button>`).join('')}</div>`:'<small>จบการต่อสู้แล้ว</small>'}</div>`};
+// ดันเจี้ยน: กำลังสำรวจหรือเพิ่งจบ (ใช้ id #adv เดิม)
+S.dungeonRun=E=>{const r=E.dungeon.run();if(!r)return '';const g=E.dungeon.def(r.dungeon),cur=E.dungeon.current();
+ return `<div class="screen" role="region" aria-label="ดันเจี้ยน"><h2>⛰ ${esc(g.name)} ${U.badge('แรงก์ '+g.rank,'gold')} ${r.status==='active'?U.badge(`ชั้น ${cur?cur.floor+1:'-'}/${g.floors} · ห้อง ${cur?cur.index+1:'-'}/${cur?cur.rooms:'-'}`,'blue'):U.badge('จบแล้ว ('+r.status+')')}</h2>
+ <div class="kv"><span>ความยาก</span><span>x${r.mult}</span><span>ของที่เก็บได้</span><span>เงิน ${U.n(r.loot.money)} · EXP ${U.n(r.loot.exp)}${Object.keys(r.loot.items).length?' · ไอเทม '+Object.values(r.loot.items).reduce((a,b)=>a+b,0)+' ชิ้น':''}</span></div>
+ <pre>${r.log.slice(-6).map(esc).join('\n')}</pre>
+ <div class="actions">${r.status==='active'?(r.waiting?'<small>จัดการห้องนี้ก่อน (เหตุการณ์หรือการต่อสู้)</small>':`<button data-dg="advance" class="pri">ไปห้องถัดไป</button><button data-dg="leave">ออกจากดันเจี้ยน (ได้ของครบ)</button>`):`<button data-dg="close" class="pri">ปิด</button>`}</div></div>`};
+// บทสนทนา NPC (เปิดจากรายชื่อคน)
+S.dialogue=(E,q)=>{const n=q&&E.npcs.get(q);if(!n)return '';const x=E.rels.edge(q,'player'),t=E.rels.type(q,'player'),here=E.npcs.at(n.world,E.player.get().location.loc).some(m=>m.id===q),mem=(n.memory||[]).slice(0,3);
+ const job=n.role||n.occupationName||((E.worlds.ctx(n.world).list('jobs').get(n.occupation)||{}).name)||'';const cb=E.party.combatOf(q);
+ return `<div class="backdrop" data-dlgclose="1"><div class="dialog wide" role="dialog" aria-modal="true" aria-label="คุยกับ ${esc(n.name)}"><div class="row" style="justify-content:space-between;margin:0"><h3>${esc(n.name)} ${U.badge(job)}</h3><button class="sm ghost" data-dlgclose="1" aria-label="ปิด">✕</button></div>
+ <div class="grid sm"><div class="tile"><div class="s">อายุ</div><div class="t">${E.npcs.ageY(q)} ปี${n.alive?'':' (จากไปแล้ว)'}</div></div><div class="tile"><div class="s">ความสัมพันธ์</div><div class="t">${t?esc(E.rels.typeName(t)):'ยังไม่รู้จัก'}</div></div>
+ <div class="tile" title="ความชอบ"><div class="s">ชอบ</div><div class="t">${x?x.aff:0}</div></div><div class="tile" title="ความไว้ใจ"><div class="s">ไว้ใจ</div><div class="t">${x?x.trust:0}</div></div>${cb?`<div class="tile"><div class="s">สายต่อสู้</div><div class="t">${esc(E.party.roleName(cb.role))}</div></div>`:''}</div>
+ ${mem.length?`<h4 style="margin-top:10px">ความทรงจำล่าสุด</h4>${mem.map(m=>`<small>• ${esc(m.t||m)}</small>`).join('<br>')}`:''}
+ <div class="actions" style="margin-top:12px">${here&&n.alive?E.rels.actions(q).map(a=>`<button data-npc="${q}" data-ia="${a.id}" ${a.why?'disabled':''} title="${esc(a.why)}">${esc(a.name)}${a.why?' · '+esc(a.why):''}</button>`).join('')+(cb&&!E.party.isMember(q)?`<button data-invite="${q}" ${E.party.canInvite(q)?'disabled':''} title="${esc(E.party.canInvite(q))}">ชวนเข้าทีม</button>`:''):'<small class="dim">ต้องอยู่ที่เดียวกันจึงจะคุยได้</small>'}</div></div></div>`};
+// เดินทางผ่าน Gate (ฝั่งเกมเพลย์)
+S.gates=E=>{const l=E.gates.list();return l.length?`<div class="grid">${l.map(g=>`<div class="tile"><div class="t">🌀 ${esc(g.name)}</div><div class="s">${g.months?`ใช้เวลา ${g.months} เดือน`:'เดินทางทันที'}${g.why?' · '+esc(g.why):''}</div><div class="row"><button data-pgate="${g.id}" ${g.why?'disabled':''} class="pri sm">เดินทาง</button></div></div>`).join('')}</div>`:''};
+})(globalThis.AW);
+
+// ==== src/ui/pages_play.js ====
+// Pages (Phase 7A, ส่วนที่ 1): หน้าหลัก · ตัวละคร · กระเป๋า · สกิล · อุปกรณ์ · ทีม · ภารกิจ
+// ทุกหน้าดึงข้อมูลจาก API ของระบบจริง ปุ่มทุกปุ่มเรียก API (ผ่าน data-* ใน app.js)
+(function(AW){
+'use strict';
+const U=AW.ui.u,esc=U.esc,page=U.page;
+const alive=E=>{const p=E.player.get();return p.created&&p.alive};
+const sec=(title,body,id='',extra='')=>body?`<div class="panel" ${id?`id="${id}"`:''}><div class="sec-title"><h3>${title}</h3>${extra}</div>${body}</div>`:(id?`<div id="${id}"></div>`:'');
+const kindName={active:'โจมตี',passive:'ติดตัว',support:'สนับสนุน'};
+// ---------- หน้าหลัก: ฉาก + สิ่งที่ทำได้ที่สถานที่นี้ ----------
+function locs(E){const p=E.player.get(),c=E.worlds.ctx(p.location.world);if(!c)return '';
+ return [...c.locations.values()].map(l=>`<button data-loc="${l.id}" ${l.id===p.location.loc||!E.player.canEnter(l.id)||E.events.get().pending?'disabled':''} title="${esc(l.desc||'')}" class="${l.id===p.location.loc?'gold':''} sm">${esc(l.name)}</button>`).join('')}
+function acts(E){const a=E.events.actions();return a.length?a.map(x=>`<button data-act="${x.id}" ${x.ok?'':'disabled'}>${esc(x.title)}${x.ap?` <span class="badge">AP ${x.ap}</span>`:''}</button>`).join(''):''}
+function miss(E){const m=E.missions.available();return m.length?`<div class="grid">${m.map(x=>`<div class="tile"><div class="t">${U.badge(x.rank,'gold')} ${esc(x.name)}</div><div class="s">ศัตรู: ${esc(x.enemy)} · โอกาส ${Math.round(x.chance*100)}%${x.mode==='manual'?' · สู้เอง':''}${x.pay!==1?` · ค่าตอบแทน ${Math.round(x.pay*100)}%`:''}</div><div class="row">${U.RISKB[x.risk]}
+ <button data-mis="${x.id}" ${x.risk!=='normal'?'data-accept="1"':''} ${x.ok?'':'disabled'} title="${esc(x.why)}" class="sm ${x.risk!=='normal'?'danger':'pri'}">${x.ok?'รับภารกิจ':esc(x.why)}${esc(U.RISK[x.risk])}</button></div></div>`).join('')}</div>`:''}
+function people(E){const p=E.player.get(),here=E.npcs.at(p.location.world,p.location.loc);if(!here.length)return '';
+ return `<div class="list">${here.map(n=>{const x=E.rels.edge(n.id,'player'),t=E.rels.type(n.id,'player'),job=n.role||n.occupationName||((E.worlds.ctx(n.world).list('jobs').get(n.occupation)||{}).name)||'';
+  return `<div><div class="row" style="margin:0"><button class="sm ghost" data-dlg="${n.id}" title="เปิดบทสนทนา"><b>${esc(n.name)}</b></button><small>${esc(job)} · ${E.npcs.ageY(n.id)} ปี · ${t?esc(E.rels.typeName(t))+' '+x.aff:'ยังไม่รู้จัก'}</small></div><div class="actions">`+
+  E.rels.actions(n.id).map(a=>`<button class="sm" data-npc="${n.id}" data-ia="${a.id}" ${a.why?'disabled':''} title="${esc(a.why)}">${esc(a.name)}${a.why?' · '+esc(a.why):''}</button>`).join('')+
+  (E.party.combatOf(n.id)&&!E.party.isMember(n.id)?`<button class="sm" data-invite="${n.id}" ${E.party.canInvite(n.id)?'disabled':''} title="${esc(E.party.canInvite(n.id))}">ชวนเข้าทีม${E.party.canInvite(n.id)?' · '+esc(E.party.canInvite(n.id)):''}</button>`:'')+'</div></div>'}).join('')}</div>`}
+function advList(E){let h='';const r=E.dungeon.run();if(!r){const ds=E.dungeon.here();if(ds.length)h+=`<div class="grid">${ds.map(d=>`<div class="tile"><div class="t">${U.badge(d.rank,'gold')} ${esc(d.name)}</div><div class="s">${d.floors} ชั้น · เคลียร์ ${d.clears}</div><div class="row">${U.RISKB[d.risk]}<button class="sm ${d.risk!=='normal'?'danger':'pri'}" data-dgin="${d.id}" ${d.risk!=='normal'?'data-accept="1"':''} ${d.ok?'':'disabled'}>${d.ok?'เข้าสำรวจ':esc(d.why)}${esc(U.RISK[d.risk]||'')}</button>${d.checkpoint&&d.ok?`<button class="sm" data-dgin="${d.id}" data-cp="1">เริ่มชั้น ${d.checkpoint+1}</button>`:''}</div></div>`).join('')}</div>`}
+ for(const t of E.tower.here())h+=towerTile(E,t);return h}
+function towerTile(E,t){const a=E.tower.assess(t.id),L=E.tower.leaders(t.id,3);
+ return `<div class="tile" style="margin-top:8px"><div class="t">♜ ${esc(t.name)} · ผ่านแล้ว ${t.best}/${t.total} ชั้น</div>${t.next?`<div class="row"><button data-tw="${t.id}" ${t.next.risk!=='normal'?'data-accept="1"':''} ${t.ok?'':'disabled'} class="sm ${t.next.risk!=='normal'?'danger':'pri'}">ปีนชั้น ${t.next.n} (${({fight:'ต่อสู้',boss:'บอส',puzzle:'ปริศนา',choice:'ทางเลือก'})[t.next.kind]})${esc(U.RISK[t.next.risk]||'')}${t.ok?'':' · '+esc(t.why)}</button></div>`:''}
+ ${a.recommend==='done'?'':`<small id="twassess" class="${a.recommend==='climb'?'ok':a.recommend==='rest'?'err':'gold-t'}">ประเมิน: ${({climb:'พร้อมปีน',rest:'ควรพักก่อน',too_hard:'ยากเกินไปตอนนี้'})[a.recommend]}${a.chance!==null?` (โอกาส ${Math.round(a.chance*100)}%)`:''}${a.reasons.length?' · '+esc(a.reasons.join(', ')):''}</small>`}
+ ${L.length?`<br><small>NPC ที่ปีนสูงสุด: ${L.map(x=>esc(x.name)+' ชั้น '+x.best).join(', ')}</small>`:''}</div>`}
+function services(E){const EC=E.economy,sv=EC.servicesHere(),KIND={once:'ครั้งเดียว',repeat:'ซื้อซ้ำได้',plan:'รายเดือน'};if(!sv.length)return '';
+ return `<div class="grid">${sv.map(x=>`<div class="tile"><div class="t">${esc(x.name)}</div><div class="s">${esc(x.desc)}</div><div class="s">${x.price?U.n(x.price):''}${x.monthly?(x.price?' + ':'')+U.n(x.monthly)+'/เดือน':''} · ${KIND[x.kind]}${x.ap?' · AP '+x.ap:''}</div><div class="row">`+
+  (x.owned&&x.kind!=='repeat'?`<span class="badge ${x.active?'blue':'red'}">${x.active?'ใช้งานอยู่':x.paused?'พักไว้':'หยุดชั่วคราว'}</span>`+(x.kind==='plan'||x.monthly?(x.paused?`<button class="sm" data-svcr="${x.id}">ใช้ต่อ</button>`:`<button class="sm" data-svcx="${x.id}">${x.kind==='plan'?'ยกเลิก':'พักใช้'}</button>`):''):
+  `<button class="sm pri" data-svc="${x.id}" ${x.ok?'':'disabled'} title="${esc(x.desc)}">${x.ok?(x.kind==='plan'?'สมัคร':'ซื้อ'):esc(x.why)}</button>`)+`</div></div>`).join('')}</div>`}
+function lifeHere(E){const p=E.player.get(),j=E.life.jobsHere(),h=E.life.housingHere();if(!j.length&&!h.length)return '';
+ return '<div class="actions">'+j.map(x=>x.current?`<button class="sm danger" data-quit="1">ลาออกจาก${esc(x.name)}</button>`:`<button class="sm" data-job="${x.id}" ${x.ok?'':'disabled'}>สมัครงาน${esc(x.name)} (${U.n(x.salary)}/เดือน, AP ${x.ap})</button>`).join('')
+  +h.filter(x=>!x.current).map(x=>(x.rent!==undefined?`<button class="sm" data-home="${x.id}" data-mode="rent" ${x.ok&&p.money>=x.rent?'':'disabled'}>เช่า${esc(x.name)} (${U.n(x.rent)}/เดือน)</button>`:'')+(x.price!==undefined?`<button class="sm gold" data-home="${x.id}" data-mode="own" ${x.ok&&p.money>=x.price?'':'disabled'}>ซื้อ${esc(x.name)} (${U.n(x.price)})</button>`:'')).join('')+'</div>'}
+page('dashboard',{title:'หน้าหลัก',render(E){if(!alive(E))return E.player.get().created?U.empty('ตัวละครเสียชีวิตแล้ว ดูประวัติชีวิตด้านบน หรือโหลดเซฟ'):'';
+ const ac=acts(E),ms=miss(E),pg=AW.ui.screens.gates(E);
+ return AW.ui.scene.html(E)+
+  sec('ไปที่',`<div class="actions" id="locs">${locs(E)}</div>`)+
+  (ac?sec('กิจกรรมที่นี่',`<div class="actions" id="acts">${ac}</div>`):'<div id="acts"></div>')+
+  sec('ภารกิจที่นี่',ms,'miss')+sec('ดันเจี้ยน / หอคอย',advList(E),'advlist')+sec('บริการ',services(E),'ecop')+sec('งานและที่พัก',lifeHere(E),'lifep')+
+  `<div class="panel" ${pg?'':'hidden'}><h3>Gate</h3><div id="pgates">${pg}</div></div>`+sec(`คนที่อยู่ที่นี่ <small>(${U.SLOT[E.npcs.clock(E.player.get().location.world).slot]})</small>`,people(E),'people')}});
+// ---------- ตัวละคร ----------
+function traitText(t){return AW.data.shared.traits.map(x=>t[x.id]>=20?x.high:t[x.id]<=-20?x.low:null).filter(Boolean).join(' ')||'กลาง ๆ'}
+page('character',{title:'ตัวละคร',render(E){if(!E.player.get().created)return U.empty('ยังไม่สร้างตัวละคร');const P=E.player,p=P.get(),RN=AW.systems.STAT_NAME,H=E.health,ill=H.get().ill;
+ const rs=E.worlds.ctx(p.location.world),sys=rs&&rs.config.rankSystem&&rs.config.rankSystem.id,next=sys&&E.ranks.next(sys),can=sys&&E.ranks.canPromote(sys);
+ return `<div class="panel" id="player"><div class="row" style="justify-content:space-between"><h2>${esc(p.name)} ${U.rank(sys&&p.ranks[sys])}</h2>${U.badge(p.class?P.className(p.class):'ยังไม่ตื่นพลัง','vio')}</div>
+ <div class="grid sm"><div class="tile" title="พลังชีวิต"><div class="s">HP</div><div class="t">${p.hp}/${P.maxHp()}</div>${U.bar('hp',p.hp,P.maxHp())}</div><div class="tile" title="มานาสูงสุดในการต่อสู้"><div class="s">MP / มานา</div><div class="t">${P.maxMp()} / ${p.mana}</div></div>
+ <div class="tile" title="ค่าประสบการณ์ถึงเลเวลถัดไป"><div class="s">เลเวล ${p.level}</div><div class="t">EXP ${U.n(p.exp)}/${U.n(P.expNeed())}</div>${U.bar('xp',p.exp,P.expNeed())}</div><div class="tile"><div class="s">เงิน</div><div class="t gold-t">${U.n(p.money)}</div></div>
+ <div class="tile" title="ชื่อเสียงในสังคมฮันเตอร์"><div class="s">ชื่อเสียง</div><div class="t">${p.reputation}</div></div><div class="tile" title="ผลรวมการกระทำดี/ร้าย มีผลกับเหตุการณ์และ NPC"><div class="s">กรรม</div><div class="t">${p.karma}</div></div></div>
+ <h3 style="margin-top:12px">ค่าสถานะ</h3><div class="grid sm">${AW.systems.Rules.STATS.map(k=>`<div class="tile" title="${esc(U.STAT_TIP[k]||'')}"><div class="s">${esc(RN[k])}</div><div class="t">${p.stats[k]}</div></div>`).join('')}</div>
+ <h3 style="margin-top:12px">ชีวิต</h3><div class="kv"><span>นิสัย</span><span>${esc(traitText(p.traits))}</span><span>สุขภาพ</span><span>${esc(H.condition())}${ill?` · <span class="err">ป่วย: ${esc(H.illDef(ill.id).name)} (${ill.months} เดือน${ill.treated?' รักษาแล้ว':''})</span>`:''}${p.injury?` · <span class="err">บาดเจ็บ ${p.injury} เดือน</span>`:''}</span>
+ <span>ที่พัก</span><span>${esc((E.life.house()||{}).name||'-')} (${({family:'บ้านครอบครัว',rent:'เช่า',own:'เจ้าของ',shelter:'ที่พักพิง'})[(E.life.get().home||{}).mode]||'-'})</span><span>งาน</span><span>${esc((E.life.jobDef()||{}).name||'ไม่มี')}</span><span>สถานะสังคม</span><span>${esc(E.life.status())}${E.life.get().arrears?` · <span class="err">ค้างจ่าย ${U.n(E.life.get().arrears)}</span>`:''}</span>
+ <span>แรงก์ถัดไป</span><span>${next?esc(next)+(can?' · <span class="ok">ผ่านเกณฑ์แล้ว ไปสอบที่สมาคม</span>':' · ยังไม่ผ่านเกณฑ์'):'-'}</span></div></div>`}});
+// ---------- กระเป๋า ----------
+page('inventory',{title:'กระเป๋า',render(E){const P=E.player,p=P.get();if(!p.created)return '';const ks=Object.keys(p.inventory);
+ return sec('กระเป๋า',ks.length?`<div class="grid">${ks.map(q=>{const d=P.item(q)||{},eq=Object.values(p.equipment).includes(q),why=d.slot?P.canEquip(q):'';
+  return `<div class="tile"><div class="t">${esc(P.itemName(q))} <span class="badge">x${p.inventory[q]}</span>${d.rank?' '+U.badge(d.rank,'gold'):''}</div><div class="s">${d.slot?esc(({weapon:'อาวุธ',armor:'เกราะ',accessory:'เครื่องประดับ'})[d.slot]):'ของใช้/วัตถุดิบ'}${d.price?' · ราคา '+U.n(d.price):''}</div>
+  ${d.slot?`<div class="row">${eq?'<span class="badge blue">สวมอยู่</span>':`<button class="sm" data-equip="${q}" ${why?'disabled':''} title="${esc(why)}">สวม${why?' · '+esc(why):''}</button>`}</div>`:''}</div>`}).join('')}</div>`:U.empty('กระเป๋าว่าง'))+`<small class="dim">ขายของได้ที่ย่านใจกลางเมือง (กิจกรรมขายในหน้าหลัก)</small>`}});
+// ---------- สกิล ----------
+page('skills',{title:'สกิล',render(E){const P=E.player,p=P.get();if(!p.created)return '';
+ return sec('สกิลที่มี',p.skills.length?`<div class="grid">${p.skills.map(q=>{const d=P.skill(q)||{},l=(p.skillLv||{})[q]||{lv:1,xp:0};
+  return `<div class="tile"><div class="t">${esc(d.name||q)} <span class="badge vio">Lv ${l.lv}${d.maxLv?'/'+d.maxLv:''}</span></div><div class="s">${esc(kindName[d.type]||'พื้นฐาน')}${d.mp?' · MP '+d.mp:''}${d.cd?' · คูลดาวน์ '+d.cd:''}${d.pierce?' · เจาะเกราะ':''}${d.target==='all'?' · ทุกเป้า':''}</div>${d.maxLv?U.bar('xp',l.xp,l.lv*10,'XP สกิล'):''}</div>`}).join('')}</div>`:U.empty('ยังไม่มีสกิล ตื่นพลังแล้วเรียนได้ที่ศูนย์ฝึก'))}});
+// ---------- อุปกรณ์ (id #gearp เดิม) ----------
+page('equipment',{title:'อุปกรณ์',render(E){const P=E.player,p=P.get();if(!p.created||!p.alive||!p.class)return `<div id="gearp">${U.empty('ตื่นพลังก่อนจึงจะใช้อุปกรณ์ต่อสู้ได้')}</div>`;
+ const slots=AW.systems.EQUIP_SLOTS.map(sl=>{const q=p.equipment[sl],SN={weapon:'อาวุธ',armor:'เกราะ',accessory:'เครื่องประดับ'}[sl];if(!q)return `<div class="tile"><div class="s">${SN}</div><div class="t dim">ว่าง</div></div>`;
+  const c=P.upgradeCost(q),lv=(p.upgrades||{})[q]||0,cd=E.economy.cond(q),rc=E.economy.repairCost(q),d=P.item(q);
+  return `<div class="tile"><div class="s">${SN}</div><div class="t">${esc(P.itemName(q))}${lv?' +'+lv:''} ${d.rank?U.badge(d.rank,'gold'):''}</div>${d.rank?`<small title="สภาพต่ำกว่า 50% พลังจากอุปกรณ์ลดลง">สภาพ ${Math.round(cd)}%</small>${U.bar(cd<50?'hp':'mp',cd,100,'สภาพ')}`:''}
+  <div class="row">${rc&&cd<100?`<button class="sm" data-repair="${q}" ${p.money<rc?'disabled':''}>ซ่อม (${U.n(rc)})</button>`:''}${c?`<button class="sm gold" data-upg="${q}" ${p.money<c.money?'disabled':''}>อัปเกรด (${U.n(c.money)})</button>`:''}</div></div>`}).join('');
+ const inv=Object.keys(p.inventory).filter(q=>{const d=P.item(q);return d&&d.slot&&!Object.values(p.equipment).includes(q)}).map(q=>`<button class="sm" data-equip="${q}" ${P.canEquip(q)?'disabled':''} title="${esc(P.canEquip(q))}">สวม ${esc(P.itemName(q))}${P.canEquip(q)?' · '+esc(P.canEquip(q)):''}</button>`).join('');
+ const sk=p.skills.map(q=>{const d=P.skill(q)||{},l=(p.skillLv||{})[q]||{lv:1};return `${esc(d.name||q)} Lv${l.lv}${d.type?' ('+kindName[d.type]+')':''}`}).join(', '),ug=E.underground.get();
+ return `<div class="panel" id="gearp"><h3>อุปกรณ์ที่สวม</h3><div class="grid">${slots}</div>${inv?`<h4 style="margin-top:10px">เปลี่ยนอุปกรณ์</h4><div class="actions">${inv}</div>`:''}<small>สกิล: ${sk||'-'}${ug.access?`<br>ใต้ดิน: ชื่อเสียง ${ug.rep} · ความสนใจของทางการ ${ug.heat}`:''}</small></div>`}});
+// ---------- ทีม (id #partyp เดิม) ----------
+page('party',{title:'ทีม',render(E){const p=E.player.get();if(!p.created)return '';const ps=E.party.get();
+ const cand=E.npcs.at(p.location.world,p.location.loc).filter(n=>E.party.combatOf(n.id)&&!E.party.isMember(n.id));
+ const mem=ps.members.length?(()=>{const t=E.party.team(p.location.world);return `<div class="panel" id="partyp"><div class="sec-title"><h3>ทีม (${ps.members.length}/${ps.max})</h3><span>${U.badge('พลังทีม '+t.power,'blue')} ${U.badge('synergy x'+t.synergy,'vio')}${E.party.conflict()?' '+U.badge('มีความขัดแย้งในทีม','red'):''}</span></div>
+  <div class="grid">${ps.members.map(m=>{const n=E.npcs.get(m.npc),a=(E.party.combatOf(m.npc)||{}).ability;return `<div class="tile"><div class="t">${esc(n?n.name:m.npc)}</div><div class="s">${E.party.roleName(m.role)} · พลัง ${E.party.power(m.npc)}${a?` · ${esc(a.name||a.kind)}`:''}</div><div class="s">${m.injury?`<span class="err">บาดเจ็บ ${m.injury} เดือน</span> · `:''}ได้ส่วนแบ่งรวม ${U.n(m.earned)}</div><div class="row"><button class="sm ghost" data-dlg="${m.npc}">คุย</button><button class="sm danger" data-pleave="${m.npc}">ให้ออกจากทีม</button></div></div>`}).join('')}</div>
+  ${ps.history.length?`<h4 style="margin-top:10px">ประวัติทีม</h4>${ps.history.slice(0,5).map(h=>`<small>เดือน ${h.m}: ${esc(h.t)}</small>`).join('<br>')}`:''}</div>`})():`<div id="partyp">${U.empty('ยังไม่มีทีม ชวน NPC สายต่อสู้ที่สนิทกันเข้าทีมได้')}</div>`;
+ return mem+sec('ชวนคนที่อยู่ที่นี่',cand.map(n=>`<div class="row"><b>${esc(n.name)}</b><button class="sm" data-invite="${n.id}" ${E.party.canInvite(n.id)?'disabled':''} title="${esc(E.party.canInvite(n.id))}">ชวนเข้าทีม${E.party.canInvite(n.id)?' · '+esc(E.party.canInvite(n.id)):''}</button></div>`).join(''))}});
+// ---------- ภารกิจ ----------
+page('missions',{title:'ภารกิจ',render(E){const p=E.player.get();if(!p.created)return '';const M=E.missions.get(),t=E.missions.meritTier(),last=M.last;
+ const top=Object.entries(M.done).sort((a,b)=>b[1]-a[1]).slice(0,6).map(([q,n])=>`${esc((E.missions.def(q)||{}).name||q)} x${n}`).join(' · ');
+ return `<div class="panel"><div class="sec-title"><h3>สมาคมและผลงาน</h3>${U.badge('ผลงาน '+(M.merit||0)+(t?' · '+t.name:''),'gold')}</div><small>ภารกิจแสดงตามสถานที่: สมาคมฮันเตอร์ และย่านเกต</small><div class="actions" style="margin-top:6px">${['association','gate_zone'].filter(l=>E.worlds.ctx(p.location.world)&&E.worlds.ctx(p.location.world).locations.has(l)).map(l=>`<button class="sm" data-loc="${l}" ${l===p.location.loc||!E.player.canEnter(l)||E.events.get().pending?'disabled':''}>ไป${esc(E.worlds.ctx(p.location.world).locations.get(l).name)}</button>`).join('')}</div></div>`+
+ sec('ภารกิจที่รับได้ที่นี่',miss(E)||U.empty('ไม่มีภารกิจที่สถานที่นี้'))+
+ (M.pending?sec('ภารกิจที่กำลังทำ',`<b>${esc((E.missions.def(M.pending.q)||{}).name||'')}</b>`):'')+
+ (last?sec('รายงานล่าสุด',`<b>${esc(last.name)}</b> · ${({win:'สำเร็จ',lose:'ล้มเหลว',retreat:'ถอนตัว',critical:'บาดเจ็บสาหัส',dead:'เสียชีวิต'})[last.outcome]||esc(last.outcome)} · เดือน ${last.month}${last.effects&&last.effects.length?`<br><small class="ok">${last.effects.map(esc).join(' · ')}</small>`:''}`):'')+
+ (top?sec('ทำบ่อยที่สุด',`<small>${top}</small>`):'')}});
+AW.ui.parts={sec,services,advList,towerTile,lifeHere,miss};
+})(globalThis.AW);
+
+// ==== src/ui/pages_world.js ====
+// Pages (Phase 7A, ส่วนที่ 2): แผนที่/โลก · ความสัมพันธ์ · ครอบครัว · การเงิน · สมาคม · กิลด์ · ดันเจี้ยน · หอคอย · ตลาดมืด · ระบบ
+(function(AW){
+'use strict';
+const U=AW.ui.u,esc=U.esc,page=U.page,X=()=>AW.ui.parts;
+const here=(E,loc)=>E.player.get().location.loc===loc;
+const goBtn=(E,loc,label)=>{const c=E.worlds.ctx(E.player.get().location.world),l=c&&c.locations.get(loc);if(!l)return '';return `<button class="sm" data-loc="${loc}" ${here(E,loc)||!E.player.canEnter(loc)||E.events.get().pending?'disabled':''}>${esc(label||'ไป'+l.name)}${E.player.canEnter(loc)?'':' · ยังเข้าไม่ได้'}</button>`};
+// ---------- แผนที่ / โลก ----------
+page('map',{title:'แผนที่ / โลก',render(E){const p=E.player.get();if(!p.created)return '';const c=E.worlds.ctx(p.location.world);
+ const locs=c?[...c.locations.values()].map(l=>{const ok=E.player.canEnter(l.id);return `<div class="tile"><div class="t">${here(E,l.id)?'📍 ':''}${esc(l.name)}</div><div class="s">${esc(l.desc||'')}</div><div class="row">${here(E,l.id)?'<span class="badge blue">อยู่ที่นี่</span>':`<button class="sm" data-loc="${l.id}" ${ok&&!E.events.get().pending?'':'disabled'}>${ok?'เดินทาง':'ยังเข้าไม่ได้'}</button>`}</div></div>`}).join(''):'';
+ const gates=AW.ui.screens.gates(E);
+ return X().sec(`สถานที่ใน${esc(c?c.def.name:'')}`,`<div class="grid">${locs}</div>`)+
+  X().sec('Gate ข้ามโลก',gates||U.empty('ยังไม่ค้นพบ Gate ที่ใช้ได้จากที่นี่'))+
+  X().sec('โลกที่รู้จักและเวลาของแต่ละโลก',`<div class="grid sm">${E.worlds.ids().map(id=>{const w=E.worlds.ctx(id);return `<div class="tile"><div class="t">${esc(w?w.def.name:id)}${E.worlds.current===id?' 📍':''}</div><div class="s">เดือน ${E.time.month(id)} · อัตราเวลา x${w?w.def.timeRate:1}</div></div>`}).join('')}</div>`)}});
+// ---------- ความสัมพันธ์ ----------
+page('relations',{title:'ความสัมพันธ์',render(E){if(!E.player.get().created)return '';const L=E.rels.list('player',{dir:'in'}).filter(x=>E.npcs.get(x.from)).sort((a,b)=>b.aff-a.aff);
+ return X().sec(`คนที่รู้จัก (${L.length})`,L.length?`<div class="list">${L.map(x=>{const n=E.npcs.get(x.from),t=E.rels.type(x.from,'player');return `<div class="row" style="justify-content:space-between"><span><button class="sm ghost" data-dlg="${x.from}"><b>${esc(n.name)}</b></button> <small>${esc(E.rels.typeName(t)||'')}${n.alive?'':' · จากไปแล้ว'}</small></span><small title="ชอบ / ไว้ใจ / นับถือ">♡ ${x.aff} · ไว้ใจ ${x.trust} · นับถือ ${x.resp}</small></div>`}).join('')}</div>`:U.empty('ยังไม่รู้จักใคร ลองคุยกับคนรอบตัวในหน้าหลัก'))}});
+// ---------- ครอบครัว (id #famp เดิม) ----------
+page('family',{title:'ครอบครัว',render(E){const f=E.family.get();if(!f.members.length)return `<div id="famp">${U.empty('ยังไม่มีข้อมูลครอบครัว')}</div>`;const bg=E.family.background();
+ return `<div class="panel" id="famp"><div class="sec-title"><h3>ครอบครัว</h3>${bg?U.badge(bg.name,'vio'):''}</div><div class="grid">${f.members.map(m=>{const n=E.npcs.get(m.npc);return n?`<div class="tile"><div class="t">${esc(E.family.roleName(m.role))}: ${esc(n.name)}</div><div class="s">${n.alive?E.npcs.ageY(n.id)+' ปี':'จากไปแล้ว'}${n.ill?' · ป่วย':''}</div><div class="row"><button class="sm ghost" data-dlg="${n.id}">คุย</button></div></div>`:''}).join('')}</div>
+ ${f.history.length?`<h4 style="margin-top:10px">เรื่องราวในครอบครัว</h4>${f.history.slice(0,5).map(h=>`<small>${esc(h.t)}</small>`).join('<br>')}`:''}</div>`}});
+// ---------- การเงิน ----------
+page('economy',{title:'การเงิน',render(E){const p=E.player.get();if(!p.created)return '';const EC=E.economy,s=EC.summary(),L=EC.get().ledger.slice(0,12),own=Object.entries(EC.get().owned),j=E.life.jobDef(),d=E.life.dues();
+ const max=Math.max(1,...L.map(x=>Math.max(x.in,x.out)));
+ return `<div class="grid sm"><div class="tile"><div class="s">เงินสด</div><div class="t gold-t">${U.n(p.money)}</div></div><div class="tile" title="เฉลี่ยตั้งแต่เริ่มบันทึก"><div class="s">รายรับเฉลี่ย/เดือน</div><div class="t ok">${U.n(s.inMo)}</div></div><div class="tile"><div class="s">รายจ่ายเฉลี่ย/เดือน</div><div class="t err">${U.n(s.outMo)}</div></div><div class="tile"><div class="s">เงินลงทุนกิลด์</div><div class="t">${U.n(s.stakes)}</div></div></div>`+
+ X().sec('สมุดบัญชี 12 เดือนล่าสุด',L.length?`<div class="list">${L.map(x=>`<div><div class="row" style="margin:0;justify-content:space-between"><small>เดือน ${x.m}</small><small><span class="ok">+${U.n(x.in)}</span> / <span class="err">-${U.n(x.out)}</span></small></div><div class="bar mp" style="width:100%"><i style="width:${U.pct(x.in,max)}%"></i></div><div class="bar hp" style="width:100%"><i style="width:${U.pct(x.out,max)}%"></i></div></div>`).join('')}</div>`:U.empty('ยังไม่มีบันทึก เดินเวลาอย่างน้อย 1 เดือน'))+
+ X().sec('บริการที่ใช้อยู่',own.length?`<div class="list">${own.map(([q,o])=>{const sd=EC.def(q);if(!sd)return '';const mo=EC.monthly(q);return `<div class="row" style="justify-content:space-between"><span>${esc(sd.name)} <small>${o.active?'ใช้งานอยู่':o.paused?'พักไว้':'หยุดชั่วคราว'}${mo?' · '+U.n(mo)+'/เดือน':''}${sd.kind==='repeat'?' · ใช้แล้ว '+o.uses+' ครั้ง':''}</small></span>${sd.kind==='repeat'?'':o.paused?`<button class="sm" data-svcr="${q}">ใช้ต่อ</button>`:(sd.kind==='plan'||mo?`<button class="sm" data-svcx="${q}">${sd.kind==='plan'?'ยกเลิก':'พักใช้'}</button>`:'')}</div>`}).join('')}</div>`:U.empty('ยังไม่ได้ใช้บริการใด ไปดูบริการได้ที่สมาคม ตลาดอุปกรณ์ ศูนย์ฝึก และย่านเมือง'))+
+ X().sec('งานและค่าใช้จ่ายประจำ',`<div class="kv"><span>งาน</span><span>${j?esc(j.name)+' · '+U.n(E.life.salary())+'/เดือน · อายุงาน '+E.life.tenure()+' ปี':'ไม่มี'}</span><span>ค่าเช่า</span><span>${U.n(d.rent)}</span><span>ค่าดูแลบ้าน</span><span>${U.n(d.upkeep)}</span><span>ค่าครองชีพ</span><span>${U.n(d.living)}</span><span>ค้างจ่าย</span><span>${U.n(E.life.get().arrears)}</span></div>`)}});
+// ---------- สมาคมฮันเตอร์ ----------
+page('association',{title:'สมาคมฮันเตอร์',render(E){const p=E.player.get();if(!p.created)return '';const reg=E.worlds.ctx('hunter')&&E.worlds.ctx('hunter').get().flags.registered,M=E.missions.get(),t=E.missions.meritTier(),rs=E.worlds.ctx(p.location.world),sys=rs&&rs.config.rankSystem&&rs.config.rankSystem.id;
+ return `<div class="panel"><div class="sec-title"><h3>สมาคมฮันเตอร์</h3>${goBtn(E,'association')}</div><div class="kv"><span>สถานะ</span><span>${reg?'ลงทะเบียนแล้ว':'ยังไม่ได้ลงทะเบียน (ไปประเมินแรงก์ที่สมาคมหลังตื่นพลัง)'}</span><span>แรงก์</span><span>${U.rank(sys&&p.ranks[sys])}</span><span>ผลงานกับสมาคม</span><span>${M.merit||0}${t?' · '+esc(t.name):''} <small title="ลดลง 2% ต่อเดือน รับงานสมาคมต่อเนื่องเพื่อรักษาระดับ">(?)</small></span><span>แรงก์ถัดไป</span><span>${sys&&E.ranks.next(sys)?esc(E.ranks.next(sys))+(E.ranks.canPromote(sys)?' · <span class="ok">พร้อมสอบ</span>':''):'-'}</span></div></div>`+
+ (here(E,'association')?X().sec('ภารกิจของสมาคม',X().miss(E)||U.empty('ไม่มีภารกิจที่รับได้ตอนนี้'))+X().sec('บริการของสมาคม',X().services(E)||U.empty('ไม่มีบริการ')):U.empty('ไปที่สมาคมเพื่อดูภารกิจและบริการ'))}});
+// ---------- กิลด์ ----------
+page('guild',{title:'กิลด์',render(E){const p=E.player.get();if(!p.created)return '';const c=E.worlds.ctx(p.location.world);if(!c)return '';const EC=E.economy,flags=(E.worlds.ctx('hunter')||{get:()=>({flags:{}})}).get().flags,hereG=EC.guildsHere();
+ const gs=[...c.list('guilds').values()];if(!gs.length)return U.empty('โลกนี้ไม่มีกิลด์');
+ return `<div class="panel"><div class="sec-title"><h3>กิลด์</h3>${goBtn(E,'association','ไปสมาคม (ติดต่อกิลด์)')}</div><small>ลงทุนได้ตามเพดานของแรงก์ ผลตอบแทนขึ้นลงทุกเดือน ถอนแล้วเสียค่าธรรมเนียม · ความเชื่อถือเปิดสัญญากิลด์</small></div><div class="grid">${gs.map(g=>{const q=c.id+'.'+g.id,h=hereG.find(x=>x.id===q);
+  return `<div class="tile"><div class="t">⚜ ${esc(g.name)}${flags['guild_'+g.id]?' '+U.badge('สมาชิก','gold'):''}</div><div class="s">${esc(g.desc||'')}</div><div class="kv"><span>ความเชื่อถือ</span><span>${EC.standing(q)}</span><span>ลงทุนอยู่</span><span>${U.n(Math.round(EC.stake(q)))} / ${U.n(EC.investCap(q))}</span><span>ค่าถอน</span><span>${Math.round(g.fee*100)}%</span></div>
+  <div class="row">${h?(h.ok?[1000,5000].map(a=>`<button class="sm" data-inv="${q}" data-amt="${a}" ${p.money<a||h.stake+a>h.cap?'disabled':''}>ลงทุน ${U.n(a)}</button>`).join('')+(h.stake>=1?`<button class="sm danger" data-wd="${q}" data-amt="${Math.floor(h.stake)}">ถอนทั้งหมด</button>`:''):`<small>${esc(h.why)}</small>`):'<small class="dim">ต้องอยู่ที่สมาคมจึงจะลงทุนได้</small>'}</div></div>`}).join('')}</div>`}});
+// ---------- ดันเจี้ยน ----------
+page('dungeon',{title:'ดันเจี้ยน',render(E){const p=E.player.get();if(!p.created)return '';const c=E.worlds.ctx(p.location.world);if(!c)return '';const ds=[...c.list('dungeons').values()],fd=E.dungeon.discoveries();
+ return `<div class="panel"><div class="sec-title"><h3>บันทึกการสำรวจ</h3>${U.badge('ค้นพบ '+fd+(fd>=3?' · นักสำรวจระดับ '+E.dungeon.explorerLevel():''),'vio')}</div><div class="grid">${ds.map(g=>{const q=c.id+'.'+g.id,r=E.dungeon.record(q),loc=c.locations.get(g.at);
+  return `<div class="tile"><div class="t">${U.badge(g.rank,'gold')} ${esc(g.name)}</div><div class="s">${g.floors} ชั้น · ที่ ${esc(loc?loc.name:g.at)}</div><div class="s">เคลียร์ ${r.clears} · เข้า ${r.runs} · ลึกสุด ${r.deepest} · ค้นพบ ${(r.found||[]).length}/${(g.finds||[]).length}</div><div class="row">${goBtn(E,g.at,'ไปทางเข้า')}</div></div>`}).join('')}</div></div>`+
+ X().sec('เข้าได้จากที่นี่',X().advList(E)||U.empty('ไม่มีทางเข้าดันเจี้ยนที่สถานที่นี้'))}});
+// ---------- หอคอย ----------
+page('tower',{title:'หอคอย',render(E){const p=E.player.get();if(!p.created)return '';const c=E.worlds.ctx(p.location.world);if(!c)return '';const ts=[...c.list('towers').values()];if(!ts.length)return U.empty('โลกนี้ไม่มีหอคอย');
+ return ts.map(t=>{const q=c.id+'.'+t.id,st=E.tower.state(q),L=E.tower.leaders(q,5),h=E.tower.here().find(x=>x.id===q);
+  return `<div class="panel"><div class="sec-title"><h3>♜ ${esc(t.name)}</h3>${goBtn(E,t.at)}</div><div class="kv"><span>ชั้นสูงสุดที่ผ่าน</span><span>${st.best} / ${E.tower.floors(q).length}</span></div>${h?X().towerTile(E,h):''}
+  <h4 style="margin-top:10px">อันดับ NPC</h4>${L.length?L.map((x,i)=>`<small>${i+1}. ${esc(x.name)} · ชั้น ${x.best} (${x.tries} ครั้ง)</small>`).join('<br>'):'<small class="dim">ยังไม่มี NPC ปีน</small>'}</div>`}).join('')}});
+// ---------- ตลาดมืด ----------
+page('market',{title:'ตลาดมืด',render(E){const p=E.player.get();if(!p.created)return '';const u=E.underground.get();
+ return `<div class="panel card danger"><div class="sec-title"><h3>☾ เส้นทางใต้ดิน</h3>${u.access?goBtn(E,'black_market'):U.badge('ยังไม่มีทางเข้า','red')}</div><div class="kv"><span>ทางเข้าตลาดมืด</span><span>${u.access?'มี':'ไม่มี'}</span><span title="เปิดดีลที่ใหญ่ขึ้น">ชื่อเสียงใต้ดิน</span><span>${u.rep}</span><span title="ถึง 60 ทางการจะเริ่มสอบสวน ลดลงเดือนละ 3">ความสนใจของทางการ</span><span class="${u.heat>=60?'err':''}">${u.heat}</span><span>ถูกจับได้</span><span>${u.caught} ครั้ง</span></div>
+ <p><small>การค้าขายใต้ดินได้เงินเร็วแต่มีความเสี่ยง: ถูกโกง ถูกสอบสวน เสียชื่อเสียงและกรรม</small></p></div>`+(here(E,'black_market')?X().sec('ที่นี่',X().services(E)||'<small class="dim">ดูกิจกรรมในหน้าหลัก</small>'):'')}});
+// ---------- ระบบ / ตั้งค่า (เซฟ โหลด เกมใหม่ debug) ----------
+page('settings',{title:'ระบบ',keepInFocus:true,render(E){const dev=AW.ui.dev();
+ return `<div class="panel"><h3>เซฟ / โหลด</h3><div class="grid sm">${[0,1,2].map(i=>{const s=E.save.list().find(x=>x.key==='mvh1:slot'+i);return `<div class="tile"><div class="t">ช่อง ${i}</div><div class="s">${s?(s.broken?'เสีย':`v${s.v} · เดือน ${s.meta&&s.meta.month}`):'ว่าง'}</div><div class="row"><button class="sm pri" data-save="${i}">เซฟ</button><button class="sm" data-load="${i}" ${s&&!s.broken?'':''}>โหลด</button></div></div>`}).join('')}</div>
+ <small>เซฟของเกมเดิมที่พบ (ไม่แตะ): ${E.save.legacyKeys().length}</small></div>
+ <div class="panel"><h3>เกม</h3><div class="actions"><button data-a="newgame" class="danger">เริ่มเกมใหม่</button><button data-a="toggleRight">${AW.ui.state.right?'ซ่อน':'แสดง'}แผงข้าง</button><button data-a="toggleDev" class="${dev?'gold':''}">โหมดพัฒนา (Debug): ${dev?'เปิด':'ปิด'}</button></div></div>`+(dev?AW.ui.debugPanel(E):'')}});
+})(globalThis.AW);
+
+// ==== src/ui/app.js ====
+// App shell (Phase 7A): boot · router (เปลี่ยนหน้าไม่ reload) · โหมด focus ของหน้าพิเศษ · การกดปุ่มทั้งหมด (event delegation ผ่าน data-*)
+// UI เรียก API ของระบบเท่านั้น · ไม่แตะ save format (สถานะ UI เก็บใน sessionStorage แยกจากเซฟ)
+(function(AW){
+'use strict';
+const U=AW.ui.u,$=U.$,esc=U.esc,L=()=>AW.ui.layout,S=()=>AW.ui.screens;
+const ss={get:k=>{try{return sessionStorage.getItem(k)}catch(e){return null}},set:(k,v)=>{try{sessionStorage.setItem(k,v)}catch(e){}}};
+const st=AW.ui.state={page:ss.get('mvh-ui-page')||'dashboard',override:false,right:ss.get('mvh-ui-right')!=='0',dlg:null,result:null,navOpen:false};
+let _last=0,_modalWas='';
+AW.ui.dev=()=>/[?&]debug=1/.test(location.search)||ss.get('mvh-ui-dev')==='1';
 function boot(){const E=new AW.core.Engine({assets:{imageFactory:src=>{const i=new Image();i.src=src;return i},canvasFactory:(w,h)=>{const c=document.createElement('canvas');c.width=w;c.height=h;return c}}});
  E.assets.registerAll(AW.data.assets);AW.systems.installGameplay(E);const wr=E.worlds.registerAll(AW.data.worlds);if(wr.bad.length)wr.bad.forEach(m=>E.debug.error(m));
  window.addEventListener('error',e=>E.debug.error('window: '+e.message));
  E.bus.on('month',({month})=>E.debug.log('เดือน '+month),{owner:'shell'});
- AW.engine=E;newGame('demo');render();setInterval(draw,200);
+ AW.engine=E;newGame('demo');if(!AW.ui.pages.some(p=>p.id===st.page))st.page='dashboard';render();setInterval(AW.ui.scene.draw,200);
  E.bus.on('month:after',()=>update(),{owner:'shell'});E.bus.on('loop:pause',()=>update(),{owner:'shell'});E.bus.on('world:enter',()=>update(true),{owner:'shell'});return E}
-function newGame(seed){const E=AW.engine;E.newGame({seed});E.worlds.start('hunter');result=null}
-function createPlayer(name,gender){const E=AW.engine,r=E.rng,st={};for(const k of AW.systems.Rules.STATS)st[k]=r.int(8,12);E.player.create({name,gender,stats:st,money:50})}
-function bgId(){const E=AW.engine,p=E.player.get(),w=p.location.world||E.worlds.current,c=w&&E.worlds.ctx(w);if(!c)return 'hunter.bg.city_day';const l=c.locations.get(p.location.loc)||c.locations.get(c.def.entry);return c.def.assetNs+'.'+l.bg}
-function draw(){const cv=$('#stage');if(!cv)return;const g=cv.getContext('2d'),E=AW.engine;g.imageSmoothingEnabled=false;g.clearRect(0,0,cv.width,cv.height);
- g.drawImage(E.assets.get(bgId()),0,0,576,324);g.drawImage(E.assets.get('shared.char.base_m'),200,230,80,64)}
-function render(){$('#app').innerHTML=`<header><b>Multiverse Hunter · Phase 6 (Economy & B-Rank)</b><span id="status"></span><span id="world"></span></header>
- <div id="create"></div>
- <canvas id="stage" width="576" height="324"></canvas>
- <div id="player" class="panel"></div>
- <div id="modal"></div><div id="combat"></div>
- <div class="row" id="locs"></div><div class="row" id="acts"></div><div id="miss"></div><div id="people"></div><div id="adv"></div><div id="partyp"></div><div id="gearp"></div><div id="ecop"></div><div id="lifep"></div><div class="row" id="pgates"></div>
- <div class="row">${[0,1,3,10].map(s=>`<button data-s="${s}">${s?s+'x':'หยุด'}</button>`).join('')}<button id="step">+1 เดือน</button><button id="menu">เปิด/ปิดเมนู (หยุดเวลา)</button><button id="new">เกมใหม่</button></div>
- <div class="row">${[0,1,2].map(i=>`<button data-save="${i}">เซฟช่อง ${i}</button><button data-load="${i}">โหลดช่อง ${i}</button>`).join('')}</div>
- <div id="famp" class="panel"></div><div id="journal" class="panel"></div><div class="row" id="gates"></div>
-<div id="info"></div>`;
+function newGame(seed){const E=AW.engine;E.newGame({seed});E.worlds.start('hunter');st.result=null;st.dlg=null}
+function createPlayer(name,gender){const E=AW.engine,r=E.rng,s={};for(const k of AW.systems.Rules.STATS)s[k]=r.int(8,12);E.player.create({name,gender,stats:s,money:50})}
+// ---- โครงหน้า: header / เมนูซ้าย / main (หน้าพิเศษ + ทุกหน้า) / แผงขวา / เมนูล่าง ----
+function render(){$('#app').className='app';$('#app').innerHTML=`<header class="hdr" id="hdr"></header><aside class="side" id="side"></aside>
+ <main class="main" id="main"><div id="focusnote"></div><div id="create"></div><div id="modal" aria-live="polite"></div><div id="combat"></div><div id="adv"></div>
+ ${AW.ui.pages.map(p=>`<section class="page" data-page="${p.id}" id="pg-${p.id}" aria-label="${esc(p.title)}"></section>`).join('')}</main>
+ <aside class="right" id="right" aria-label="ข้อมูลเสริม"></aside><nav class="bnav" id="bnav" aria-label="เมนูมือถือ"></nav><div id="dlg"></div><div id="confirm"></div><div id="toasts"></div>`;
  wire();update(true)}
-const RN=()=>AW.systems.STAT_NAME;
-function statusLine(){const E=AW.engine,m=E.loop.month,p=E.player.get(),meta=E.state.get('meta');
- const age=p.created?`อายุ ${Math.floor(p.age/12)} ปี ${p.age%12} เดือน`:`อายุ ${15+Math.floor(m/12)} ปี ${m%12} เดือน (ยังไม่สร้างตัวละคร)`;
- return `เดือน ${m} (${age}) · seed ${meta.seed} · ${E.loop.paused?'หยุด: '+[...E.loop.reasons].join(', '):'ความเร็ว '+E.loop.speed+'x'}`}
-function worldLine(){const E=AW.engine,cur=E.worlds.current,tr=E.state.get('worlds_time').traveling;
- return `โลก: ${tr?'กำลังเดินทาง':cur?esc(E.worlds.ctx(cur)?E.worlds.ctx(cur).def.name:cur+' (ยังไม่ติดตั้ง)'):'-'} · `+E.worlds.ids().map(id=>`${id} เดือน ${E.time.month(id)}`).join(' · ')}
-function playerPanel(){const E=AW.engine,P=E.player,p=P.get();if(!p.created)return '';const c=E.worlds.ctx(p.location.world),loc=c&&c.locations.get(p.location.loc);
- const rank=Object.keys(p.ranks).map(k=>`${k}: ${p.ranks[k]}`).join(' ')||'ยังไม่มีแรงก์';
- return `<b>${esc(p.name)}</b> · ${p.class?esc(P.className(p.class)):'ยังไม่ตื่นพลัง'} · แรงก์ ${esc(rank)} · เลเวล ${p.level} (EXP ${p.exp}/${P.expNeed()}) · มานา ${p.mana}<br>
- พลังชีวิต ${p.hp}/${P.maxHp()}${p.injury?` · <span class="err">บาดเจ็บ ${p.injury} เดือน</span>`:''} · เงิน ${p.money} · ชื่อเสียง ${p.reputation} · AP ${p.ap}/2 · อยู่ที่ <b>${esc(loc?loc.name:p.location.loc)}</b><br>
- ${AW.systems.Rules.STATS.map(k=>`${RN()[k]} ${p.stats[k]}`).join(' · ')}<br>
- กรรม ${p.karma} · นิสัย: ${traitText(p.traits)} · สุขภาพ ${E.health.condition()}${E.health.get().ill?` · <span class="err">ป่วย: ${esc(E.health.illDef(E.health.get().ill.id).name)} (${E.health.get().ill.months} เดือน${E.health.get().ill.treated?' รักษาแล้ว':''})</span>`:''}<br>
- ที่พัก: ${esc((E.life.house()||{}).name||'-')} (${({family:'บ้านครอบครัว',rent:'เช่า',own:'เจ้าของ',shelter:'ที่พักพิง'})[(E.life.get().home||{}).mode]||'-'}) · งาน: ${esc((E.life.jobDef()||{}).name||'ไม่มี')} · ${esc(E.life.status())}${E.life.get().arrears?` · <span class="err">ค้างจ่าย ${E.life.get().arrears}</span>`:''}<br>
- <small>อุปกรณ์: ${['weapon','armor'].map(s=>p.equipment[s]?esc(P.itemName(p.equipment[s])):'-').join(' / ')} · กระเป๋า: ${Object.keys(p.inventory).map(q=>esc(P.itemName(q))+' x'+p.inventory[q]).join(', ')||'ว่าง'} · สกิล: ${p.skills.map(q=>esc(P.skillName(q))).join(', ')||'-'}</small>`}
-function traitText(t){return AW.data.shared.traits.map(x=>t[x.id]>=20?x.high:t[x.id]<=-20?x.low:null).filter(Boolean).join(' ')||'กลาง ๆ'}
-function modal(){const E=AW.engine,pp=E.player.get();if(pp.created&&!pp.alive&&!result){const L=E.health.get().lives.slice(-1)[0]||{};
-  return `<div class="card"><b>สิ้นสุดชีวิตของ ${esc(L.name||pp.name)}</b><p>จากไปเมื่ออายุ ${L.ageY} ปี สาเหตุ: ${esc(L.cause||'')}</p><p>${L.class?esc(E.player.className(L.class)):'ไม่ได้ตื่นพลัง'} · แรงก์ ${esc(Object.values(L.ranks||{}).join(' ')||'-')} · เลเวล ${L.level} · กรรม ${L.karma} · ทรัพย์สิน ${L.assets?L.assets.money:0}</p><p>คนสำคัญ: ${(L.people||[]).slice(0,5).map(x=>esc(x.name)+' ('+esc(E.rels.typeName(x.type))+')').join(', ')||'-'}</p><p>ครอบครัว: ${L.family?L.family.members.map(m=>esc(m.name||'')+' '+esc(E.family.roleName(m.role))+(m.alive?'':' (จากไปแล้ว)')).join(', '):'-'}</p><p><small>ประวัติชีวิตถูกบันทึกไว้แล้ว (ยังไม่มีการเล่นต่อเป็นรุ่นลูก)</small></p><button id="new2">เริ่มชีวิตใหม่</button></div>`}
- if(result){const r=result;return `<div class="card"><b>${esc(r.title)}</b><p>${esc(r.choice?'› '+r.choice:'')}</p>${r.fight?`<pre>${r.fight.lines.map(esc).join('\n')}</pre>`:''}<p>${r.success===false?'<span class="err">ไม่สำเร็จ</span> ':''}${esc(r.text||'')}</p>${r.effects&&r.effects.length?`<p class="ok">${r.effects.map(esc).join(' · ')}</p>`:''}<button data-ok="1">ตกลง</button></div>`}
- const p=E.events.pending();if(!p)return '';
- return `<div class="card"><b>${esc(p.def.title)}</b><p>${esc(E.events.fmt(p.def.text))}</p>${E.events.choices().map(c=>`<button data-choice="${c.i}" ${c.ok?'':'disabled'}>${esc(c.text)}${c.chance<1?` (${Math.round(c.chance*100)}%)`:''}${c.ok?'':' · '+esc(c.lockText||'เลือกไม่ได้')}</button>`).join('')}</div>`}
-function locs(){const E=AW.engine,p=E.player.get(),c=p.created&&E.worlds.ctx(p.location.world);if(!c)return '';
- return 'ไปที่: '+[...c.locations.values()].map(l=>`<button data-loc="${l.id}" ${l.id===p.location.loc||!E.player.canEnter(l.id)||E.events.get().pending?'disabled':''} title="${esc(l.desc||'')}">${esc(l.name)}</button>`).join('')}
-function acts(){const E=AW.engine;if(!E.player.get().created)return '';const a=E.events.actions();return a.length?'ทำ: '+a.map(x=>`<button data-act="${x.id}" ${x.ok?'':'disabled'}>${esc(x.title)}${x.ap?` (AP ${x.ap})`:''}</button>`).join(''):''}
-const RISK={normal:'',high:' ⚠ เสี่ยงสูง (อาจวิกฤต)',lethal:' ☠ อันตรายถึงชีวิต (อาจตายถาวร)'};
-function miss(){const E=AW.engine;if(!E.player.get().created)return '';const m=E.missions.available();return m.length?'<div class="row">ภารกิจ: '+m.map(x=>`<button data-mis="${x.id}" ${x.risk!=='normal'?'data-accept="1"':''} ${x.ok?'':'disabled'} title="${esc(x.why)}">[${x.rank}] ${esc(x.name)} · ${esc(x.enemy)} (${Math.round(x.chance*100)}%)${x.mode==='manual'?' · สู้เอง':''}${esc(RISK[x.risk])}${x.pay!==1?` · ค่าตอบแทน ${Math.round(x.pay*100)}%`:''}${x.ok?'':' · '+esc(x.why)}</button>`).join('')+'</div>':''}
-function people(){const E=AW.engine,p=E.player.get();if(!p.created||!p.alive)return '';const here=E.npcs.at(p.location.world,p.location.loc);if(!here.length)return '';
- return '<div class="panel"><b>คนที่อยู่ที่นี่</b> <small>('+({morning:'เช้า',day:'กลางวัน',evening:'เย็น',night:'กลางคืน'})[E.npcs.clock(p.location.world).slot]+')</small><br>'+here.map(n=>{const x=E.rels.edge(n.id,'player'),t=E.rels.type(n.id,'player');
-  return `<div>${esc(n.name)} <small>${esc(n.role||n.occupationName||((E.worlds.ctx(n.world).list('jobs').get(n.occupation)||{}).name)||'')} · ${E.npcs.ageY(n.id)} ปี · ${t?esc(E.rels.typeName(t))+' '+x.aff:'ยังไม่รู้จัก'}</small> `+E.rels.actions(n.id).map(a=>`<button data-npc="${n.id}" data-ia="${a.id}" ${a.why?'disabled':''} title="${esc(a.why)}">${esc(a.name)}${a.why?' · '+esc(a.why):''}</button>`).join('')+(E.party.combatOf(n.id)&&!E.party.isMember(n.id)?`<button data-invite="${n.id}" ${E.party.canInvite(n.id)?'disabled':''} title="${esc(E.party.canInvite(n.id))}">ชวนเข้าทีม${E.party.canInvite(n.id)?' · '+esc(E.party.canInvite(n.id)):''}</button>`:'')+'</div>'}).join('')+'</div>'}
-function lifePanel(){const E=AW.engine,p=E.player.get();if(!p.created||!p.alive)return '';const j=E.life.jobsHere(),h=E.life.housingHere();if(!j.length&&!h.length)return '';
- return '<div class="row">'+j.map(x=>x.current?`<button data-quit="1">ลาออกจาก${esc(x.name)}</button>`:`<button data-job="${x.id}" ${x.ok?'':'disabled'}>สมัครงาน${esc(x.name)} (${x.salary}/เดือน, AP ${x.ap})</button>`).join('')
-  +h.filter(x=>!x.current).map(x=>(x.rent!==undefined?`<button data-home="${x.id}" data-mode="rent" ${x.ok&&p.money>=x.rent?'':'disabled'}>เช่า${esc(x.name)} (${x.rent}/เดือน)</button>`:'')+(x.price!==undefined?`<button data-home="${x.id}" data-mode="own" ${x.ok&&p.money>=x.price?'':'disabled'}>ซื้อ${esc(x.name)} (${x.price})</button>`:'')).join('')+'</div>'}
-function pgates(){const E=AW.engine,l=E.gates.list();return l.length?'Gate: '+l.map(g=>`<button data-pgate="${g.id}" ${g.why?'disabled':''} title="${esc(g.why)}">${esc(g.name)}${g.months?` (${g.months} เดือน)`:''}${g.why?' · '+esc(g.why):''}</button>`).join(''):''}
-function famPanel(){const E=AW.engine,f=E.family.get();if(!f.members.length)return '';const bg=E.family.background();
- return `<b>ครอบครัว</b> ${bg?esc(bg.name):''}<br>`+f.members.map(m=>{const n=E.npcs.get(m.npc);return n?`<small>${esc(E.family.roleName(m.role))}: ${esc(n.name)} ${n.alive?E.npcs.ageY(n.id)+' ปี':'(จากไปแล้ว)'}${n.ill?' · ป่วย':''}</small>`:''}).join(' · ')+(f.history.length?'<br><small>'+f.history.slice(0,3).map(h=>esc(h.t)).join(' · ')+'</small>':'')}
-function bar(v,m){return `${Math.max(0,Math.round(v))}/${m}`}
-function combatPanel(){const E=AW.engine,s=E.combat.session();if(!s)return '';const RK={normal:'ปกติ',high:'เสี่ยงสูง',lethal:'อันตรายถึงชีวิต'};
- return `<div class="card"><b>การต่อสู้ · รอบ ${s.round}</b> <small>ความเสี่ยง: ${RK[s.risk]}${s.me.critical?' · <span class="err">อาการวิกฤต</span>':''}</small><br>
- ${esc(s.me.name)} HP ${bar(s.me.hp,s.me.max)} · MP ${bar(s.me.mp,s.me.maxMp)}${s.party.map(m=>` · ${esc(m.name)} (${E.party.roleName(m.role)}) ${m.down?'หมดสภาพ':'HP '+bar(m.hp,m.max)}`).join('')}<br>
- ${s.foes.map(f=>`${esc(f.name)} HP ${bar(f.hp,f.max)}${f.enraged?' (คลั่ง)':''}`).join(' · ')}
- <pre>${s.log.slice(-6).map(esc).join('\n')}</pre>${s.status==='active'?E.combat.options().map(o=>`<button data-cact="${o.type}" data-cid="${o.id||''}" ${o.why?'disabled':''}>${esc(o.name)}${o.why?' · '+esc(o.why):''}</button>`).join(''):''}</div>`}
-function advPanel(){const E=AW.engine,p=E.player.get();if(!p.created||!p.alive)return '';let h='';const r=E.dungeon.run();
- if(r){const g=E.dungeon.def(r.dungeon),cur=E.dungeon.current();h+=`<div class="panel"><b>${esc(g.name)}</b> · ${r.status==='active'?`ชั้น ${cur?cur.floor+1:'-'}/${g.floors} ห้อง ${cur?cur.index+1:'-'}/${cur?cur.rooms:'-'}`:'จบแล้ว ('+r.status+')'} · ความยาก x${r.mult} · ของที่เก็บได้: เงิน ${r.loot.money} EXP ${r.loot.exp}<br><small>${r.log.slice(-4).map(esc).join(' · ')}</small><br>`+
-  (r.status==='active'?(r.waiting?'<small>จัดการห้องนี้ก่อน</small>':`<button data-dg="advance">ไปห้องถัดไป</button><button data-dg="leave">ออกจากดันเจี้ยน (ได้ของครบ)</button>`):`<button data-dg="close">ปิด</button>`)+'</div>'}
- else{const ds=E.dungeon.here();if(ds.length)h+='<div class="row">ดันเจี้ยน: '+ds.map(d=>`<button data-dgin="${d.id}" ${d.risk!=='normal'?'data-accept="1"':''} ${d.ok?'':'disabled'}>[${d.rank}] ${esc(d.name)} · ${d.floors} ชั้น · เคลียร์ ${d.clears}${esc(RISK[d.risk]||'')}${d.ok?'':' · '+esc(d.why)}</button>`+(d.checkpoint&&d.ok?`<button data-dgin="${d.id}" data-cp="1">เริ่มจาก checkpoint ชั้น ${d.checkpoint+1}</button>`:'')).join('')+'</div>'}
- for(const t of E.tower.here())h+=`<div class="row">${esc(t.name)}: ผ่านแล้ว ${t.best}/${t.total} ชั้น ${t.next?`<button data-tw="${t.id}" ${t.next.risk!=='normal'?'data-accept="1"':''} ${t.ok?'':'disabled'}>ปีนชั้น ${t.next.n} (${({fight:'ต่อสู้',boss:'บอส',puzzle:'ปริศนา',choice:'ทางเลือก'})[t.next.kind]})${esc(RISK[t.next.risk]||'')}${t.ok?'':' · '+esc(t.why)}</button>`:''}${(()=>{const a=E.tower.assess(t.id);return a.recommend==='done'?'':` <small id="twassess">ประเมิน: ${({climb:'พร้อมปีน',rest:'ควรพักก่อน',too_hard:'ยากเกินไปตอนนี้'})[a.recommend]}${a.chance!==null?` (โอกาส ${Math.round(a.chance*100)}%)`:''}${a.reasons.length?' · '+esc(a.reasons.join(', ')):''}</small>`})()}${(()=>{const L=E.tower.leaders(t.id,3);return L.length?`<br><small>NPC ที่ปีนสูงสุด: ${L.map(x=>esc(x.name)+' ชั้น '+x.best).join(', ')}</small>`:''})()}</div>`;
- return h}
-function partyPanel(){const E=AW.engine,ps=E.party.get();if(!ps.members.length)return '';const t=E.party.team(E.player.get().location.world);
- return `<div class="panel"><b>ทีม</b> (${ps.members.length}/${ps.max}) · พลังทีม ${t.power} · synergy x${t.synergy}${E.party.conflict()?' · <span class="err">มีความขัดแย้งในทีม</span>':''}<br>`+ps.members.map(m=>{const n=E.npcs.get(m.npc);return `<small>${esc(n?n.name:m.npc)} · ${E.party.roleName(m.role)} · พลัง ${E.party.power(m.npc)}${(()=>{const a=(E.party.combatOf(m.npc)||{}).ability;return a?` · ${esc(a.name||a.kind)}`:''})()}${m.injury?` · <span class="err">บาดเจ็บ ${m.injury} เดือน</span>`:''} · ได้ส่วนแบ่งรวม ${m.earned}</small> <button data-pleave="${m.npc}">ให้ออกจากทีม</button>`}).join('<br>')+'</div>'}
-function gearPanel(){const E=AW.engine,P=E.player,p=P.get();if(!p.created||!p.alive||!p.class)return '';
- const sk=p.skills.map(q=>{const d=P.skill(q)||{},l=(p.skillLv||{})[q]||{lv:1,xp:0};return `${esc(d.name||q)} Lv${l.lv}${d.type?' ('+({active:'โจมตี',passive:'ติดตัว',support:'สนับสนุน'})[d.type]+')':''}`}).join(', ');
- const eq=AW.systems.EQUIP_SLOTS.map(sl=>{const q=p.equipment[sl];if(!q)return '';const c=P.upgradeCost(q),lv=(p.upgrades||{})[q]||0;const cd=E.economy.cond(q),rc=E.economy.repairCost(q);return `${esc(P.itemName(q))}${lv?' +'+lv:''}${P.item(q).rank?` <small>สภาพ ${Math.round(cd)}%</small>`:''}${rc&&cd<100?` <button data-repair="${q}" ${p.money<rc?'disabled':''}>ซ่อม (${rc})</button>`:''}${c?` <button data-upg="${q}" ${p.money<c.money?'disabled':''}>อัปเกรด (${c.money})</button>`:''}`}).filter(Boolean).join(' · ');
- const inv=Object.keys(p.inventory).filter(q=>{const d=P.item(q);return d&&d.slot&&!Object.values(p.equipment).includes(q)}).map(q=>`<button data-equip="${q}" ${P.canEquip(q)?'disabled':''} title="${esc(P.canEquip(q))}">สวม ${esc(P.itemName(q))}${P.canEquip(q)?' · '+esc(P.canEquip(q)):''}</button>`).join('');
- const ug=E.underground.get();return `<div class="panel"><small>สกิล: ${sk||'-'}<br>อุปกรณ์: ${eq||'-'} ${inv}${ug.access?`<br>ใต้ดิน: ชื่อเสียง ${ug.rep} · ความสนใจของทางการ ${ug.heat}`:''}</small></div>`}
-function journal(){const E=AW.engine;return '<b>บันทึก</b><br>'+E.events.get().log.slice(0,8).map(l=>`<small>เดือน ${l.m}: ${esc(l.t)}</small>`).join('<br>')}
-function createForm(){const p=AW.engine.player.get();return p.created?'':`<div class="card"><b>เริ่มชีวิตใหม่ในโลกฮันเตอร์</b><p>อายุ 15 ปี นักเรียน ม.4</p><input id="pname" maxlength="24" placeholder="ชื่อตัวละคร" value="ซอนอู"> <select id="pgender"><option value="m">ชาย</option><option value="f">หญิง</option></select> <button id="pcreate">เริ่ม</button></div>`}
-// Debug: เดินทางตรงผ่าน worlds.travelVia ไม่ตรวจเงื่อนไขเกมเพลย์ (ใช้ทดสอบโลก Fantasy)
-function gates(){const E=AW.engine;return 'Debug: '+E.worlds.gatesHere().map(g=>`<button data-gate="${g.id}">${esc(g.name)}</button>`).join('')||(E.worlds.current&&!E.worlds.has(E.worlds.current)?E.worlds.ids().map(id=>`<button data-go="${id}">กลับไป ${id}</button>`).join(''):'')}
-function info(){const E=AW.engine,r=E.assets.report();return `<p>ภาพ: จริง ${r.real} · placeholder ${r.placeholder} · โลกที่ลงทะเบียน ${E.registries.world.all().length} · เซฟเกมเดิมที่พบ (ไม่แตะ) ${E.save.legacyKeys().length}</p>
- <p>เซฟใหม่: ${E.save.list().map(s=>esc(s.key)+(s.broken?' (เสีย)':` v${s.v} เดือน ${s.meta&&s.meta.month}`)).join(' · ')||'ยังไม่มี'}</p>
- <details id="dbg" ${window.__dbgOpen?'open':''}><summary>Debug</summary><p class="err">${E.debug.errors.map(esc).join('<br>')||'ไม่มี error'}</p><pre>${esc(JSON.stringify(E.state.snapshot(),null,1))}</pre><pre>${E.debug.lines.slice(-12).map(l=>esc(l.lvl+' '+l.msg)).join('\n')}</pre></details>`}
-const set=(sel,html)=>{const el=$(sel);if(el&&el.__h!==html){el.innerHTML=html;el.__h=html}};
-// Phase 6: บริการที่สถานที่นี้ การลงทุนกิลด์ ผลงานกับสมาคม การค้นพบ และสมุดบัญชีเดือนล่าสุด
-function ecoPanel(){const E=AW.engine,p=E.player.get();if(!p.created||!p.alive)return '';const EC=E.economy,sv=EC.servicesHere(),gs=EC.guildsHere(),L=EC.get().ledger[0],t=E.missions.meritTier(),KIND={once:'ครั้งเดียว',repeat:'ซื้อซ้ำได้',plan:'รายเดือน'};
- let h='';if(sv.length)h+='<div class="row">บริการ: '+sv.map(x=>x.owned&&x.kind!=='repeat'?`<small>${esc(x.name)} ${x.active?'(ใช้งานอยู่)':x.paused?'(พักไว้)':'(หยุดชั่วคราว)'}${x.monthly?` · ${x.monthly}/เดือน`:''}</small>`+(x.kind==='plan'||x.monthly?(x.paused?`<button data-svcr="${x.id}">ใช้ต่อ</button>`:`<button data-svcx="${x.id}">${x.kind==='plan'?'ยกเลิก':'พักใช้'}</button>`):''):
-  `<button data-svc="${x.id}" ${x.ok?'':'disabled'} title="${esc(x.desc)}">${esc(x.name)} · ${x.price?x.price:''}${x.monthly?(x.price?' + ':'')+x.monthly+'/เดือน':''} (${KIND[x.kind]}${x.ap?' AP '+x.ap:''})${x.ok?'':' · '+esc(x.why)}</button>`).join('')+'</div>';
- for(const g of gs)h+=`<div class="row"><small>${esc(g.name)}: ลงทุนอยู่ ${Math.round(g.stake)} / เพดาน ${g.cap} · ค่าถอน ${Math.round(g.fee*100)}% · ความเชื่อถือ ${g.standing}</small>${g.ok?[1000,5000].map(a=>`<button data-inv="${g.id}" data-amt="${a}" ${p.money<a||g.stake+a>g.cap?'disabled':''}>ลงทุน ${a}</button>`).join('')+(g.stake>=1?`<button data-wd="${g.id}" data-amt="${Math.floor(g.stake)}">ถอนทั้งหมด</button>`:''):' · '+esc(g.why)}</div>`;
- const fd=E.dungeon.discoveries();h+=`<div class="panel" id="ledger"><small>ผลงานกับสมาคม ${E.missions.get().merit||0}${t?' ('+esc(t.name)+')':''} · ค้นพบในดันเจี้ยน ${fd}${fd>=3?' (นักสำรวจระดับ '+E.dungeon.explorerLevel()+')':''}${L?` · เดือนล่าสุด: รับ ${L.in} จ่าย ${L.out}`:''}</small></div>`;return h}
-function update(force){const E=AW.engine;if(!$('#status'))return;$('#status').textContent=statusLine();$('#world').textContent=worldLine();
- const now=Date.now();if(!force&&E.loop.speed&&now-_last<300)return;_last=now;
- set('#create',createForm());set('#player',playerPanel());set('#modal',modal());set('#combat',combatPanel());set('#adv',advPanel());set('#partyp',partyPanel());set('#gearp',gearPanel());set('#ecop',ecoPanel());set('#locs',locs());set('#acts',acts());set('#miss',miss());set('#people',people());set('#lifep',lifePanel());set('#pgates',pgates());set('#famp',famPanel());set('#journal',journal());set('#gates',gates());
- set('#info',info());const d=$('#dbg');if(d)d.ontoggle=e=>window.__dbgOpen=e.target.open}
-// ผลที่ต้องแสดง: คำตอบเหตุการณ์ (มี choice) หรือรายงานภารกิจ (มี name+fight) · ถ้ามีเหตุการณ์ใหม่ค้าง modal จะแสดงต่อหลังกดตกลง
-function act(fn){const E=AW.engine;try{const r=fn();if(r&&r.name&&r.fight)result={title:'ภารกิจ: '+r.name,success:r.win,text:r.win?'ภารกิจสำเร็จ':'ภารกิจล้มเหลว',fight:r.fight,effects:r.effects};else if(r&&r.choice!==undefined)result=r}
- catch(e){E.debug.error(e.message);result={title:'ทำไม่ได้',text:e.message}}update(true)}
-function wire(){const E=AW.engine;
- document.querySelectorAll('[data-s]').forEach(b=>b.onclick=()=>{E.loop.setSpeed(+b.dataset.s);update(true)});
- $('#step').onclick=()=>{E.loop.step(1);update(true)};$('#new').onclick=()=>{newGame(String(Date.now()));update(true)};
- $('#menu').onclick=()=>{E.loop.reasons.has('menu')?E.loop.resume('menu'):E.loop.pause('menu')};
- document.querySelectorAll('[data-save]').forEach(b=>b.onclick=()=>{E.saveTo(+b.dataset.save);update(true)});
- document.querySelectorAll('[data-load]').forEach(b=>b.onclick=()=>{try{E.loadFrom(+b.dataset.load);if(!E.worlds.current)E.worlds.start('hunter')}catch(e){E.debug.error(e.message)}result=null;update(true)});
- $('#app').addEventListener('click',e=>{const b=e.target.closest('button');if(!b||b.disabled)return;const d=b.dataset;
-  if(b.id==='pcreate'){createPlayer($('#pname').value.trim()||'ซอนอู',$('#pgender').value);update(true)}
-  else if(d.ok){result=null;update(true)}
-  else if(d.choice!==undefined)act(()=>E.events.answer(+d.choice));
-  else if(d.loc)act(()=>{E.player.moveTo(d.loc)});
-  else if(d.act)act(()=>E.events.doAction(d.act));
-  else if(d.mis){if(d.accept&&!confirm2(b))return;act(()=>E.missions.start(d.mis,{acceptRisk:!!d.accept}))}
-  else if(d.cact)act(()=>{E.combat.act(d.cact==='skill'?{type:'skill',id:d.cid}:{type:d.cact})});
-  else if(d.invite)act(()=>{E.party.invite(d.invite)});
-  else if(d.pleave)act(()=>{E.party.leave(d.pleave,'ผู้เล่นให้ออก')});
-  else if(d.upg)act(()=>{E.player.upgrade(d.upg)});
-  else if(d.equip)act(()=>{E.player.equip(d.equip)});
-  else if(d.repair)act(()=>{E.economy.repair(d.repair)});
-  else if(d.svc)act(()=>{E.economy.buy(d.svc)});
-  else if(d.svcx)act(()=>{E.economy.cancel(d.svcx)});
-  else if(d.svcr)act(()=>{E.economy.resume(d.svcr)});
-  else if(d.inv)act(()=>{E.economy.invest(d.inv,+d.amt)});
-  else if(d.wd)act(()=>{E.economy.withdraw(d.wd,+d.amt)});
-  else if(d.dgin){if(d.accept&&!confirm2(b))return;act(()=>{E.dungeon.enter(d.dgin,{fromCheckpoint:!!d.cp})})}
-  else if(d.dg)act(()=>{const r=d.dg==='advance'?E.dungeon.advance():d.dg==='leave'?E.dungeon.leave():E.dungeon.close();if(r&&r.status)result={title:'ผลการสำรวจ',text:({cleared:'เคลียร์ดันเจี้ยน',left:'ออกจากดันเจี้ยน',retreated:'ถอนตัว',failed:'สำรวจล้มเหลว'})[r.status]+` · เงิน ${r.money} EXP ${r.exp}`,effects:r.items.concat(r.clear||[])}});
-  else if(d.tw){if(d.accept&&!confirm2(b))return;act(()=>{E.tower.climb(d.tw,{acceptRisk:!!d.accept})})}
-  else if(d.gate)act(()=>{E.worlds.travelVia(d.gate)});
-  else if(d.go)act(()=>{E.worlds.travel(d.go)})
-  else if(d.ia)act(()=>E.rels.interact(d.npc,d.ia));
-  else if(d.job)act(()=>{E.life.takeJob(d.job)});
-  else if(d.quit)act(()=>{E.life.quitJob()});
-  else if(d.home)act(()=>{E.life.moveIn(d.home,d.mode)});
-  else if(d.pgate)act(()=>{E.gates.travel(d.pgate)});
-  else if(b.id==='new2'){newGame(String(Date.now()));update(true)}});
- draw()}
-// ยืนยันความเสี่ยงสองจังหวะ: คลิกแรกแสดงคำเตือนบนปุ่ม คลิกที่สองจึงเริ่ม (ไม่ใช้ dialog ของเบราว์เซอร์)
-function confirm2(b){if(b.dataset.armed)return true;b.dataset.armed='1';b.textContent='ยืนยัน: ยอมรับความเสี่ยงและเริ่ม';b.classList.add('err');return false}
-AW.ui.boot=boot;
+const set=(sel,html)=>{const el=$(sel);if(el&&el.__h!==html){el.innerHTML=html;el.__h=html}return el};
+function focusOn(E){const s=E.combat.session(),r=E.dungeon.run();return !!((s&&s.status==='active')||(r&&r.status==='active'))}
+function update(force){const E=AW.engine;if(!$('#hdr'))return;const now=Date.now();if(!force&&E.loop.speed&&now-_last<300)return;_last=now;
+ const p=E.player.get(),focus=focusOn(E);if(!focus)st.override=false;
+ const app=$('#app');app.classList.toggle('focus',focus&&!st.override);app.classList.toggle('no-right',!st.right);
+ set('#hdr',L().header(E));$('#world').textContent=L().worldLine(E);$('#status').textContent=L().statusLine(E);
+ set('#side',L().side(st.page));$('#side').classList.toggle('open',st.navOpen);set('#bnav',L().bnav(st.page));
+ set('#focusnote',focus&&st.override?`<div class="todo focus-note">กำลังอยู่ในกิจกรรมพิเศษ <button class="sm" data-a="backFocus">กลับไปที่การต่อสู้/ดันเจี้ยน</button></div>`:'');
+ set('#create',S().create(E));const mh=S().modal(E,st.result);set('#modal',mh);
+ if(mh&&!_modalWas){const m=$('#modal');if(m&&m.scrollIntoView)m.scrollIntoView({block:'nearest'})}_modalWas=mh;
+ set('#combat',S().combat(E));const r=E.dungeon.run();set('#adv',r?S().dungeonRun(E):'');
+ for(const pg of AW.ui.pages){const el=$('#pg-'+pg.id);if(!el)continue;el.classList.toggle('active',pg.id===st.page);set('#pg-'+pg.id,p.created||pg.id==='settings'||pg.id==='dashboard'?pg.render(E):'')}
+ set('#right',L().right(E));set('#dlg',st.dlg?S().dialogue(E,st.dlg):'')}
+// ---- router ----
+function go(id,{override=false}={}){if(!AW.ui.pages.some(p=>p.id===id))return;st.page=id;ss.set('mvh-ui-page',id);st.navOpen=false;if(override||focusOn(AW.engine))st.override=true;update(true);const m=$('#main');if(m&&window.scrollTo)window.scrollTo(0,0)}
+// เปิดหน้าที่มี element นั้นอยู่ (ใช้กับลิงก์ภายในและการทดสอบอัตโนมัติ)
+AW.ui.reveal=sel=>{const el=document.querySelector(sel);if(!el)return false;const pg=el.closest('.page');if(pg&&(!pg.classList.contains('active')||$('#app').classList.contains('focus')))go(pg.dataset.page,{override:true});return true};
+AW.ui.go=go;
+// ---- การกระทำ: ผลลัพธ์แสดงใน modal (เหตุการณ์/ภารกิจ) หรือ toast · error ไปที่ debug และ toast ----
+function act(fn,okMsg){const E=AW.engine;try{const r=fn();if(r&&r.name&&r.fight)st.result={title:'ภารกิจ: '+r.name,success:r.win,text:r.win?'ภารกิจสำเร็จ':'ภารกิจล้มเหลว',fight:r.fight,effects:r.effects};
+  else if(r&&r.choice!==undefined)st.result=r;else if(okMsg)U.toast(okMsg,'good')}
+ catch(e){E.debug.error(e.message);U.toast('ทำไม่ได้: '+e.message,'bad')}update(true)}
+// ยืนยันความเสี่ยงสองจังหวะบนปุ่ม (ไม่บังจอ) · การกระทำสำคัญอื่นใช้ confirm modal
+function confirm2(b){if(b.dataset.armed)return true;b.dataset.armed='1';b.textContent='ยืนยัน: ยอมรับความเสี่ยงและเริ่ม';b.classList.add('danger');return false}
+function wire(){const E=AW.engine,app=$('#app');
+ document.addEventListener('keydown',e=>{if(e.key==='Escape'){if($('#confirm').innerHTML){$('#confirm').innerHTML=''}else if(st.dlg){st.dlg=null;update(true)}else if(st.navOpen){st.navOpen=false;update(true)}}});
+ app.addEventListener('click',e=>{if(U.confirmClick(e))return;const b=e.target.closest('button,[data-dlgclose]');if(!b)return;if(b.disabled)return;const d=b.dataset;
+  if(d.dlgclose!==undefined){if(b.tagName!=='BUTTON'&&e.target!==b)return;st.dlg=null;update(true);return}
+  if(d.nav){go(d.nav);return}
+  if(d.navToggle){st.navOpen=!st.navOpen;update(true);return}
+  if(d.s!==undefined){E.loop.setSpeed(+d.s);update(true);return}
+  if(b.id==='step'){E.loop.step(1);update(true);return}
+  if(b.id==='menu'){E.loop.reasons.has('menu')?E.loop.resume('menu'):E.loop.pause('menu');update(true);return}
+  if(d.save!==undefined){act(()=>{E.saveTo(+d.save)},'เซฟช่อง '+d.save+' แล้ว');return}
+  if(d.load!==undefined){try{E.loadFrom(+d.load);if(!E.worlds.current)E.worlds.start('hunter');U.toast('โหลดช่อง '+d.load+' แล้ว','good')}catch(err){E.debug.error(err.message);U.toast('โหลดไม่ได้: '+err.message,'bad')}st.result=null;st.dlg=null;update(true);return}
+  if(b.id==='new'){newGame(String(Date.now()));update(true);return}
+  if(b.id==='new2'){newGame(String(Date.now()));go('dashboard');return}
+  if(b.id==='pcreate'){createPlayer(($('#pname').value||'').trim()||'ซอนอู',$('#pgender').value);go('dashboard');return}
+  if(d.a==='newgame'){U.confirm('เริ่มเกมใหม่?','ความคืบหน้าที่ยังไม่ได้เซฟจะหายไป เซฟที่มีอยู่ไม่ถูกลบ',()=>{newGame(String(Date.now()));go('dashboard')},{yes:'เริ่มใหม่',danger:true});return}
+  if(d.a==='toggleRight'){st.right=!st.right;ss.set('mvh-ui-right',st.right?'1':'0');update(true);return}
+  if(d.a==='toggleDev'){ss.set('mvh-ui-dev',AW.ui.dev()&&ss.get('mvh-ui-dev')==='1'?'0':'1');update(true);return}
+  if(d.a==='backFocus'){st.override=false;update(true);return}
+  if(d.dlg){st.dlg=d.dlg;update(true);return}
+  if(d.ok){st.result=null;update(true);return}
+  if(d.choice!==undefined){act(()=>E.events.answer(+d.choice));return}
+  if(d.loc){act(()=>{E.player.moveTo(d.loc)});return}
+  if(d.act){act(()=>E.events.doAction(d.act));return}
+  if(d.mis){if(d.accept&&!confirm2(b))return;act(()=>E.missions.start(d.mis,{acceptRisk:!!d.accept}));return}
+  if(d.cact){act(()=>{E.combat.act(d.cact==='skill'?{type:'skill',id:d.cid}:{type:d.cact})});return}
+  if(d.invite){act(()=>{E.party.invite(d.invite)},'เข้าร่วมทีมแล้ว');return}
+  if(d.pleave){const n=E.npcs.get(d.pleave);U.confirm('ให้ออกจากทีม?',`${n?n.name:''} จะออกจากทีม ความสัมพันธ์อาจลดลง`,()=>act(()=>{E.party.leave(d.pleave,'ผู้เล่นให้ออก')},'ออกจากทีมแล้ว'),{yes:'ให้ออก',danger:true});return}
+  if(d.upg){act(()=>{E.player.upgrade(d.upg)},'อัปเกรดแล้ว');return}
+  if(d.equip){act(()=>{E.player.equip(d.equip)},'สวมแล้ว');return}
+  if(d.repair){act(()=>{E.economy.repair(d.repair)},'ซ่อมแล้ว');return}
+  if(d.svc){act(()=>{E.economy.buy(d.svc)},'ดำเนินการแล้ว');return}
+  if(d.svcx){act(()=>{E.economy.cancel(d.svcx)},'หยุดบริการแล้ว');return}
+  if(d.svcr){act(()=>{E.economy.resume(d.svcr)},'ใช้บริการต่อแล้ว');return}
+  if(d.inv){act(()=>{E.economy.invest(d.inv,+d.amt)},'ลงทุนแล้ว');return}
+  if(d.wd){act(()=>{E.economy.withdraw(d.wd,+d.amt)},'ถอนเงินแล้ว');return}
+  if(d.dgin){if(d.accept&&!confirm2(b))return;act(()=>{E.dungeon.enter(d.dgin,{fromCheckpoint:!!d.cp})});return}
+  if(d.dg){act(()=>{const r=d.dg==='advance'?E.dungeon.advance():d.dg==='leave'?E.dungeon.leave():E.dungeon.close();if(r&&r.status)st.result={title:'ผลการสำรวจ',text:({cleared:'เคลียร์ดันเจี้ยน',left:'ออกจากดันเจี้ยน',retreated:'ถอนตัว',failed:'สำรวจล้มเหลว'})[r.status]+` · เงิน ${r.money} EXP ${r.exp}`,effects:(r.items||[]).concat(r.clear||[])};else if(r&&r.fight&&r.fight.outcome!=='win')st.result={title:'ต่อสู้ในดันเจี้ยน',success:false,text:r.fight.outcome,fight:r.fight}});return}
+  if(d.tw){if(d.accept&&!confirm2(b))return;act(()=>{E.tower.climb(d.tw,{acceptRisk:!!d.accept})});return}
+  if(d.gate){act(()=>{E.worlds.travelVia(d.gate)});return}
+  if(d.go){act(()=>{E.worlds.travel(d.go)});return}
+  if(d.ia){act(()=>E.rels.interact(d.npc,d.ia));return}
+  if(d.job){act(()=>{E.life.takeJob(d.job)},'เริ่มงานแล้ว');return}
+  if(d.quit){U.confirm('ลาออกจากงาน?','อายุงานจะเริ่มนับใหม่เมื่อทำงานใหม่',()=>act(()=>{E.life.quitJob()},'ลาออกแล้ว'),{yes:'ลาออก',danger:true});return}
+  if(d.home){const h=()=>act(()=>{E.life.moveIn(d.home,d.mode)},'ย้ายที่พักแล้ว');if(d.mode==='own')U.confirm('ซื้อที่พัก?','การซื้อบ้านใช้เงินก้อนใหญ่ และมีค่าดูแลรายเดือน',h,{yes:'ซื้อ'});else h();return}
+  if(d.pgate){act(()=>{E.gates.travel(d.pgate)});return}});
+ app.addEventListener('toggle',e=>{if(e.target.id==='dbg')window.__dbgOpen=e.target.open},true)}
+// ---- Debug panel (เฉพาะโหมดพัฒนา: ?debug=1 หรือเปิดในหน้าระบบ) ----
+AW.ui.debugPanel=E=>{const r=E.assets.report(),dg=E.worlds.gatesHere().map(g=>`<button class="sm" data-gate="${g.id}">${esc(g.name)}</button>`).join('')||(E.worlds.current&&!E.worlds.has(E.worlds.current)?E.worlds.ids().map(id=>`<button class="sm" data-go="${id}">กลับไป ${id}</button>`).join(''):'');
+ return `<div class="panel devp"><h3 class="gold-t">Debug (โหมดพัฒนา)</h3><div class="row" id="gates">Debug Gate: ${dg}</div><div class="row"><button id="new" class="sm">เกมใหม่ทันที (ไม่ถาม)</button></div>
+ <div id="info"><p><small>ภาพ: จริง ${r.real} · placeholder ${r.placeholder} · โลกที่ลงทะเบียน ${E.registries.world.all().length} · เซฟเกมเดิมที่พบ (ไม่แตะ) ${E.save.legacyKeys().length}</small></p>
+ <p><small>เซฟใหม่: ${E.save.list().map(s=>esc(s.key)+(s.broken?' (เสีย)':` v${s.v} เดือน ${s.meta&&s.meta.month}`)).join(' · ')||'ยังไม่มี'}</small></p>
+ <details id="dbg" ${window.__dbgOpen?'open':''}><summary>สถานะภายใน</summary><p class="err">${E.debug.errors.map(esc).join('<br>')||'ไม่มี error'}</p><pre>${esc(JSON.stringify(E.state.snapshot(),null,1))}</pre><pre>${E.debug.lines.slice(-12).map(l=>esc(l.lvl+' '+l.msg)).join('\n')}</pre></details></div></div>`};
+AW.ui.boot=boot;AW.ui.update=update;
 })(globalThis.AW);
 </script><script>AW.ui.boot()</script></body></html>
