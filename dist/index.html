@@ -1,7 +1,7 @@
-<!DOCTYPE html><html lang="th"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Multiverse Hunter (Core Test)</title>
+<!DOCTYPE html><html lang="th"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Multiverse Hunter (Phase 3)</title>
 <style>body{margin:0;background:#0d1118;color:#e6e8ee;font:14px/1.5 sans-serif}#app{max-width:900px;margin:auto;padding:12px}header{display:flex;flex-direction:column;margin-bottom:8px}header span{color:#9ab}
 canvas{width:100%;image-rendering:pixelated;background:#000;border:1px solid #2a3344}.row{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0}button{background:#1a2230;color:#e6e8ee;border:1px solid #2a3344;border-radius:6px;padding:6px 10px;cursor:pointer}
-pre{background:#0a0d13;padding:8px;max-height:220px;overflow:auto;font-size:11px}.err{color:#ff8a8a}</style></head><body><div id="app"></div>
+pre{background:#0a0d13;padding:8px;max-height:220px;overflow:auto;font-size:11px}.err{color:#ff8a8a}.ok{color:#8fe3a0}.panel{background:#121a26;border:1px solid #2a3344;border-radius:8px;padding:8px;margin:6px 0}.card{background:#18233a;border:1px solid #4a6aa0;border-radius:8px;padding:10px;margin:6px 0}.card button{display:block;width:100%;text-align:left;margin:4px 0}button:disabled{opacity:.45;cursor:default}input,select{background:#0a0d13;color:#e6e8ee;border:1px solid #2a3344;border-radius:6px;padding:6px}</style></head><body><div id="app"></div>
 <script>// ==== src/core/ns.js ====
 // Namespace กลาง: ทุกโมดูลลงทะเบียนที่ AW ไม่สร้างตัวแปร global อื่น
 (function(g){g.AW=g.AW||{core:{},systems:{},data:{worlds:[],assets:[]},ui:{}}})(globalThis);
@@ -52,6 +52,8 @@ class GameState{
  // slice ที่มีในเซฟแต่ยังไม่มีใครลงทะเบียน (orphan) จะถูกเก็บไว้ไม่หาย และถูกรับไปใช้เมื่อมีการ register ชื่อนั้นทีหลัง
  register(name,owner,init){if(this.slices.has(name))throw new Error(`slice "${name}" ซ้ำ (เจ้าของเดิม ${this.slices.get(name).owner})`);this.slices.set(name,{owner,init});
   const o=this.orphans[name],fresh=init();delete this.orphans[name];this.data[name]=deepFreeze(clone(o!==undefined&&kind(o)===kind(fresh)?o:fresh))}
+ // ถอน slice (ใช้ตอน rollback การติดตั้งที่ไม่สำเร็จ) เจ้าของเท่านั้น · keep=true คืนข้อมูลไปเป็น orphan
+ unregister(name,owner,{keep=false}={}){if(this.owner(name)!==owner)throw new Error(`"${owner}" ถอน slice "${name}" ไม่ได้`);if(keep)this.orphans[name]=this.data[name];this.slices.delete(name);delete this.data[name]}
  owner(name){const s=this.slices.get(name);if(!s)throw new Error(`ไม่มี slice "${name}"`);return s.owner}
  get(name){if(!this.slices.has(name))throw new Error(`ไม่มี slice "${name}"`);return this.data[name]}
  mutate(owner,name,fn){const o=this.owner(name);if(o!==owner)throw new Error(`"${owner}" เขียน slice "${name}" ไม่ได้ (เจ้าของคือ "${o}")`);
@@ -250,7 +252,7 @@ AW.core.Engine=Engine;
 // ดู docs/phase2/WORLD_SYSTEM_DESIGN.md และ WORLD_MODULE_GUIDE.md
 (function(AW){
 'use strict';
-const C=AW.core,ID=/^[a-z][a-z0-9_]*$/,HOOKS=['install','enter','leave','update','dispose'];
+const C=AW.core,ID=/^[a-z][a-z0-9_]*$/,HOOKS=['install','enter','leave','update','dispose','migrate'];
 const sliceOf=id=>'world:'+id;
 const kindOf=v=>Array.isArray(v)?'array':v===null?'null':typeof v;
 
@@ -267,9 +269,11 @@ function validateWorld(d,{assets}={}){const e=[];
  if(d.state){let s;try{s=d.state()}catch(x){e.push('state() error: '+x.message)}if(s!==undefined&&kindOf(s)!=='object')e.push('state() ต้องคืน object');
   else if(s){try{JSON.stringify(s)}catch(x){e.push('state ต้องเป็น JSON')}}}
  const data=d.data||{};
- for(const k of['locations','npcs','quests','events','gates','assets'])if(data[k]!==undefined&&!Array.isArray(data[k]))e.push('data.'+k+' ต้องเป็น array');
+ for(const k of Object.keys(data))if(!Array.isArray(data[k]))e.push('data.'+k+' ต้องเป็น array');
+ if(d.stateVersion!==undefined&&(!Number.isInteger(d.stateVersion)||d.stateVersion<1))e.push('stateVersion ต้องเป็นจำนวนเต็ม >= 1');
+ if((d.stateVersion||1)>1&&!(d.module&&typeof d.module.migrate==='function'))e.push('stateVersion > 1 ต้องมี module.migrate');
  if(e.length)return e;
- for(const k of['locations','npcs','quests','events','gates']){const seen=new Set();for(const x of data[k]||[]){if(!x||!ID.test(x.id||''))e.push('data.'+k+': id ผิดรูปแบบ "'+(x&&x.id)+'"');else if(seen.has(x.id))e.push('data.'+k+': id ซ้ำ "'+x.id+'"');else seen.add(x.id)}}
+ for(const k of Object.keys(data)){if(k==='assets')continue;const seen=new Set();for(const x of data[k]){if(!x||!ID.test(x.id||''))e.push('data.'+k+': id ผิดรูปแบบ "'+(x&&x.id)+'"');else if(seen.has(x.id))e.push('data.'+k+': id ซ้ำ "'+x.id+'"');else seen.add(x.id)}}
  if(e.length)return e;
  const locs=data.locations||[];if(!locs.some(l=>l&&l.id===d.entry))e.push('entry "'+d.entry+'" ไม่อยู่ใน data.locations');
  for(const g of data.gates||[]){{if(!ID.test(g.to||''))e.push('gate '+g.id+' ไม่มีปลายทาง');if(!Number.isInteger(g.months??0)||(g.months??0)<0)e.push('gate '+g.id+' months ต้องเป็นจำนวนเต็ม >= 0')}}
@@ -277,27 +281,45 @@ function validateWorld(d,{assets}={}){const e=[];
  return e}
 
 class WorldSystem{
- constructor(engine){this.E=engine;this.reg=engine.registries.world;this.live=new Map();
+ constructor(engine){this.E=engine;this.reg=engine.registries.world;this.live=new Map();this.validators=[];
+  engine.bus.on('game:loaded',()=>this._migrateAll(),{prio:100,owner:'worlds'});
   engine.bus.on('world:month',({world,month})=>{const w=this.live.get(world);if(w&&w.def.module.update)this._hook(w,'update',{month})},{prio:10,owner:'worlds'})}
- // ลงทะเบียน + ติดตั้ง · ผิดอย่างใดอย่างหนึ่งต้องไม่เหลือร่องรอย
+ // ลงทะเบียน + ติดตั้งแบบ atomic: ตรวจก่อน แล้วทำทีละขั้น ถ้าขั้นใดล้ม ถอยทุกขั้นที่ทำไปแล้ว
+ // ลำดับ: registry -> state slice -> WorldTime -> install hook (เรียกเป็นขั้นสุดท้าย ถ้า hook throw ถือว่าติดตั้งไม่สำเร็จ)
  register(def){const errs=def&&typeof def==='object'?validateWorld(def,{assets:this.E.assets}):['ไม่ใช่ object'];
+  if(!errs.length)errs.push(...this.reg.check(def));
+  if(!errs.length)for(const v of this.validators)errs.push(...(v(def)||[]));
   if(errs.length)throw new Error(`world "${def&&def.id}" ไม่ถูกต้อง: ${errs.join('; ')}`);
-  C.deepFreeze(def);this.reg.add(def);this._install(def);return def.id}
+  C.deepFreeze(def);const id=def.id,S=this.E.state,name=sliceOf(id),undo=[];
+  try{
+   this.reg.add(def);undo.push(()=>this.reg.items.delete(id));
+   if(S.slices.has(name))throw new Error('slice '+name+' มีอยู่แล้ว (เจ้าของ '+S.owner(name)+')');
+   const hadOrphan=name in S.orphans;S.register(name,name,()=>{const v=(def.state||(()=>({})))();return def.stateVersion?Object.assign({_v:def.stateVersion},v):v});
+   undo.push(()=>S.unregister(name,name,{keep:hadOrphan}));
+   this.E.time.addWorld(id,def.timeRate);undo.push(()=>this.E.time.removeWorld(id));
+   const w=this._make(def);this.live.set(id,w);undo.push(()=>this.live.delete(id));
+   const f=def.module.install;if(f)f(w.ctx);
+  }catch(err){for(const u of undo.reverse()){try{u()}catch(e){}}this.E.bus.emit('world:error',{world:id,hook:'register',err});throw new Error(`world "${id}" ติดตั้งไม่สำเร็จ: ${err.message}`)}
+  this.E.bus.emit('world:installed',{world:id});return id}
  registerAll(defs){const ok=[],bad=[];for(const d of defs){try{ok.push(this.register(d))}catch(x){bad.push(x.message)}}return{ok,bad}}
- _install(def){const id=def.id,S=this.E.state,name=sliceOf(id),init=def.state||(()=>({}));
-  const sub=r=>new Map((r||[]).map(x=>[x.id,x]));
-  const data=def.data||{},w={def,locations:sub(data.locations),npcs:sub(data.npcs),quests:sub(data.quests),events:sub(data.events),gates:sub(data.gates),disposed:false};
-  if(!S.slices.has(name))S.register(name,name,init);else if(S.owner(name)!==name)throw new Error('slice '+name+' มีเจ้าของอื่น');
-  this.E.time.addWorld(id,def.timeRate);
-  w.ctx=Object.freeze({id,def,config:def.config,rules:def.config.rules||{},locations:w.locations,npcs:w.npcs,quests:w.quests,events:w.events,
+ _make(def){const id=def.id,S=this.E.state,name=sliceOf(id),data=def.data||{},lists={};
+  for(const k of Object.keys(data))if(k!=='assets')lists[k]=new Map(data[k].map(x=>[x.id,x]));
+  const w={def,lists,locations:lists.locations||new Map(),gates:lists.gates||new Map(),disposed:false};
+  w.ctx=Object.freeze({id,def,config:def.config,rules:def.config.rules||{},locations:w.locations,npcs:lists.npcs||new Map(),quests:lists.quests||new Map(),events:lists.events||new Map(),
+   list:k=>lists[k]||new Map(),
    get:()=>S.get(name),mutate:fn=>S.mutate(name,name,fn),
    month:()=>this.E.time.month(id),globalMonth:()=>this.E.loop.month,
    asset:k=>this.E.assets.get(def.assetNs+'.'+k),storyId:k=>def.storyNs+'.'+k,
    emit:(ev,payload)=>this.E.bus.emit('world:event',{world:id,ev,payload})});
-  this.live.set(id,w);this._hook(w,'install');this.E.bus.emit('world:installed',{world:id})}
+  return w}
+ // หลังโหลดเซฟ: ถ้า state ของโลกเก่ากว่า stateVersion ให้ module.migrate แปลงทีละเวอร์ชัน
+ _migrateAll(){for(const w of this.live.values()){const want=w.def.stateVersion||1;let v=w.ctx.get()._v||1;if(v>=want)continue;
+  w.ctx.mutate(s=>{while(v<want){w.def.module.migrate(s,v);v++}s._v=want})}}
  // error จาก hook ของโลกถูกแยก ไม่ทำให้ระบบอื่นค้าง: แจ้ง 'world:error' แล้วไปต่อ
  _hook(w,h,arg){const f=w.def.module[h];if(!f)return true;try{f(w.ctx,arg);return true}catch(err){this.E.bus.emit('world:error',{world:w.def.id,hook:h,err});this.E.debug&&this.E.debug.error(`world ${w.def.id}.${h}: ${err.message}`);return false}}
  dispose(id){const w=this.live.get(id);if(!w)throw new Error('ไม่มีโลก '+id);this._hook(w,'dispose');w.disposed=true;this.live.delete(id);this.E.time.removeWorld(id);this.E.bus.emit('world:disposed',{world:id})}
+ // ระบบอื่น (Event, Mission) เพิ่มตัวตรวจเนื้อหาโลกได้ ทำงานก่อนลงทะเบียน ถ้าไม่ผ่านไม่ลงทะเบียน
+ addValidator(fn){this.validators.push(fn)}
  has(id){return this.live.has(id)}
  ctx(id){const w=this.live.get(id);return w?w.ctx:null}
  ids(){return[...this.live.keys()]}
@@ -319,6 +341,403 @@ class WorldSystem{
 }
 AW.systems.WorldSystem=WorldSystem;AW.systems.validateWorld=validateWorld;
 AW.systems.WorldsModule={id:'worlds',deps:[],install(e){e.worlds=new WorldSystem(e)}};
+})(globalThis.AW);
+
+// ==== src/systems/rules.js ====
+// Rules: ตัวตรวจเงื่อนไขและตัวใช้ผลลัพธ์แบบข้อมูลล้วน (ไม่มี eval ไม่มีฟังก์ชันในข้อมูล)
+// ใช้ร่วมกันโดย Event System, Mission System, การย้ายสถานที่ และเกณฑ์แรงก์
+// id ที่ไม่มีจุดถือว่าอยู่ในโลกของข้อมูลนั้น: 'iron_dagger' ในโลก hunter = 'hunter.iron_dagger'
+// ดู docs/phase3/STORY_EVENT_SYSTEM.md
+(function(AW){
+'use strict';
+const qid=(id,world)=>typeof id==='string'&&id.includes('.')?id:world+'.'+id;
+const isObj=v=>v&&typeof v==='object'&&!Array.isArray(v);
+const inRange=(v,r)=>(r.min===undefined||v>=r.min)&&(r.max===undefined||v<=r.max);
+const rangeOk=r=>isObj(r)&&Object.keys(r).every(k=>(k==='min'||k==='max')&&typeof r[k]==='number');
+const STATS=['str','agi','int','vit','cha','luk'];
+const list=v=>Array.isArray(v)?v:[v];
+
+// ---- เงื่อนไข ----
+// v = view: {player, world (ctx ของโลกเจ้าของข้อมูล), worldId, ranks, events, missions, rng}
+const COND={
+ all:{ok:(c,v)=>c.every(x=>check(x,v)),val:c=>Array.isArray(c)?c.flatMap(validateCond):['all ต้องเป็น array']},
+ any:{ok:(c,v)=>c.some(x=>check(x,v)),val:c=>Array.isArray(c)?c.flatMap(validateCond):['any ต้องเป็น array']},
+ not:{ok:(c,v)=>!check(c,v),val:c=>validateCond(c)},
+ age:{ok:(c,v)=>inRange(v.player.age/12,c),val:c=>rangeOk(c)?[]:['age ต้องเป็น {min,max} (ปี)']},
+ awakened:{ok:(c,v)=>!!v.player.class===c,val:c=>typeof c==='boolean'?[]:['awakened ต้องเป็น true/false']},
+ class:{ok:(c,v)=>list(c).map(x=>qid(x,v.worldId)).includes(v.player.class),val:c=>list(c).every(x=>typeof x==='string')?[]:['class ต้องเป็นข้อความ']},
+ rank:{ok:(c,v)=>{const sys=c.sys||v.rankSys,r=v.player.ranks[sys]||null;if(c.is!==undefined)return(c.is===null?r===null:r===c.is);if(r===null)return false;const i=v.ranks.index(sys,r);
+   return(c.min===undefined||i>=v.ranks.index(sys,c.min))&&(c.max===undefined||i<=v.ranks.index(sys,c.max))},
+  val:c=>isObj(c)&&Object.keys(c).every(k=>['sys','min','max','is'].includes(k))?[]:['rank ต้องเป็น {sys,min,max,is}']},
+ level:{ok:(c,v)=>inRange(v.player.level,c),val:c=>rangeOk(c)?[]:['level ต้องเป็น {min,max}']},
+ stat:{ok:(c,v)=>Object.keys(c).every(k=>inRange(v.player.stats[k],c[k])),val:c=>isObj(c)&&Object.keys(c).every(k=>STATS.includes(k)&&rangeOk(c[k]))?[]:['stat ต้องเป็น {str:{min}}']},
+ statTotal:{ok:(c,v)=>inRange(STATS.reduce((a,k)=>a+v.player.stats[k],0),c),val:c=>rangeOk(c)?[]:['statTotal ต้องเป็น {min,max}']},
+ mana:{ok:(c,v)=>inRange(v.player.mana,c),val:c=>rangeOk(c)?[]:['mana ต้องเป็น {min,max}']},
+ money:{ok:(c,v)=>inRange(v.player.money,c),val:c=>rangeOk(c)?[]:['money ต้องเป็น {min,max}']},
+ ap:{ok:(c,v)=>inRange(v.player.ap,c),val:c=>rangeOk(c)?[]:['ap ต้องเป็น {min,max}']},
+ item:{ok:(c,v)=>(v.player.inventory[qid(c.id,v.worldId)]||0)>=(c.min??1),val:c=>isObj(c)&&typeof c.id==='string'?[]:['item ต้องเป็น {id,min}']},
+ location:{ok:(c,v)=>v.player.location.world===v.worldId&&list(c).includes(v.player.location.loc),val:c=>list(c).every(x=>typeof x==='string')?[]:['location ต้องเป็นข้อความ']},
+ world:{ok:(c,v)=>v.player.location.world===c,val:c=>typeof c==='string'?[]:['world ต้องเป็นข้อความ']},
+ rel:{ok:(c,v)=>inRange(v.player.relations[qid(c.npc,v.worldId)]||0,c),val:c=>isObj(c)&&typeof c.npc==='string'&&['min','max'].every(k=>c[k]===undefined||typeof c[k]==='number')?[]:['rel ต้องเป็น {npc,min,max}']},
+ flag:{ok:(c,v)=>list(c).every(f=>v.player.flags[f]),val:c=>list(c).every(x=>typeof x==='string')?[]:['flag ต้องเป็นข้อความ']},
+ notFlag:{ok:(c,v)=>list(c).every(f=>!v.player.flags[f]),val:c=>list(c).every(x=>typeof x==='string')?[]:['notFlag ต้องเป็นข้อความ']},
+ worldFlag:{ok:(c,v)=>list(c).every(f=>v.world&&(v.world.get().flags||{})[f]),val:c=>list(c).every(x=>typeof x==='string')?[]:['worldFlag ต้องเป็นข้อความ']},
+ notWorldFlag:{ok:(c,v)=>list(c).every(f=>!(v.world&&(v.world.get().flags||{})[f])),val:c=>list(c).every(x=>typeof x==='string')?[]:['notWorldFlag ต้องเป็นข้อความ']},
+ done:{ok:(c,v)=>list(c).every(e=>(v.events.done[qid(e,v.worldId)]||0)>0),val:c=>list(c).every(x=>typeof x==='string')?[]:['done ต้องเป็นข้อความ']},
+ notDone:{ok:(c,v)=>list(c).every(e=>!(v.events.done[qid(e,v.worldId)]||0)),val:c=>list(c).every(x=>typeof x==='string')?[]:['notDone ต้องเป็นข้อความ']},
+ missions:{ok:(c,v)=>inRange(v.missions.byTag[c.tag]||0,c),val:c=>isObj(c)&&typeof c.tag==='string'?[]:['missions ต้องเป็น {tag,min}']},
+ canPromote:{ok:(c,v)=>!!v.ranks.canPromote(c===true?v.rankSys:c,v),val:c=>typeof c==='string'||c===true?[]:['canPromote ต้องเป็นชื่อระบบแรงก์']},
+ injured:{ok:(c,v)=>(v.player.injury>0)===c,val:c=>typeof c==='boolean'?[]:['injured ต้องเป็น true/false']},
+ chance:{ok:(c,v)=>v.rng.next()<c,val:c=>typeof c==='number'&&c>=0&&c<=1?[]:['chance ต้องเป็น 0..1']},
+};
+function validateCond(c){if(c===undefined||c===null)return[];if(!isObj(c))return['เงื่อนไขต้องเป็น object'];const e=[];
+ for(const k of Object.keys(c)){const d=COND[k];if(!d)e.push('ไม่รู้จักเงื่อนไข "'+k+'"');else e.push(...d.val(c[k]))}return e}
+function check(c,v){if(!c)return true;for(const k of Object.keys(c)){if(!COND[k].ok(c[k],v))return false}return true}
+
+// ---- ผลลัพธ์ ----
+// แต่ละผลเป็น object คีย์เดียว เช่น {money:100} · apply คืนข้อความสรุปให้ผู้เล่นอ่าน
+const P=v=>v.P;
+const EFF={
+ money:{run:(x,v)=>{P(v).addMoney(x);return`เงิน ${x>0?'+':''}${x}`},val:x=>typeof x==='number'?[]:['money ต้องเป็นตัวเลข']},
+ exp:{run:(x,v)=>{const up=P(v).addExp(x);return`EXP +${x}`+(up?` · เลเวลอัป ${up} ขั้น`:'')},val:x=>typeof x==='number'&&x>=0?[]:['exp ต้องเป็นตัวเลข >= 0']},
+ stat:{run:(x,v)=>{P(v).addStats(x);return Object.keys(x).map(k=>`${AW.systems.STAT_NAME[k]} ${x[k]>0?'+':''}${x[k]}`).join(' ')},val:x=>isObj(x)&&Object.keys(x).every(k=>STATS.includes(k)&&typeof x[k]==='number')?[]:['stat ต้องเป็น {str:1}']},
+ mana:{run:(x,v)=>{P(v).addMana(x);return`มานา ${x>0?'+':''}${x}`},val:x=>typeof x==='number'?[]:['mana ต้องเป็นตัวเลข']},
+ hp:{run:(x,v)=>{P(v).addHp(x);return`พลังชีวิต ${x>0?'+':''}${x}`},val:x=>typeof x==='number'?[]:['hp ต้องเป็นตัวเลข']},
+ cure:{run:(x,v)=>{P(v).cure();return'แผลหายสนิท'},val:x=>x===true?[]:['cure ต้องเป็น true']},
+ injury:{run:(x,v)=>{P(v).injure(x);return`บาดเจ็บ ${x} เดือน`},val:x=>Number.isInteger(x)&&x>=0?[]:['injury ต้องเป็นจำนวนเต็ม']},
+ item:{run:(x,v)=>{const id=qid(x.id,v.worldId),n=x.n??1;n>=0?P(v).addItem(id,n):P(v).removeItem(id,-n);return`${P(v).itemName(id)} ${n>0?'+':''}${n}`},val:x=>isObj(x)&&typeof x.id==='string'&&(x.n===undefined||Number.isInteger(x.n))?[]:['item ต้องเป็น {id,n}']},
+ equip:{run:(x,v)=>{P(v).equip(qid(x,v.worldId));return`สวมใส่ ${P(v).itemName(qid(x,v.worldId))}`},val:x=>typeof x==='string'?[]:['equip ต้องเป็นข้อความ']},
+ flag:{run:(x,v)=>{P(v).setFlag(x,true);return null},val:x=>typeof x==='string'?[]:['flag ต้องเป็นข้อความ']},
+ unflag:{run:(x,v)=>{P(v).setFlag(x,false);return null},val:x=>typeof x==='string'?[]:['unflag ต้องเป็นข้อความ']},
+ worldFlag:{run:(x,v)=>{v.world.mutate(s=>{s.flags=s.flags||{};s.flags[x]=true});return null},val:x=>typeof x==='string'?[]:['worldFlag ต้องเป็นข้อความ']},
+ rel:{run:(x,v)=>{const id=qid(x.npc,v.worldId);P(v).addRel(id,x.n);return`ความสัมพันธ์กับ${P(v).npcName(id)} ${x.n>0?'+':''}${x.n}`},val:x=>isObj(x)&&typeof x.npc==='string'&&typeof x.n==='number'?[]:['rel ต้องเป็น {npc,n}']},
+ reputation:{run:(x,v)=>{P(v).addRep(x);return`ชื่อเสียง ${x>0?'+':''}${x}`},val:x=>typeof x==='number'?[]:['reputation ต้องเป็นตัวเลข']},
+ class:{run:(x,v)=>{const id=qid(x,v.worldId);P(v).setClass(id);return`ได้รับอาชีพ ${P(v).className(id)}`},val:x=>typeof x==='string'?[]:['class ต้องเป็นข้อความ']},
+ skill:{run:(x,v)=>{const id=qid(x,v.worldId);P(v).addSkill(id);return`ได้สกิล ${P(v).skillName(id)}`},val:x=>typeof x==='string'?[]:['skill ต้องเป็นข้อความ']},
+ rankInit:{run:(x,v)=>{const r=v.ranks.init(x===true?v.rankSys:x,v);return`ประเมินแรงก์: ${r}`},val:x=>typeof x==='string'||x===true?[]:['rankInit ต้องเป็นชื่อระบบแรงก์']},
+ rankUp:{run:(x,v)=>{const r=v.ranks.promote(x===true?v.rankSys:x,v);return r?`เลื่อนเป็นแรงก์ ${r}`:'ยังไม่ผ่านเกณฑ์เลื่อนแรงก์'},val:x=>typeof x==='string'||x===true?[]:['rankUp ต้องเป็นชื่อระบบแรงก์']},
+ unlock:{run:(x,v)=>{v.eventsApi.unlock(qid(x,v.worldId));return null},val:x=>typeof x==='string'?[]:['unlock ต้องเป็นข้อความ']},
+ move:{run:(x,v)=>{P(v).moveTo(x,{force:true});return`ย้ายไป ${v.world.locations.get(x).name}`},val:x=>typeof x==='string'?[]:['move ต้องเป็นข้อความ']},
+ log:{run:x=>x,val:x=>typeof x==='string'?[]:['log ต้องเป็นข้อความ']},
+};
+function validateEffects(list){if(list===undefined)return[];if(!Array.isArray(list))return['effects ต้องเป็น array'];const e=[];
+ for(const x of list){if(!isObj(x)||Object.keys(x).length!==1){e.push('effect ต้องเป็น object คีย์เดียว');continue}const k=Object.keys(x)[0];if(!EFF[k])e.push('ไม่รู้จักผล "'+k+'"');else e.push(...EFF[k].val(x[k]))}return e}
+function apply(list,v){const out=[];for(const x of list||[]){const k=Object.keys(x)[0],r=EFF[k].run(x[k],v);if(r)out.push(r)}return out}
+// ตรวจว่าผลที่ทำให้เสียของ (เงิน/ไอเทม) จ่ายไหวไหมก่อนใช้
+function affordable(list,v){let m=0;const need={};for(const x of list||[]){if(x.money<0)m-=x.money;if(x.item&&(x.item.n??1)<0){const id=qid(x.item.id,v.worldId);need[id]=(need[id]||0)-x.item.n}}
+ if(v.player.money<m)return false;return Object.keys(need).every(id=>(v.player.inventory[id]||0)>=need[id])}
+AW.systems.Rules={check,validateCond,apply,validateEffects,affordable,qid,COND,EFF,STATS};
+AW.systems.STAT_NAME={str:'กาย',agi:'ความเร็ว',int:'ปัญญา',vit:'ความอึด',cha:'เสน่ห์',luk:'โชค'};
+})(globalThis.AW);
+
+// ==== src/systems/player.js ====
+// Player System: ข้อมูลผู้เล่นกลาง ใช้ร่วมทุกโลก (ไม่ใช่ state ของโลกใด)
+// slice 'player' เจ้าของ 'player' · ระบบอื่นอ่านด้วย player.get() และเปลี่ยนผ่านเมธอดของระบบนี้เท่านั้น
+// อายุคิดจาก global month: age = loop.month - bornAt · เงิน ไอเทม อุปกรณ์ ติดตัวข้ามโลก
+// ตำแหน่ง = {world, loc} ตรวจว่ามีจริงทุกครั้งที่เปลี่ยน · ไอเทม/อาชีพ/สกิล ใช้ id แบบ 'โลก.id' และอ่านนิยามจากข้อมูลของโลกนั้น
+// ดู docs/phase3/PLAYER_SYSTEM_DESIGN.md
+(function(AW){
+'use strict';
+const OWNER='player',VERSION=1,STATS=['str','agi','int','vit','cha','luk'],AP_PER_MONTH=2;
+const blank=()=>({_v:VERSION,created:false,id:'p1',name:'',species:'human',gender:null,bornAt:0,age:0,level:1,exp:0,ranks:{},class:null,
+ stats:{str:0,agi:0,int:0,vit:0,cha:0,luk:0},mana:0,hp:0,injury:0,skills:[],inventory:{},equipment:{weapon:null,armor:null},
+ money:0,reputation:0,location:{world:null,loc:null},relations:{},flags:{},ap:0});
+// migrations[v]: แปลง player state จาก v ไป v+1 (ยังไม่มี เพราะเพิ่งเวอร์ชัน 1)
+const MIGRATIONS={};
+class PlayerSystem{
+ constructor(E){this.E=E;E.state.register('player',OWNER,blank);
+  E.bus.on('month',()=>this._month(),{prio:40,owner:OWNER});
+  E.bus.on('world:enter',({world})=>{const c=E.worlds.ctx(world);if(this.get().created&&c)this.setLocation(world,c.def.entry)},{prio:50,owner:OWNER});
+  E.bus.on('game:loaded',()=>this._afterLoad(),{prio:90,owner:OWNER})}
+ get(){return this.E.state.get('player')}
+ _m(fn){return this.E.state.mutate(OWNER,'player',fn)}
+ // ---- นิยามจากโลก ----
+ _def(kind,q){if(typeof q!=='string'||!q.includes('.'))return null;const[w,id]=q.split('.');const c=this.E.worlds.ctx(w);return c?c.list(kind).get(id)||null:null}
+ item(q){return this._def('items',q)} cls(q){return this._def('classes',q)} skill(q){return this._def('skills',q)} npc(q){return this._def('npcs',q)}
+ itemName(q){const d=this.item(q);return d?d.name:q} className(q){const d=this.cls(q);return d?d.name:q} skillName(q){const d=this.skill(q);return d?d.name:q} npcName(q){const d=this.npc(q);return d?d.name:q}
+ // ---- สร้าง ----
+ create({name='ผู้เล่น',gender=null,startAge=15,stats={},money=0,species='human'}={}){const E=this.E,w=E.worlds.current,c=w&&E.worlds.ctx(w);
+  if(!c)throw new Error('ต้องเข้าโลกก่อนสร้างผู้เล่น');const p=blank();
+  Object.assign(p,{created:true,name:String(name).slice(0,24)||'ผู้เล่น',gender,species,bornAt:E.loop.month-startAge*12,age:startAge*12,money,location:{world:w,loc:c.def.entry},ap:AP_PER_MONTH});
+  for(const k of STATS)p.stats[k]=Math.max(0,Math.round(stats[k]||0));p.hp=this.maxHp(p);
+  this._m(s=>Object.assign(s,p));E.bus.emit('player:created',{name:p.name});return this.get()}
+ // ---- ค่าที่คำนวณ ----
+ age(){return this.get().age}
+ maxHp(p=this.get()){const a=p.equipment.armor&&this.item(p.equipment.armor);return 50+p.stats.vit*5+p.level*5+(a&&a.hp||0)}
+ expNeed(level=this.get().level){return Math.floor(60*Math.pow(level,1.45))}
+ // ---- เปลี่ยนค่า (ทุกอย่างผ่าน mutate ของเจ้าของ) ----
+ addMoney(n){if(this.get().money+n<0)throw new Error('เงินไม่พอ');this._m(p=>{p.money+=n})}
+ addRep(n){this._m(p=>{p.reputation+=n})}
+ addMana(n){this._m(p=>{p.mana=Math.max(0,p.mana+n)})}
+ addStats(d){for(const k of Object.keys(d))if(!STATS.includes(k))throw new Error('ไม่มีค่าสถานะ '+k);this._m(p=>{for(const k of Object.keys(d))p.stats[k]=Math.max(0,p.stats[k]+d[k])});this._clampHp()}
+ addHp(n){const mx=this.maxHp();this._m(p=>{p.hp=Math.max(1,Math.min(mx,p.hp+n))})}
+ cure(){this._m(p=>{p.injury=0})}
+ injure(months){this._m(p=>{p.injury=Math.max(p.injury,months)})}
+ _clampHp(){const mx=this.maxHp();this._m(p=>{p.hp=Math.min(p.hp,mx)})}
+ // เลเวลอัป: ค่าหลักของอาชีพ +2 ค่าอื่นแบบสุ่ม +1 (ใช้ rng ของเกม)
+ addExp(n){const cls=this.cls(this.get().class);let ups=0;this._m(p=>{p.exp+=Math.round(n);while(p.exp>=this.expNeed(p.level)){p.exp-=this.expNeed(p.level);p.level++;ups++;
+   if(cls)p.stats[cls.main]+=2;p.stats[STATS[this.E.rng.int(0,3)]]+=1}});if(ups)this._m(p=>{p.hp=this.maxHp(p)});return ups}
+ addItem(q,n=1){if(!this.item(q))throw new Error('ไม่มีไอเทม '+q);this._m(p=>{p.inventory[q]=(p.inventory[q]||0)+n})}
+ removeItem(q,n=1){const have=this.get().inventory[q]||0;if(have<n)throw new Error('ไอเทมไม่พอ: '+q);
+  this._m(p=>{p.inventory[q]=have-n;if(!p.inventory[q]){delete p.inventory[q];for(const s of Object.keys(p.equipment))if(p.equipment[s]===q)p.equipment[s]=null}});this._clampHp()}
+ equip(q){const d=this.item(q);if(!d||!['weapon','armor'].includes(d.slot))throw new Error('สวมใส่ไม่ได้: '+q);if(!this.get().inventory[q])throw new Error('ไม่มีของชิ้นนี้');this._m(p=>{p.equipment[d.slot]=q})}
+ unequip(slot){this._m(p=>{p.equipment[slot]=null});this._clampHp()}
+ setClass(q){const c=this.cls(q);if(!c)throw new Error('ไม่มีอาชีพ '+q);if(this.get().class)throw new Error('มีอาชีพแล้ว');
+  this._m(p=>{p.class=q;for(const k of Object.keys(c.bonus||{}))p.stats[k]+=c.bonus[k];if(c.skill&&!p.skills.includes(c.skill))p.skills.push(c.skill)});const p=this.get();this._m(s=>{s.hp=this.maxHp(p)})}
+ addSkill(q){if(!this.skill(q))throw new Error('ไม่มีสกิล '+q);this._m(p=>{if(!p.skills.includes(q))p.skills.push(q)})}
+ setRank(sys,r){this._m(p=>{p.ranks[sys]=r})}
+ addRel(q,n){this._m(p=>{p.relations[q]=Math.max(-100,Math.min(100,(p.relations[q]||0)+n))})}
+ setFlag(f,on){this._m(p=>{if(on)p.flags[f]=true;else delete p.flags[f]})}
+ spendAp(n=1){if(this.get().ap<n)throw new Error('แรงไม่พอเดือนนี้ (AP)');this._m(p=>{p.ap-=n})}
+ // ---- ตำแหน่ง ----
+ validLocation(world,loc){const c=this.E.worlds.ctx(world);return!!(c&&c.locations.has(loc))}
+ setLocation(world,loc){if(!this.validLocation(world,loc))throw new Error(`ไม่มีสถานที่ ${world}/${loc}`);this._m(p=>{p.location={world,loc}});this.E.bus.emit('player:moved',{world,loc})}
+ // ย้ายในโลกปัจจุบัน ตรวจเงื่อนไขของสถานที่ (when) ด้วย Rules
+ canEnter(loc){const p=this.get(),c=this.E.worlds.ctx(p.location.world),l=c&&c.locations.get(loc);if(!l)return false;return AW.systems.Rules.check(l.when,this.E.view(c.id))}
+ moveTo(loc,{force=false}={}){const p=this.get();if(this.E.time.state.get('worlds_time').traveling)throw new Error('กำลังเดินทาง');
+  if(!this.validLocation(p.location.world,loc))throw new Error('ไม่มีสถานที่ '+loc);if(!force&&!this.canEnter(loc))throw new Error('ยังเข้าไม่ได้: '+loc);this.setLocation(p.location.world,loc)}
+ // ---- รายเดือน ----
+ _month(){const p=this.get();if(!p.created)return;const mx=this.maxHp(p);
+  this._m(s=>{s.age=this.E.loop.month-s.bornAt;s.ap=AP_PER_MONTH;if(s.injury>0)s.injury--;s.hp=Math.min(mx,s.hp+Math.ceil(mx*(s.injury?0.1:0.35)))})}
+ // ---- หลังโหลด: migrate, ซ่อมข้อมูลที่ขาด, ตรวจตำแหน่ง ----
+ _afterLoad(){const E=this.E;let p=this.get();
+  if((p._v||1)<VERSION)this._m(s=>{let v=s._v||1;while(v<VERSION){MIGRATIONS[v](s);v++}s._v=VERSION});
+  const cur=E.worlds.current;
+  // เซฟเก่า (Phase 2) ไม่มีผู้เล่น: สร้างผู้เล่นที่อายุ 15 ตอนเดือน 0 (ค่าสถานะ 10 ทุกด้าน) อยู่ที่จุดเริ่มของโลกปัจจุบัน
+  if(!p.created&&cur&&E.worlds.has(cur)){this._m(s=>{s.created=true;s.name='ผู้เล่น';s.bornAt=-180;s.ap=AP_PER_MONTH;for(const k of STATS)s.stats[k]=10;s.flags.fromOldSave=true});this._m(s=>{s.hp=this.maxHp(s)})}
+  this._m(s=>{s.age=E.loop.month-s.bornAt});p=this.get();
+  const w=p.location.world||cur;
+  if(p.created&&w&&E.worlds.has(w)&&!this.validLocation(w,p.location.loc)){const c=E.worlds.ctx(w);E.debug&&E.debug.log(`ตำแหน่ง ${w}/${p.location.loc} ไม่มีอยู่ ย้ายไปจุดเริ่ม ${c.def.entry}`);this._m(s=>{s.location={world:w,loc:c.def.entry}})}}
+}
+AW.systems.PlayerSystem=PlayerSystem;
+AW.systems.PlayerModule={id:'player',deps:['worlds'],install(e){e.player=new PlayerSystem(e)}};
+})(globalThis.AW);
+
+// ==== src/systems/ranks.js ====
+// Rank System: แรงก์แบบข้อมูล ประกาศใน config.rankSystem ของโลก (เช่นแรงก์ฮันเตอร์ E–S)
+// {id, order:[...], initial:[{rank, when}], promote:{D:{when}, C:{when}}} · เกณฑ์ใช้ Rules ทั้งหมด
+// แรงก์เก็บใน player.ranks[id] (ข้อมูลกลาง ข้ามโลกได้) · เลื่อนได้เมื่อผ่านเกณฑ์เท่านั้น ไม่มีทางลัด
+// ไฟล์นี้ยังสร้าง engine.view(worldId) ให้ Rules ใช้ (มุมมองอ่านอย่างเดียวของผู้เล่นและระบบที่เกี่ยวข้อง)
+(function(AW){
+'use strict';
+const R=()=>AW.systems.Rules;
+class RankSystem{
+ constructor(E){this.E=E}
+ def(sys){for(const id of this.E.worlds.ids()){const r=this.E.worlds.ctx(id).config.rankSystem;if(r&&r.id===sys)return r}throw new Error('ไม่มีระบบแรงก์ '+sys)}
+ index(sys,r){const i=this.def(sys).order.indexOf(r);if(i<0)throw new Error(`แรงก์ ${r} ไม่มีใน ${sys}`);return i}
+ of(sys){return this.E.player.get().ranks[sys]||null}
+ // ประเมินครั้งแรก: แถวแรกใน initial ที่เงื่อนไขผ่าน (แถวสุดท้ายควรไม่มีเงื่อนไข)
+ init(sys,v){if(this.of(sys))throw new Error('ประเมินแรงก์ไปแล้ว');const d=this.def(sys);const row=d.initial.find(x=>R().check(x.when,v));if(!row)throw new Error('ไม่ผ่านเกณฑ์ประเมินแรงก์');
+  this.E.player.setRank(sys,row.rank);this.E.bus.emit('rank:set',{sys,rank:row.rank,initial:true});return row.rank}
+ next(sys){const d=this.def(sys),r=this.of(sys);if(!r)return null;return d.order[d.order.indexOf(r)+1]||null}
+ // ผ่านเกณฑ์ขั้นถัดไปไหม (ยังไม่เลื่อน) คืนชื่อแรงก์ถัดไปหรือ null
+ canPromote(sys,v){const n=this.next(sys);if(!n)return null;const rule=this.def(sys).promote[n];if(!rule)return null;return R().check(rule.when,v||this.E.view(this.E.player.get().location.world))?n:null}
+ promote(sys,v){const n=this.canPromote(sys,v);if(!n)return null;this.E.player.setRank(sys,n);this.E.bus.emit('rank:set',{sys,rank:n});return n}
+ // ตรวจข้อมูลระบบแรงก์ของโลก (เรียกตอนตรวจเนื้อหา)
+ static validate(d){const e=[];if(!d)return e;if(typeof d.id!=='string'||!Array.isArray(d.order)||!d.order.length)return['rankSystem ต้องมี id และ order'];
+  if(!Array.isArray(d.initial)||!d.initial.length)e.push('rankSystem.initial ว่าง');for(const x of d.initial||[]){if(!d.order.includes(x.rank))e.push('initial แรงก์ไม่รู้จัก '+x.rank);e.push(...R().validateCond(x.when))}
+  for(const k of Object.keys(d.promote||{})){if(!d.order.includes(k))e.push('promote แรงก์ไม่รู้จัก '+k);e.push(...R().validateCond(d.promote[k].when))}return e}
+}
+AW.systems.RankSystem=RankSystem;
+AW.systems.RanksModule={id:'ranks',deps:['player'],install(e){e.ranks=new RankSystem(e);
+ e.view=(worldId)=>{const c=worldId&&e.worlds.ctx(worldId),rs=c&&c.config.rankSystem;
+  // ค่าเป็น getter เพื่อให้เห็นข้อมูลล่าสุดเสมอ (ผลหลายข้อในชุดเดียวกันต่อเนื่องกันได้ เช่น exp แล้ว rankUp)
+  return{E:e,P:e.player,get player(){return e.player.get()},world:c||null,worldId:worldId||null,rankSys:rs?rs.id:null,ranks:e.ranks,
+   get events(){return e.state.slices.has('events')?e.state.get('events'):{done:{}}},get missions(){return e.state.slices.has('missions')?e.state.get('missions'):{byTag:{}}},
+   get rng(){return e.rng},get eventsApi(){return e.events||null}}}}};
+})(globalThis.AW);
+
+// ==== src/systems/combat.js ====
+// Combat Resolver: แยกจากโลก ใช้ได้ทุกโลก · Phase 3 มีแค่โหมด 'auto' (Auto Resolve)
+// resolve() คำนวณอย่างเดียว ไม่แตะ state · apply() นำความเสียหายและการบาดเจ็บไปใส่ผู้เล่น
+// โหมดใหม่ (เช่น 'hybrid' ใน Phase 5) ลงทะเบียนด้วย register(mode, fn) โดยไม่ต้องแก้ Mission System
+// สูตรอิงเกมเดิม fight() ใน logic4.js:384 · ดู docs/phase3/COMBAT_RESOLVER_DESIGN.md
+(function(AW){
+'use strict';
+const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+const STATS=['str','agi','int','vit'];
+function auto(req,rng){const{profile:pr,enemy}=req,ratio=pr.power/Math.max(1,enemy.power);
+ const chance=clamp(1/(1+Math.pow(1/ratio,3))+pr.luk*0.002,0.02,0.98),win=rng.next()<chance;
+ const frac=clamp(0.35/Math.pow(ratio,1.5)*(0.5+rng.next()*0.7)*(win?1:1.5),0.02,1.5),dmg=Math.round(pr.maxHp*frac);
+ let hpAfter=pr.hp-dmg,injury=0;if(hpAfter<=0){hpAfter=1;injury=3}else if(dmg>pr.maxHp*0.5)injury=1;
+ const sk=pr.skills.length?pr.skills[rng.int(0,pr.skills.length-1)]:null,rounds=2+rng.int(0,3);
+ const lines=[`${pr.name} เผชิญหน้ากับ${enemy.name} (พลัง ${pr.power} ต่อ ${enemy.power})`];
+ if(sk)lines.push(`${pr.name} ใช้ ${sk}`);
+ lines.push(win?`ผ่านไป ${rounds} ยก ${enemy.name}ล้มลง`:`ผ่านไป ${rounds} ยก ${pr.name}ต้องถอยออกมา`);
+ lines.push(`เสียพลังชีวิต ${dmg}`+(injury===3?' หมดสติ ต้องพักรักษาตัว 3 เดือน':injury?' บาดเจ็บ ต้องพัก 1 เดือน':''));
+ return{mode:'auto',enemy:enemy.id,enemyName:enemy.name,win,chance:Math.round(chance*100)/100,ratio:Math.round(ratio*100)/100,power:pr.power,enemyPower:enemy.power,dmg,hpBefore:pr.hp,hpAfter,injury,lines}}
+class CombatSystem{
+ constructor(E){this.E=E;this.modes=new Map();this.register('auto',auto)}
+ register(mode,fn){if(this.modes.has(mode))throw new Error('โหมดต่อสู้ซ้ำ: '+mode);this.modes.set(mode,fn)}
+ // พลังผู้เล่น: ยังไม่ตื่นพลังใช้ร่างกายล้วน · ตื่นแล้ว = ค่าหลักอาชีพ + ค่าสถานะรวม + เลเวล + แรงก์ + มานา + อาวุธ + สกิล · บาดเจ็บลดพลัง
+ profile(worldId){const P=this.E.player,p=P.get(),c=this.E.worlds.ctx(worldId),rs=c&&c.config.rankSystem;let power;
+  if(!p.class)power=(p.stats.str+p.stats.agi+p.stats.vit)*0.6;
+  else{const cls=P.cls(p.class),w=p.equipment.weapon&&P.item(p.equipment.weapon),r=rs&&p.ranks[rs.id]?rs.order.indexOf(p.ranks[rs.id]):0;
+   power=p.stats[cls.main]*1.5+STATS.reduce((a,k)=>a+p.stats[k],0)*0.4+p.level*3+r*40+p.mana*0.8+(w?w.power||0:0)+p.skills.reduce((a,q)=>a+((P.skill(q)||{}).power||0),0)}
+  power=Math.round(power*(1-0.15*Math.min(p.injury,3)));
+  return{name:p.name,power,maxHp:P.maxHp(),hp:p.hp,luk:p.stats.luk,skills:p.skills.map(q=>P.skillName(q))}}
+ enemy(worldId,id){const c=this.E.worlds.ctx(worldId),e=c&&c.list('enemies').get(id);if(!e)throw new Error('ไม่มีศัตรู '+worldId+'.'+id);return e}
+ resolve({worldId,enemy,mode='auto'}){const fn=this.modes.get(mode);if(!fn)throw new Error('ไม่มีโหมดต่อสู้ '+mode);
+  return fn({profile:this.profile(worldId),enemy:this.enemy(worldId,enemy),worldId},this.E.rng)}
+ apply(rep){const P=this.E.player;P.addHp(rep.hpAfter-P.get().hp);if(rep.injury)P.injure(rep.injury);this.E.bus.emit('combat:done',rep);return rep}
+ fight(o){return this.apply(this.resolve(o))}
+}
+AW.systems.CombatSystem=CombatSystem;AW.systems.autoResolve=auto;
+AW.systems.CombatModule={id:'combat',deps:['player'],install(e){e.combat=new CombatSystem(e)}};
+})(globalThis.AW);
+
+// ==== src/systems/events.js ====
+// Event System: เหตุการณ์แบบ Ask/Answer จากข้อมูลของโลก (data.events) ไม่มีเนื้อเรื่องในโค้ดนี้
+// trigger: 'auto' (ทุกเดือนเมื่อเงื่อนไขผ่าน เรียงตาม priority) · 'month' (สุ่มตาม weight เดือนละไม่เกินหนึ่งครั้ง)
+//          'enter' (เมื่อผู้เล่นเข้าสถานที่ at) · 'action' (ผู้เล่นกดเองที่สถานที่ ใช้ AP)
+// เหตุการณ์ค้าง (pending) ทำให้เวลาหยุด (loop reason 'event') จนกว่าจะตอบ · ตอบแล้วถ้ามี next จะต่อเรื่องทันที
+// slice 'events' เจ้าของ 'events' เก็บ pending, done, last, unlocked, log · ดู docs/phase3/STORY_EVENT_SYSTEM.md
+(function(AW){
+'use strict';
+const OWNER='events',R=()=>AW.systems.Rules,TRIGGERS=['auto','month','enter','action'],DC={easy:10,mid:22,hard:36,ext:55},STATS=['str','agi','int','vit','cha','luk'];
+const isObj=v=>v&&typeof v==='object'&&!Array.isArray(v);
+// ตรวจข้อมูลเหตุการณ์ทั้งโลก (เรียกโดย WorldSystem ก่อนลงทะเบียน)
+function validateEvents(def){const d=def.data||{},ev=d.events||[],ids=new Set(ev.map(e=>e.id)),locs=new Set((d.locations||[]).map(l=>l.id)),en=new Set((d.enemies||[]).map(x=>x.id)),e=[];
+ const ref=(id)=>typeof id==='string'&&(id.includes('.')||ids.has(id));
+ for(const x of ev){const p='event '+x.id+': ';
+  if(typeof x.title!=='string'||typeof x.text!=='string')e.push(p+'ต้องมี title และ text');
+  if(!TRIGGERS.includes(x.trigger))e.push(p+'trigger ไม่รู้จัก '+x.trigger);
+  if((x.trigger==='enter'||x.trigger==='action')&&!x.at)e.push(p+'trigger '+x.trigger+' ต้องมี at');
+  if(x.at&&!locs.has(x.at))e.push(p+'at ไม่มีสถานที่ '+x.at);
+  for(const k of['weight','priority','cooldown'])if(x[k]!==undefined&&(typeof x[k]!=='number'||x[k]<0))e.push(p+k+' ต้องเป็นตัวเลข >= 0');
+  if(x.cost&&!(isObj(x.cost)&&Object.keys(x.cost).every(k=>k==='ap'&&Number.isInteger(x.cost[k])&&x.cost[k]>=0)))e.push(p+'cost ต้องเป็น {ap}');
+  e.push(...R().validateCond(x.when).map(m=>p+m));
+  if(!Array.isArray(x.choices)||!x.choices.length){e.push(p+'ต้องมี choices อย่างน้อย 1');continue}
+  x.choices.forEach((c,i)=>{const q=p+'choice '+i+': ';if(typeof c.text!=='string')e.push(q+'ต้องมี text');
+   e.push(...R().validateCond(c.when).map(m=>q+m));
+   if(c.check&&c.fight)e.push(q+'ใช้ check กับ fight พร้อมกันไม่ได้');
+   if(c.check&&!(STATS.includes(c.check.stat)&&DC[c.check.dc]!==undefined))e.push(q+'check ต้องเป็น {stat,dc:easy|mid|hard|ext}');
+   if(c.fight&&!en.has(c.fight.enemy))e.push(q+'ไม่มีศัตรู '+(c.fight&&c.fight.enemy));
+   if(!isObj(c.ok)||typeof c.ok.text!=='string')e.push(q+'ต้องมี ok.text');else e.push(...R().validateEffects(c.ok.effects).map(m=>q+'ok: '+m));
+   if((c.check||c.fight)&&!(isObj(c.fail)&&typeof c.fail.text==='string'))e.push(q+'มี check/fight ต้องมี fail.text');
+   if(c.fail)e.push(...R().validateEffects(c.fail.effects).map(m=>q+'fail: '+m));
+   for(const r of[c.next].concat([...(c.ok&&c.ok.effects||[]),...(c.fail&&c.fail.effects||[])].filter(f=>f.unlock).map(f=>f.unlock)))if(r!==undefined&&!ref(r))e.push(q+'อ้างเหตุการณ์ที่ไม่มี '+r)});
+  try{JSON.stringify(x)}catch(err){e.push(p+'ต้องเป็นข้อมูล JSON')}}
+ return e}
+class EventSystem{
+ constructor(E){this.E=E;E.state.register('events',OWNER,()=>({pending:null,done:{},last:{},unlocked:{},log:[]}));
+  E.worlds.addValidator(validateEvents);
+  E.bus.on('month:after',()=>this._month(),{prio:0,owner:OWNER});
+  // เหตุการณ์ enter ที่แสดงไปแล้วในการมาครั้งนี้จะไม่ขึ้นซ้ำ (กันวนกรณีเลือก 'ไว้ก่อน') ล้างเมื่อย้ายที่
+  this._seen=new Set();E.bus.on('player:moved',({world,loc})=>{this._seen=new Set();this._enter(world,loc)},{prio:0,owner:OWNER});
+  E.bus.on('game:loaded',()=>{if(this.pending())E.loop.pause('event')},{prio:0,owner:OWNER});
+  E.bus.on('game:new',()=>E.loop.resume('event'),{prio:0,owner:OWNER});
+  E.bus.on('player:created',()=>this._month({autoOnly:true}),{prio:0,owner:OWNER})}
+ get(){return this.E.state.get(OWNER)}
+ _m(fn){return this.E.state.mutate(OWNER,OWNER,fn)}
+ def(q){const[w,id]=q.split('.'),c=this.E.worlds.ctx(w);return c?c.events.get(id)||null:null}
+ view(w){return this.E.view(w)}
+ log(t){const m=this.E.loop.month;this._m(s=>{s.log.unshift({m,t});if(s.log.length>80)s.log.length=80})}
+ pending(){const p=this.get().pending;return p?Object.assign({},p,{def:this.def(p.id)}):null}
+ _active(){const p=this.E.player.get();return p.created&&p.location.world&&this.E.worlds.has(p.location.world)&&!this.E.time.state.get('worlds_time').traveling&&!this.get().pending}
+ // ผ่านเงื่อนไขทุกข้อไหม (ไม่รวมการสุ่ม trigger)
+ eligible(q,{v}={}){const x=this.def(q);if(!x)return false;const s=this.get(),w=q.split('.')[0],P=this.E.player.get();
+  if(P.location.world!==w)return false;if(x.at&&P.location.loc!==x.at)return false;
+  if(x.locked&&!s.unlocked[q])return false;if(x.once&&s.done[q])return false;
+  if(x.cooldown&&s.last[q]!==undefined&&this.E.loop.month-s.last[q]<x.cooldown)return false;
+  return R().check(x.when,v||this.view(w))}
+ _list(trigger,w){const c=this.E.worlds.ctx(w);return c?[...c.events.values()].filter(x=>x.trigger===trigger).map(x=>w+'.'+x.id):[]}
+ _month({autoOnly=false}={}){if(!this._active())return;const w=this.E.player.get().location.world,c=this.E.worlds.ctx(w);
+  const auto=this._list('auto',w).filter(q=>this.eligible(q)).sort((a,b)=>(this.def(b).priority||0)-(this.def(a).priority||0));
+  if(auto.length)return this.present(auto[0]);if(autoOnly)return;
+  const ch=c.config.eventChance??0.4;if(this.E.rng.next()>=ch)return;
+  const pool=this._list('month',w).filter(q=>this.eligible(q));if(!pool.length)return;
+  const tot=pool.reduce((a,q)=>a+(this.def(q).weight??1),0);let r=this.E.rng.next()*tot;
+  for(const q of pool){r-=this.def(q).weight??1;if(r<0)return this.present(q)}return this.present(pool[pool.length-1])}
+ _enter(w,loc){if(!this._active())return;const list=this._list('enter',w).filter(q=>this.def(q).at===loc&&!this._seen.has(q)&&this.eligible(q)).sort((a,b)=>(this.def(b).priority||0)-(this.def(a).priority||0));
+  if(list.length){this._seen.add(list[0]);this.present(list[0])}}
+ // แสดงเหตุการณ์: เก็บเป็น pending และหยุดเวลา
+ present(q){if(!this.def(q))throw new Error('ไม่มีเหตุการณ์ '+q);if(this.get().pending)throw new Error('มีเหตุการณ์ค้างอยู่');
+  this._m(s=>{s.pending={id:q,at:this.E.loop.month}});this.E.loop.pause('event');this.E.bus.emit('event:show',{id:q});return this.pending()}
+ // ตัวเลือกที่แสดง: ทุกข้อ พร้อมสถานะเลือกได้/ไม่ได้ และโอกาสสำเร็จ
+ choices(){const p=this.pending();if(!p)return[];const w=p.id.split('.')[0],v=this.view(w);
+  return p.def.choices.map((c,i)=>({i,text:c.text,ok:R().check(c.when,v)&&R().affordable(c.ok&&c.ok.effects,v),lockText:c.lockText||'',chance:this.chance(c,w)}))}
+ chance(c,w){if(c.fight){const pr=this.E.combat.profile(w),en=this.E.combat.enemy(w,c.fight.enemy),ratio=pr.power/Math.max(1,en.power);return Math.round(Math.max(0.02,Math.min(0.98,1/(1+Math.pow(1/ratio,3))+pr.luk*0.002))*100)/100}
+  if(!c.check)return 1;const p=this.E.player.get(),rs=this.E.worlds.ctx(w).config.rankSystem,r=rs&&p.ranks[rs.id];
+  // สูตรเดิม logic4.js:144: หลังตื่นพลังเกณฑ์ยากขึ้นตามแรงก์ เพราะค่าสถานะโตเร็ว
+  const off=p.class?18+(r?rs.order.indexOf(r):0)*12:0;return Math.round(Math.max(0.05,Math.min(0.97,0.5+(p.stats[c.check.stat]-DC[c.check.dc]-off)/30))*100)/100}
+ // ตอบ: ตรวจว่าเลือกได้ -> ทอย check/fight -> ใช้ผล -> บันทึก -> ต่อ next หรือปล่อยเวลาเดิน
+ answer(i){const p=this.pending();if(!p)throw new Error('ไม่มีเหตุการณ์ค้าง');const c=p.def.choices[i];if(!c)throw new Error('ไม่มีตัวเลือก '+i);
+  const w=p.id.split('.')[0],v=this.view(w);if(!R().check(c.when,v))throw new Error('ยังเลือกข้อนี้ไม่ได้');if(!R().affordable(c.ok&&c.ok.effects,v))throw new Error('เงินหรือของไม่พอ');
+  let success=true,fight=null;
+  if(c.check)success=this.E.rng.next()<this.chance(c,w);
+  if(c.fight){fight=this.E.combat.fight({worldId:w,enemy:c.fight.enemy,mode:c.fight.mode||'auto'});success=fight.win}
+  const out=success?c.ok:c.fail,lines=R().apply(out.effects,v);
+  const text=this.fmt(out.text),res={id:p.id,title:p.def.title,choice:c.text,success,text,effects:lines,fight};
+  this._m(s=>{s.pending=null;s.done[p.id]=(s.done[p.id]||0)+1;s.last[p.id]=this.E.loop.month});
+  this.log(`${p.def.title}: ${text}`+(lines.length?` (${lines.join(', ')})`:''));
+  this.E.bus.emit('event:answered',res);
+  const nx=c.next&&(c.next.includes('.')?c.next:w+'.'+c.next);
+  // ต่อเรื่อง: next ก่อน ไม่มีก็ดูเหตุการณ์ enter อื่นที่สถานที่เดิม (เช่น ประเมินแรงก์ -> ลงทะเบียน)
+  if(nx)this.present(nx);else{this.E.loop.resume('event');const L=this.E.player.get().location;if(L.world)this._enter(L.world,L.loc)}
+  return res}
+ // กิจกรรมที่สถานที่ปัจจุบัน
+ actions(){const p=this.E.player.get(),w=p.location.world;if(!w||!this.E.worlds.has(w))return[];
+  return this._list('action',w).filter(q=>this.def(q).at===p.location.loc).map(q=>{const x=this.def(q),v=this.view(w),ap=(x.cost&&x.cost.ap)??1;
+   return{id:q,title:x.title,ap,ok:!this.get().pending&&this.eligible(q,{v})&&p.ap>=ap&&R().affordable(x.choices[0].ok.effects,v)}})}
+ // ทำกิจกรรม: กิจกรรมตัวเลือกเดียวใช้ผลทันที กิจกรรมหลายตัวเลือกแสดงเป็นเหตุการณ์
+ doAction(q){const x=this.def(q);if(!x||x.trigger!=='action')throw new Error('ไม่มีกิจกรรม '+q);if(this.get().pending)throw new Error('มีเหตุการณ์ค้างอยู่');
+  if(!this.eligible(q))throw new Error('ทำกิจกรรมนี้ไม่ได้ตอนนี้');const ap=(x.cost&&x.cost.ap)??1;if(ap)this.E.player.spendAp(ap);
+  this.present(q);if(x.choices.length===1)return this.answer(0);return this.pending()}
+ unlock(q){this._m(s=>{s.unlocked[q]=true})}
+ fmt(t){const p=this.E.player.get();return String(t).replace(/\{name\}/g,p.name).replace(/\{age\}/g,String(Math.floor(p.age/12)))}
+}
+AW.systems.EventSystem=EventSystem;AW.systems.validateEvents=validateEvents;AW.systems.CHECK_DC=DC;
+AW.systems.EventsModule={id:'events',deps:['ranks','combat'],install(e){e.events=new EventSystem(e)}};
+})(globalThis.AW);
+
+// ==== src/systems/missions.js ====
+// Mission System: ภารกิจจากข้อมูลของโลก (data.missions) ต่อสู้ผ่าน Combat Resolver (โหมดตามภารกิจ ค่าเริ่ม 'auto')
+// ใช้ AP 1 ต่อภารกิจ · ชนะได้ผล win[] และนับ tags (ใช้เป็นเกณฑ์แรงก์) · แพ้ได้ผล lose[] · ความเสียหาย/บาดเจ็บมาจาก Combat
+// บาดเจ็บหนัก (injury >= 2) รับภารกิจไม่ได้จนกว่าจะหาย
+// slice 'missions' เจ้าของ 'missions': done (ต่อภารกิจ), byTag, last (รายงานล่าสุด)
+(function(AW){
+'use strict';
+const OWNER='missions',R=()=>AW.systems.Rules;
+function validateMissions(def){const d=def.data||{},en=new Set((d.enemies||[]).map(x=>x.id)),locs=new Set((d.locations||[]).map(l=>l.id)),e=[];
+ for(const m of d.missions||[]){const p='mission '+m.id+': ';
+  if(typeof m.name!=='string')e.push(p+'ต้องมี name');if(!en.has(m.enemy))e.push(p+'ไม่มีศัตรู '+m.enemy);
+  if(m.at&&!locs.has(m.at))e.push(p+'ไม่มีสถานที่ '+m.at);
+  if(m.tags&&!(Array.isArray(m.tags)&&m.tags.every(t=>typeof t==='string')))e.push(p+'tags ต้องเป็น array ของข้อความ');
+  e.push(...R().validateCond(m.when).map(x=>p+x),...R().validateEffects(m.win).map(x=>p+'win: '+x),...R().validateEffects(m.lose).map(x=>p+'lose: '+x))}
+ for(const x of d.enemies||[])if(typeof x.name!=='string'||!(x.power>0))e.push('enemy '+x.id+': ต้องมี name และ power > 0');
+ const rs=def.config&&def.config.rankSystem;if(rs)e.push(...AW.systems.RankSystem.validate(rs));
+ for(const l of d.locations||[])e.push(...R().validateCond(l.when).map(x=>'location '+l.id+': '+x));
+ return e}
+class MissionSystem{
+ constructor(E){this.E=E;E.state.register(OWNER,OWNER,()=>({done:{},byTag:{},last:null}));E.worlds.addValidator(validateMissions)}
+ get(){return this.E.state.get(OWNER)}
+ def(q){const[w,id]=q.split('.'),c=this.E.worlds.ctx(w);return c?c.list('missions').get(id)||null:null}
+ // ภารกิจที่สถานที่ปัจจุบัน พร้อมเหตุผลถ้ายังรับไม่ได้ (ภารกิจที่เงื่อนไขไม่ผ่านจะไม่แสดง)
+ available(){const p=this.E.player.get(),w=p.location.world,c=w&&this.E.worlds.ctx(w);if(!c)return[];const v=this.E.view(w);
+  return[...c.list('missions').values()].filter(m=>(!m.at||m.at===p.location.loc)&&R().check(m.when,v)).map(m=>{const q=w+'.'+m.id;
+   const why=this.E.events&&this.E.events.get().pending?'มีเหตุการณ์ค้าง':p.injury>=2?'บาดเจ็บหนัก ต้องพักก่อน':p.ap<1?'แรงไม่พอเดือนนี้ (AP)':'';
+   const pr=this.E.combat.profile(w),en=this.E.combat.enemy(w,m.enemy),ratio=pr.power/en.power;
+   return{id:q,name:m.name,rank:m.rank,enemy:en.name,ok:!why,why,chance:Math.round(Math.max(0.02,Math.min(0.98,1/(1+Math.pow(1/ratio,3))+pr.luk*0.002))*100)/100}})}
+ start(q){const m=this.def(q);if(!m)throw new Error('ไม่มีภารกิจ '+q);const a=this.available().find(x=>x.id===q);
+  if(!a)throw new Error('รับภารกิจนี้ไม่ได้ที่นี่');if(!a.ok)throw new Error(a.why);
+  const w=q.split('.')[0];this.E.player.spendAp(1);
+  const fight=this.E.combat.resolve({worldId:w,enemy:m.enemy,mode:m.mode||'auto'});
+  // โหมดอนาคตอาจคืน pending (รอผู้เล่นเลือกสกิล) ตอนนั้นจะเรียก finish() ทีหลัง ตอนนี้ auto จบในครั้งเดียว
+  if(fight.pending)return{pending:true,fight};
+  return this.finish(q,fight)}
+ finish(q,fight){const m=this.def(q),w=q.split('.')[0];this.E.combat.apply(fight);const v=this.E.view(w);
+  const effects=R().apply(fight.win?m.win:m.lose,v);
+  this._m(s=>{if(fight.win){s.done[q]=(s.done[q]||0)+1;for(const t of(m.tags||[]).concat('any'))s.byTag[t]=(s.byTag[t]||0)+1}});
+  const rep={id:q,name:m.name,win:fight.win,fight,effects,month:this.E.loop.month};this._m(s=>{s.last=rep});
+  if(this.E.events)this.E.events.log(`ภารกิจ ${m.name}: ${fight.win?'สำเร็จ':'ล้มเหลว'}`+(effects.length?` (${effects.join(', ')})`:''));
+  this.E.bus.emit('mission:done',rep);return rep}
+ _m(fn){return this.E.state.mutate(OWNER,OWNER,fn)}
+}
+AW.systems.MissionSystem=MissionSystem;AW.systems.validateMissions=validateMissions;
+AW.systems.MissionsModule={id:'missions',deps:['events'],install(e){e.missions=new MissionSystem(e)}};
+// ติดตั้งระบบเกมเพลย์ทั้งชุดตามลำดับ deps
+AW.systems.installGameplay=e=>{for(const m of['WorldsModule','PlayerModule','RanksModule','CombatModule','EventsModule','MissionsModule'])e.use(AW.systems[m]);return e};
 })(globalThis.AW);
 
 // ==== data/assets/manifest.js ====
@@ -363,32 +782,298 @@ AW.data.assetCandidates=[
 // ลำดับไฟล์กำหนดใน tools/build.py · ไฟล์นี้ไม่มีโค้ด เก็บไว้เป็นจุดอธิบาย
 (function(AW){})(globalThis.AW);
 
-// ==== data/worlds/hunter.js ====
-// โลกทดสอบ Phase 2: Hunter World (ข้อมูลตัวอย่าง ยังไม่ใช่เนื้อหาจริง)
-// เมือง ชื่อ และสถานที่เป็นของที่แต่งขึ้นเอง ภาพอ้างถึง id ใน namespace hunter (ตอนนี้เป็น placeholder ทั้งหมด)
+// ==== data/worlds/hunter/base.js ====
+// Hunter World: ข้อมูลพื้นฐาน (สถานที่ อาชีพ สกิล ไอเทม ศัตรู แรงก์)
+// src: 'logic4.js:N' = ย้ายจากเกมเดิม (ข้อความก่อนผ่าน theme7) · 'new' = เขียนใหม่ใน Phase 3
+// ไฟล์นี้เป็นข้อมูลล้วน ไม่มีฟังก์ชัน
 (function(AW){
+const H=(AW.data.parts=AW.data.parts||{}).hunter=AW.data.parts.hunter||{};
+H.locations=[
+ {id:'home',name:'บ้าน',desc:'ที่พักของท่าน',bg:'bg.apartment',src:'logic4.js:20'},
+ {id:'school',name:'โรงเรียนมัธยมฮันนัม',desc:'เรียน สอบ ชมรม และเพื่อนร่วมชั้น',bg:'bg.city_day',when:{awakened:false},src:'logic4.js:21'},
+ {id:'city',name:'ย่านใจกลางเมือง',desc:'ร้านค้า ข่าวลือ และผู้คน',bg:'bg.city_day',src:'logic4.js:22'},
+ {id:'gym',name:'ศูนย์ฝึกเอกชน',desc:'ฝึกร่างกายแบบจ่ายรายครั้ง',bg:'bg.training_center',src:'new'},
+ {id:'market',name:'ตลาดอุปกรณ์ฮันเตอร์',desc:'อาวุธและเกราะที่สมาคมรับรอง',bg:'bg.market',when:{awakened:true},src:'logic4.js:23 (ส่วนซื้ออุปกรณ์)'},
+ {id:'association',name:'สมาคมฮันเตอร์',desc:'ประเมินแรงก์ ลงทะเบียน รับภารกิจ',bg:'bg.association_hall',when:{awakened:true},src:'logic4.js:23'},
+ {id:'gate_zone',name:'ย่านเกต',desc:'เขตกั้นรอบเกตที่เปิดอยู่ อันตรายแต่คุ้มค่า',bg:'bg.gate_blue',when:{worldFlag:'registered'},src:'logic4.js:24'},
+ {id:'hospital',name:'โรงพยาบาลฮันเตอร์',desc:'พักรักษาตัว ฟื้นพลังชีวิตเร็วขึ้นมาก',bg:'bg.hunter_hospital',src:'logic4.js:25'}];
+H.classes=[
+ {id:'sword',name:'นักดาบ',main:'str',desc:'ฟันระยะประชิด เน้นกาย',bonus:{str:5,vit:2},skill:'hunter.slash',src:'logic4.js:7'},
+ {id:'bow',name:'นักธนู',main:'agi',desc:'ยิงจากระยะไกล เน้นความเร็ว',bonus:{agi:5,luk:2},skill:'hunter.aimed_shot',src:'logic4.js:7'},
+ {id:'mage',name:'นักเวท',main:'int',desc:'ร่ายลูกไฟ เน้นปัญญา',bonus:{int:6},skill:'hunter.fireball',src:'logic4.js:8'},
+ {id:'assassin',name:'นักลอบสังหาร',main:'agi',desc:'หายตัวไปด้านหลังศัตรู',bonus:{agi:4,luk:3},skill:'hunter.backstab',src:'logic4.js:8'},
+ {id:'healer',name:'ผู้รักษา',main:'int',desc:'ฟื้นฟูตัวเองและทีม',bonus:{int:4,vit:3},skill:'hunter.heal',src:'logic4.js:9'},
+ {id:'tank',name:'ผู้คุ้มกัน',main:'vit',desc:'ยกโล่รับดาเมจแทนทีม',bonus:{vit:6,str:1},skill:'hunter.shield_wall',src:'logic4.js:9'}];
+H.skills=[
+ {id:'slash',name:'ฟันเฉียง',power:8,src:'new'},{id:'aimed_shot',name:'เล็งจุดตาย',power:8,src:'new'},{id:'fireball',name:'ลูกไฟ',power:10,src:'logic4.js:8 (คำอธิบายอาชีพ)'},
+ {id:'backstab',name:'แทงข้างหลัง',power:9,src:'logic4.js:8 (คำอธิบายอาชีพ)'},{id:'heal',name:'ฟื้นฟู',power:5,src:'new'},{id:'shield_wall',name:'กำแพงโล่',power:6,src:'new'},
+ {id:'mana_burst',name:'ระเบิดมานา',power:15,src:'new'}];
+// ราคาและพลังจากตาราง WEAPONS/ARMORS เดิม (logic4.js:45-46) สามเกรดแรก
+H.items=[
+ {id:'iron_dagger',name:'มีดสั้นเหล็ก',slot:'weapon',power:12,price:150,src:'logic4.js:45'},
+ {id:'mana_blade_d',name:'อาวุธมานาเกรด D',slot:'weapon',power:30,price:600,src:'logic4.js:45'},
+ {id:'crystal_blade_c',name:'อาวุธผลึกเกรด C',slot:'weapon',power:70,price:2200,src:'logic4.js:45'},
+ {id:'leather_vest',name:'เสื้อหนังกันมีด',slot:'armor',hp:40,price:120,src:'logic4.js:46'},
+ {id:'light_armor_d',name:'เกราะเบาเกรด D',slot:'armor',hp:110,price:550,src:'logic4.js:46'},
+ {id:'mana_stone',name:'หินมานา',kind:'loot',price:60,src:'logic4.js:238 (ของในเกต)'},
+ {id:'monster_core',name:'แกนอสูร',kind:'loot',price:150,src:'logic4.js:270'},
+ {id:'hunter_license',name:'ใบอนุญาตฮันเตอร์',kind:'key',src:'new'}];
+// พลังศัตรูอิง GATE_DIFF เดิม [60,120,220,...] (logic4.js:3) ชื่อจาก MON_N (logic4.js:40) และ BOSSES
+H.enemies=[
+ {id:'slime_g',name:'สไลม์เขียว',power:40,asset:'mon.goblin',src:'logic4.js:40'},
+ {id:'goblins',name:'ฝูงก็อบลิน',power:60,asset:'mon.goblin',src:'new'},
+ {id:'thugs',name:'ฮันเตอร์นอกกฎหมายสามคน',power:45,src:'logic4.js:262'},
+ {id:'border_beast',name:'สัตว์อสูรหลุดจากเกต',power:55,asset:'mon.dire_wolf',src:'logic4.js:286'},
+ {id:'skel_w',name:'โครงกระดูกนักรบ',power:110,src:'logic4.js:40'},
+ {id:'wolf_w',name:'มนุษย์หมาป่าขาว',power:135,asset:'mon.dire_wolf',src:'logic4.js:40'},
+ {id:'goblin_king',name:'ราชาก็อบลิน',power:150,asset:'mon.gate_boss',src:'logic4.js:387 (BOSSES)'},
+ {id:'exam_d',name:'หุ่นประเมินของสมาคม (เกณฑ์ D)',power:115,asset:'mon.golem',src:'new'},
+ {id:'skel_a',name:'โครงกระดูกนักธนู',power:210,src:'logic4.js:40'},
+ {id:'wolf_b',name:'มนุษย์หมาป่าดำ',power:230,asset:'mon.dire_wolf',src:'logic4.js:40'},
+ {id:'exam_c',name:'หุ่นประเมินของสมาคม (เกณฑ์ C)',power:225,asset:'mon.golem',src:'new'}];
+H.npcs=[
+ {id:'best_friend',name:'ฮาจุน',role:'เพื่อนสนิทตั้งแต่ ม.1',src:'new (แทนเพื่อนสนิทที่เกมเดิมสุ่มสร้าง logic4.js:89)'},
+ {id:'clerk_yoon',name:'ยุนแชอา',role:'เจ้าหน้าที่สมาคม',at:'association',src:'new'},
+ {id:'master_kang',name:'ครูฝึกคัง',role:'ครูฝึกที่ศูนย์ฝึก',at:'gym',src:'new'}];
+// เกณฑ์แรงก์ (ใหม่): ไม่มีทางเลื่อนด้วยเวลาอย่างเดียว ต้องมีเลเวล ค่าสถานะ จำนวนภารกิจ และผ่านภารกิจสอบ
+H.rankSystem={id:'hunter',name:'แรงก์ฮันเตอร์',order:['E','D','C','B','A','S'],
+ initial:[{rank:'D',when:{all:[{statTotal:{min:150}},{mana:{min:25}}]}},{rank:'E'}],
+ promote:{
+  D:{when:{all:[{level:{min:6}},{statTotal:{min:140}},{missions:{tag:'rank_e',min:4}}]}},
+  C:{when:{all:[{level:{min:11}},{statTotal:{min:190}},{missions:{tag:'rank_d',min:6}}]}}}};
+})(globalThis.AW);
+
+// ==== data/worlds/hunter/events_life.js ====
+// Hunter World: เหตุการณ์ช่วงเป็นนักเรียน (ก่อนตื่นพลัง) และเรื่องหลัก (ตื่นพลัง ประเมิน ลงทะเบียน กิลด์)
+// ข้อมูลล้วน รูปแบบอธิบายใน docs/phase3/STORY_EVENT_SYSTEM.md
+// ผลที่เกมเดิมมีแต่ Phase 3 ยังไม่มีระบบรองรับ (karma, นิสัย tr, ความโปรดปรานดวงดาว fav, ดาวเหรียญ coin) ถูกตัดออก บันทึกไว้ใน HUNTER_WORLD_DESIGN.md
+(function(AW){
+const H=(AW.data.parts=AW.data.parts||{}).hunter=AW.data.parts.hunter||{};
+const school={awakened:false};
+H.events=(H.events||[]).concat([
+// ---------- เปิดเรื่อง ----------
+{id:'intro',title:'ชีวิต ม.ปลายเริ่มต้นขึ้น',trigger:'auto',once:true,priority:100,when:{age:{max:15.99}},src:'logic4.js:90-91,321',
+ text:'{name} อายุ 15 ปี นักเรียน ม.4 โรงเรียนมัธยมฮันนัม โลกนี้มีเกตเปิดขึ้นมาได้ 20 ปีแล้ว คนที่ตื่นพลังเรียกว่าฮันเตอร์ ส่วนใหญ่ตื่นพลังตอนอายุ 18 อีกสามปีจะถึงวันนั้น ท่านจะใช้ชีวิตแบบไหน',
+ choices:[
+  {text:'ตั้งใจเรียน',ok:{text:'ท่านตั้งใจจะสอบให้ได้ที่หนึ่งของชั้น',effects:[{stat:{int:2}},{flag:'path_study'}]}},
+  {text:'เล่นกีฬา',ok:{text:'ท่านสมัครทีมกรีฑาตั้งแต่สัปดาห์แรก',effects:[{stat:{str:1,vit:1}},{flag:'path_sport'}]}},
+  {text:'ผูกมิตร',ok:{text:'ท่านรู้จักคนทั้งห้องภายในเดือนเดียว',effects:[{stat:{cha:2}},{rel:{npc:'best_friend',n:5}},{flag:'path_social'}]}},
+  {text:'ทำงานพิเศษ',ok:{text:'ท่านได้งานกะดึกที่ร้านสะดวกซื้อ',effects:[{money:80},{flag:'path_work'}]}}]},
+{id:'midterm',title:'สอบกลางภาค',trigger:'month',at:'school',when:school,cooldown:6,weight:3,src:'logic4.js:183',
+ text:'ข้อสอบคณิตศาสตร์ยากกว่าที่คิด เพื่อนข้าง ๆ เลื่อนกระดาษคำตอบมาให้ดูครึ่งแผ่น ครูกำลังหันหลังเขียนกระดาน',
+ choices:[
+  {text:'ตั้งใจทำเอง',check:{stat:'int',dc:'mid'},ok:{text:'ทำได้เกือบเต็ม ครูชมหน้าห้อง',effects:[{stat:{int:2}},{reputation:1}]},fail:{text:'คะแนนกลาง ๆ แต่ภูมิใจที่ทำเอง',effects:[{stat:{int:1}}]}},
+  {text:'แอบลอกคำตอบ',check:{stat:'agi',dc:'mid'},ok:{text:'ได้คะแนนสูงโดยไม่มีใครรู้',effects:[]},fail:{text:'ครูจับได้ ถูกเรียกพบผู้ปกครอง',effects:[{stat:{cha:-1}}]}},
+  {text:'ส่งกระดาษเปล่าแล้วนอน',ok:{text:'ตื่นมาอีกทีห้องว่างแล้ว',effects:[{stat:{vit:1}}]}}]},
+{id:'club',title:'ชมรมเปิดรับสมัคร',trigger:'month',at:'school',when:school,once:true,weight:2,src:'logic4.js:187',
+ text:'ต้นเทอมแต่ละชมรมตั้งโต๊ะเรียกสมาชิกเต็มโถงอาคาร ชมรมไหนก็ได้เลือกแค่ชมรมเดียว',
+ choices:[
+  {text:'ชมรมเคนโด้',ok:{text:'ได้ดาบไม้มาหนึ่งเล่ม ซ้อมจนมือพอง',effects:[{stat:{str:3}},{flag:'club_kendo'}]}},
+  {text:'ชมรมยิงธนู',ok:{text:'ยิงเข้าเป้าตั้งแต่ลูกแรก รุ่นพี่ตาโต',effects:[{stat:{agi:3}},{flag:'club_archery'}]}},
+  {text:'ชมรมวิทยาศาสตร์ที่ศึกษาเกต',ok:{text:'ได้จับเศษแกนอสูรของจริงเป็นครั้งแรก',effects:[{stat:{int:3}},{mana:3},{flag:'club_science'}]}},
+  {text:'ชมรมอาสาพยาบาล',ok:{text:'เรียนปฐมพยาบาลจนพันแผลได้คล่อง',effects:[{stat:{vit:2,cha:1}},{flag:'club_nurse'}]}}]},
+{id:'locker_letter',title:'จดหมายในล็อกเกอร์',trigger:'month',at:'school',when:school,once:true,weight:2,src:'logic4.js:197',
+ text:'มีซองสีฟ้าเสียบอยู่ในล็อกเกอร์ ข้างในเขียนว่า "หลังเลิกเรียน ดาดฟ้า" ไม่ได้ลงชื่อ',
+ choices:[
+  {text:'ขึ้นไปตามนัด',ok:{text:'คนที่รออยู่เป็นรุ่นเดียวกันห้องข้าง ๆ หน้าแดงจนพูดไม่ออก',effects:[{stat:{cha:2}}]}},
+  {text:'พาเพื่อนสนิทไปด้วย',ok:{text:'ฮาจุนแซวท่านทั้งทางจนลืมไปว่ามานัดใคร คนที่รอหนีไปก่อน',effects:[{rel:{npc:'best_friend',n:5}}]}},
+  {text:'ไม่ไป',ok:{text:'วันต่อมาซองฟ้าหายไปจากล็อกเกอร์',effects:[]}}]},
+{id:'store_robber',title:'โจรในร้านสะดวกซื้อ',trigger:'month',when:{all:[school,{flag:'path_work'}]},cooldown:12,weight:3,src:'logic4.js:201',
+ text:'กะดึกที่ร้านสะดวกซื้อ ชายสวมหมวกไหมพรมยื่นมีดข้ามเคาน์เตอร์ สั่งให้เปิดลิ้นชักเงิน',
+ choices:[
+  {text:'แย่งมีด',check:{stat:'agi',dc:'hard'},ok:{text:'ท่านบิดข้อมือเขาจนมีดหล่น ตำรวจมาถึงพอดี เจ้าของร้านให้โบนัส',effects:[{money:120},{reputation:3}]},fail:{text:'มีดเฉี่ยวแขนเป็นแผลยาว',effects:[{hp:-25}]}},
+  {text:'ส่งเงินให้แล้วกดปุ่มฉุกเฉิน',check:{stat:'int',dc:'easy'},ok:{text:'ตำรวจจับเขาได้ที่ปากซอย',effects:[{stat:{int:1}}]},fail:{text:'ปุ่มเสีย เขาหนีไปได้ เจ้าของร้านหักเงินเดือน',effects:[{money:-60}]}},
+  {text:'ชวนคุย ถามว่าเดือดร้อนเรื่องอะไร',check:{stat:'cha',dc:'mid'},ok:{text:'เขาร้องไห้ บอกว่าลูกป่วยหนัก แล้ววางมีดเดินออกไปเอง',effects:[{stat:{cha:2}}]},fail:{text:'เขาตะคอกให้หุบปากแล้วกวาดเงินไป',effects:[{money:-40}]}}]},
+{id:'friend_gate_clip',title:'เพื่อนชวนแอบเข้าเขตเกต',trigger:'month',when:school,cooldown:18,weight:2,src:'logic4.js:217',
+ text:'ฮาจุนกระซิบว่ารั้วกั้นเกตแรงก์ E หลังตลาดมีช่องโหว่ อยากเข้าไปถ่ายคลิปลงโซเชียล',
+ choices:[
+  {text:'ไปด้วย',check:{stat:'luk',dc:'mid'},ok:{text:'ทั้งคู่ได้คลิปหน้าเกตเรืองแสง ยอดวิวทะลุแสน',effects:[{reputation:4},{rel:{npc:'best_friend',n:6}}]},fail:{text:'สไลม์ตัวหนึ่งพุ่งออกมา ท่านลากเพื่อนหนีจนแขนถลอก',effects:[{hp:-30},{rel:{npc:'best_friend',n:10}}]}},
+  {text:'ห้ามเพื่อน',check:{stat:'cha',dc:'mid'},ok:{text:'เพื่อนยอมกลับบ้าน',effects:[{rel:{npc:'best_friend',n:2}}]},fail:{text:'เพื่อนไปคนเดียว กลับมาพร้อมแผลที่ขา',effects:[{rel:{npc:'best_friend',n:-5}}]}},
+  {text:'แจ้งยามสมาคม',ok:{text:'ยามปิดช่องโหว่ เพื่อนโกรธท่านไปหนึ่งสัปดาห์',effects:[{rel:{npc:'best_friend',n:-6}}]}}]},
+{id:'track_meet',title:'แข่งกรีฑาระดับเขต',trigger:'month',when:{all:[school,{flag:'path_sport'}]},cooldown:12,weight:3,src:'logic4.js:221',
+ text:'ท่านถูกส่งลงแข่งวิ่ง 400 เมตรแทนเพื่อนที่ขาพลิก แมวมองจากสมาคมนั่งอยู่บนอัฒจันทร์',
+ choices:[
+  {text:'ออกตัวแรงตั้งแต่ต้น',check:{stat:'agi',dc:'mid'},ok:{text:'เข้าเส้นชัยเป็นอันดับหนึ่ง แมวมองจดชื่อท่านไว้',effects:[{stat:{agi:2}},{reputation:3}]},fail:{text:'หมดแรงช่วงโค้งสุดท้าย ได้ที่ห้า',effects:[{stat:{vit:1}}]}},
+  {text:'เก็บแรงไว้ช่วงท้าย',check:{stat:'vit',dc:'mid'},ok:{text:'แซงสามคนในร้อยเมตรสุดท้าย ได้ที่สอง',effects:[{stat:{vit:2}},{reputation:2}]},fail:{text:'แซงไม่ทัน ได้ที่สี่',effects:[{stat:{vit:1}}]}},
+  {text:'วิ่งเป็นเพื่อนคนที่ล้ม',ok:{text:'ไม่ได้เหรียญแต่ภาพนั้นถูกแชร์ทั่วเมือง',effects:[{stat:{cha:2}}]}}]},
+{id:'library_night',title:'ห้องสมุดตอนดึก',trigger:'month',at:'school',when:{all:[school,{flag:'path_study'}]},once:true,weight:2,src:'logic4.js:225',
+ text:'ท่านเจอหนังสือเล่มบาง ๆ ไม่มีชื่อผู้แต่ง ชื่อเรื่องว่า "บันทึกก่อนเกตแรกเปิด" ซ่อนอยู่หลังชั้นวาง',
+ choices:[
+  {text:'อ่านจนจบในคืนเดียว',check:{stat:'int',dc:'hard'},ok:{text:'เนื้อหาบอกว่าเกตเปิดตามจังหวะของดวงดาว ท่านจดไว้ทุกบรรทัด',effects:[{stat:{int:3}},{mana:5},{flag:'lore_first_gate'}]},fail:{text:'ตัวอักษรเลือนจนอ่านไม่ออก ปวดหัวไปสามวัน',effects:[{stat:{int:1}}]}},
+  {text:'ยืมกลับบ้าน',ok:{text:'วันรุ่งขึ้นหนังสือหายไปจากกระเป๋า',effects:[{stat:{luk:1}}]}},
+  {text:'ส่งให้บรรณารักษ์',ok:{text:'บรรณารักษ์หน้าซีดแล้วรีบเก็บเข้าห้องด้านใน',effects:[]}}]},
+{id:'scout_rumor',title:'ข่าวลือเรื่องแมวมอง',trigger:'month',when:{all:[school,{age:{min:17}}]},once:true,weight:2,src:'logic4.js:229',
+ text:'มีข่าวว่ากิลด์ใหญ่ส่งคนมาดูตัวนักเรียน ม.6 ที่มีแววจะตื่นพลังแรงก์สูง หลายคนเริ่มไปฟิตเนส',
+ choices:[
+  {text:'ฝึกหนักทุกเช้า',ok:{text:'กล้ามเนื้อเริ่มแน่น',effects:[{stat:{str:2,vit:1}}]}},
+  {text:'อ่านเรื่องฮันเตอร์ให้มากที่สุด',ok:{text:'ท่านรู้ชื่อมอนสเตอร์ทุกตัวในฐานข้อมูลสมาคม',effects:[{stat:{int:2}},{mana:2}]}},
+  {text:'ไม่สน ตื่นได้ก็ตื่น',ok:{text:'ชีวิตยังเหมือนเดิม',effects:[{stat:{luk:1}}]}}]},
+// ---------- เรื่องหลัก ----------
+{id:'awakening',title:'วันตื่นพลัง',trigger:'auto',once:true,priority:90,src:'prog6.js:86-98 (ข้อความลูกแก้วย้ายไปเหตุการณ์ประเมินแรงก์)',
+ when:{all:[{awakened:false},{age:{min:17.5}},{any:[{chance:0.25},{age:{min:18.5}}]}]},
+ text:'คืนนั้นร่างกายร้อนผ่าวเหมือนมีไฟไหลในเส้นเลือด เช้าวันต่อมาท่านมองเห็นมานารอบตัวเป็นสายแสงจาง ๆ ท่านตื่นพลังแล้ว พลังในตัวกำลังรอให้ท่านเลือกทาง',
+ choices:[
+  {text:'นักดาบ — ฟันระยะประชิด เน้นกาย',ok:{text:'ท่านตื่นพลังเป็นนักดาบ',effects:[{class:'sword'},{mana:10}]}},
+  {text:'นักธนู — ยิงจากระยะไกล เน้นความเร็ว',ok:{text:'ท่านตื่นพลังเป็นนักธนู',effects:[{class:'bow'},{mana:10}]}},
+  {text:'นักเวท — ร่ายลูกไฟ เน้นปัญญา',when:{mana:{min:8}},lockText:'ต้องมีมานาแฝง 8 ขึ้นไป',ok:{text:'ท่านตื่นพลังเป็นนักเวท',effects:[{class:'mage'},{mana:12}]}},
+  {text:'นักลอบสังหาร — หายตัวไปด้านหลังศัตรู',ok:{text:'ท่านตื่นพลังเป็นนักลอบสังหาร',effects:[{class:'assassin'},{mana:10}]}},
+  {text:'ผู้รักษา — ฟื้นฟูตัวเองและทีม',when:{mana:{min:8}},lockText:'ต้องมีมานาแฝง 8 ขึ้นไป',ok:{text:'ท่านตื่นพลังเป็นผู้รักษา',effects:[{class:'healer'},{mana:12}]}},
+  {text:'ผู้คุ้มกัน — ยกโล่รับดาเมจแทนทีม',ok:{text:'ท่านตื่นพลังเป็นผู้คุ้มกัน',effects:[{class:'tank'},{mana:10}]}}]},
+{id:'rank_evaluation',title:'ประเมินแรงก์',trigger:'enter',at:'association',once:true,priority:80,when:{all:[{awakened:true},{rank:{is:null}}]},src:'prog6.js:96 (ข้อความลูกแก้วประเมินพลัง)',
+ text:'เจ้าหน้าที่ยุนแชอาพาท่านไปที่ห้องประเมิน ท่านวางมือลงบนลูกแก้วประเมินพลัง แสงพุ่งขึ้นเต็มห้อง',
+ choices:[{text:'รอฟังผล',ok:{text:'เจ้าหน้าที่ประกาศผลและบันทึกลงฐานข้อมูลสมาคม',effects:[{rankInit:'hunter'}]}}]},
+{id:'registration',title:'ลงทะเบียนฮันเตอร์',trigger:'enter',at:'association',priority:70,when:{all:[{rank:{min:'E'}},{notWorldFlag:'registered'}]},src:'new',
+ text:'ยุนแชอายื่นแบบฟอร์มให้ "ถ้าจะรับภารกิจหรือเข้าย่านเกต ต้องลงทะเบียนเป็นฮันเตอร์ก่อน ค่าธรรมเนียมแรกเข้า 50 ถ้าเป็นนักเรียนเพิ่งจบขอยกเว้นได้ แต่ต้องคุยให้ผ่าน"',
+ choices:[
+  {text:'จ่ายค่าธรรมเนียม 50',when:{money:{min:50}},lockText:'เงินไม่พอ',ok:{text:'ท่านได้รับบัตรฮันเตอร์ ชื่อของท่านขึ้นบนกระดานสมาคมแล้ว',effects:[{money:-50},{worldFlag:'registered'},{item:{id:'hunter_license'}},{rel:{npc:'clerk_yoon',n:3}}]}},
+  {text:'ขอยกเว้นค่าธรรมเนียม',check:{stat:'cha',dc:'easy'},ok:{text:'ยุนแชอาหัวเราะแล้วประทับตรายกเว้นให้',effects:[{worldFlag:'registered'},{item:{id:'hunter_license'}}]},fail:{text:'"ระเบียบคือระเบียบ" ยุนแชอาบอก ท่านต้องกลับมาใหม่พร้อมเงิน',effects:[]}},
+  {text:'ไว้ก่อน',ok:{text:'ท่านเก็บแบบฟอร์มใส่กระเป๋า',effects:[]}}]},
+{id:'guild_offer',title:'กิลด์ชวนเข้าร่วม',trigger:'enter',at:'association',once:true,priority:60,when:{all:[{worldFlag:'registered'},{missions:{tag:'any',min:2}}]},src:'new',
+ text:'หลังงานที่สองของท่าน มีคนจากสองกิลด์มารอที่ล็อบบี้สมาคม กิลด์เขี้ยวเหล็กเน้นงานล่าที่ได้ประสบการณ์มาก ส่วนกิลด์ดาวเหนือเน้นงานคุ้มกันที่จ่ายดี',
+ choices:[
+  {text:'เข้ากิลด์เขี้ยวเหล็ก',ok:{text:'หัวหน้ากิลด์ตบไหล่ท่าน "ที่นี่เราล่าอย่างเดียว"',effects:[{worldFlag:'guild_ironfang'},{reputation:2}]}},
+  {text:'เข้ากิลด์ดาวเหนือ',ok:{text:'ท่านได้เสื้อกิลด์สีน้ำเงินกับตารางงานคุ้มกัน',effects:[{worldFlag:'guild_northstar'},{reputation:2}]}},
+  {text:'อยู่อิสระต่อไป',ok:{text:'ท่านอยากเลือกงานเอง',effects:[{worldFlag:'guild_none'}]}}]},
+{id:'rank_d_ready',title:'สมาคมเรียกสอบเลื่อนแรงก์',trigger:'enter',at:'association',once:true,priority:50,when:{canPromote:'hunter',rank:{is:'E'}},src:'new',
+ text:'ยุนแชอายิ้มเมื่อเห็นประวัติภารกิจของท่าน "ผลงานถึงเกณฑ์แรงก์ D แล้ว ไปลงชื่อสอบภาคปฏิบัติได้ที่กระดานภารกิจ"',
+ choices:[{text:'รับทราบ',ok:{text:'ภารกิจสอบเลื่อนแรงก์ D ปรากฏบนกระดาน',effects:[]}}]},
+{id:'rank_c_ready',title:'คำแนะนำก่อนสอบแรงก์ C',trigger:'enter',at:'association',once:true,priority:50,when:{canPromote:'hunter',rank:{is:'D'}},src:'new',
+ text:'"แรงก์ C คือเส้นแบ่งระหว่างมือใหม่กับมืออาชีพ" ยุนแชอาบอก "หุ่นประเมินรอบนี้แรงกว่าครั้งก่อนสองเท่า เตรียมอุปกรณ์ให้พร้อม"',
+ choices:[{text:'รับทราบ',ok:{text:'ภารกิจสอบเลื่อนแรงก์ C ปรากฏบนกระดาน',effects:[]}}]},
+{id:'reached_c',title:'ฮันเตอร์แรงก์ C',trigger:'auto',once:true,priority:95,when:{rank:{is:'C'}},src:'new',
+ text:'ชื่อของ {name} ถูกย้ายไปกระดานแรงก์ C ฮาจุนส่งข้อความมาแสดงความยินดีพร้อมรูปคลิปเก่าหน้าเกตที่เคยถ่ายด้วยกัน จบวงจรแรกของโลกฮันเตอร์',
+ choices:[{text:'ก้าวต่อไป',ok:{text:'ท่านเป็นฮันเตอร์แรงก์ C แล้ว',effects:[{reputation:10},{flag:'hunter_c_reached'}]}}]},
+]);
+})(globalThis.AW);
+
+// ==== data/worlds/hunter/events_hunter.js ====
+// Hunter World: เหตุการณ์ช่วงเป็นฮันเตอร์ (หลังตื่นพลัง) ย้ายจาก logic4.js
+// ค่าที่เดิมคำนวณจากแรงก์ (เช่น GATE_DIFF[P.rank]*x) ถูกแทนด้วยตัวเลขคงที่ระดับแรงก์ E–D หรือศัตรูในข้อมูล
+(function(AW){
+const H=(AW.data.parts=AW.data.parts||{}).hunter=AW.data.parts.hunter||{};
+const hunter={worldFlag:'registered'};
+H.events=(H.events||[]).concat([
+{id:'stranger_party',title:'ปาร์ตี้แปลกหน้าชวนลงเกต',trigger:'month',at:'association',when:hunter,cooldown:6,weight:3,src:'logic4.js:234',
+ text:'ฮันเตอร์สามคนชวนท่านลงเกตที่สูงกว่าแรงก์หนึ่งขั้น แต่ขอส่วนแบ่ง 70%',
+ choices:[
+  {text:'ไปด้วย',fight:{enemy:'skel_w'},ok:{text:'ทีมเคลียร์เกตได้ ส่วนของท่านคือ 150',effects:[{money:150},{exp:80}]},fail:{text:'ทีมแตกกระเจิง ท่านหนีออกมาได้',effects:[]}},
+  {text:'ต่อรองขอ 50%',check:{stat:'cha',dc:'hard'},ok:{text:'หัวหน้าทีมยอม แต่สีหน้าไม่พอใจ',effects:[{money:120},{exp:30}]},fail:{text:'พวกเขาหัวเราะแล้วไปชวนคนอื่น',effects:[]}},
+  {text:'ปฏิเสธ',ok:{text:'สัปดาห์ต่อมาได้ข่าวว่าทีมนั้นกลับมาไม่ครบ',effects:[{stat:{luk:1}}]}}]},
+{id:'teammate_stone',title:'เพื่อนร่วมทีมกับหินมานา',trigger:'month',at:'gate_zone',when:hunter,cooldown:12,weight:3,src:'logic4.js:238',
+ text:'เพื่อนร่วมทีมบาดเจ็บหนักอยู่กลางดันเจี้ยน ข้างตัวเขามีหินมานาก้อนใหญ่ ฝูงอสูรกำลังวนกลับมา',
+ choices:[
+  {text:'แบกเขาออกมา',check:{stat:'str',dc:'mid'},ok:{text:'ท่านแบกเขาออกมาได้ ข่าวนี้แพร่ไปทั่วสมาคม',effects:[{reputation:4}]},fail:{text:'ท่านพาเขาออกมาได้แต่โดนกรงเล็บเต็มหลัง',effects:[{hp:-40},{injury:1},{reputation:3}]}},
+  {text:'เก็บหินแล้วทิ้งเขาไว้',ok:{text:'ไม่มีใครเห็นท่านทำแบบนั้น',effects:[{item:{id:'mana_stone',n:3}},{reputation:-3}]}},
+  {text:'ยิงพลุขอความช่วยเหลือแล้วยันไว้',fight:{enemy:'goblins'},ok:{text:'ทีมกู้ภัยมาถึงทันเวลา ทั้งคู่รอด',effects:[{reputation:2},{exp:40}]},fail:{text:'ทีมกู้ภัยมาช้า เพื่อนร่วมทีมเสียชีวิต',effects:[]}}]},
+{id:'energy_drink',title:'บริษัทเครื่องดื่มชูกำลัง',trigger:'month',at:'city',when:{all:[hunter,{rank:{min:'E'}}]},once:true,weight:2,src:'logic4.js:242 (เดิมต้องมีชื่อเสียง 10)',
+ text:'บริษัทเครื่องดื่มเสนอให้ท่านเป็นพรีเซนเตอร์ ค่าตัวสูงกว่ารายได้จากเกตสามเดือน',
+ choices:[
+  {text:'รับงาน',ok:{text:'หน้าท่านอยู่บนป้ายโฆษณาทั่วเมือง',effects:[{money:250},{reputation:5}]}},
+  {text:'ขอเพิ่มค่าตัว',check:{stat:'cha',dc:'hard'},ok:{text:'เขายอมเพิ่มให้อีกครึ่งหนึ่ง',effects:[{money:380},{reputation:5}]},fail:{text:'เขาไปจ้างฮันเตอร์คนอื่นแทน',effects:[]}},
+  {text:'ปฏิเสธ',ok:{text:'ท่านไม่ชอบถ่ายแบบ',effects:[]}}]},
+{id:'secret_room',title:'ห้องลับในดันเจี้ยน',trigger:'month',at:'gate_zone',when:hunter,once:true,weight:2,src:'logic4.js:246',
+ text:'หลังกำแพงที่พังมีประตูหินสลักตัวอักษรที่ไม่มีใครอ่านออก ลมเย็นพัดออกมาจากร่องประตู',
+ choices:[
+  {text:'เปิดเข้าไปคนเดียว',check:{stat:'luk',dc:'hard'},ok:{text:'ข้างในมีคัมภีร์สกิลเก่า',effects:[{skill:'mana_burst'}]},fail:{text:'กับดักลูกดอกพุ่งใส่',effects:[{hp:-50},{injury:1}]}},
+  {text:'ถอดรหัสตัวอักษรก่อน',check:{stat:'int',dc:'hard'},ok:{text:'ท่านปลดกลไกได้ ได้แกนอสูรหายากมาขาย',effects:[{item:{id:'monster_core',n:2}}]},fail:{text:'อ่านไม่ออก ประตูปิดตายไปเอง',effects:[{stat:{int:1}}]}},
+  {text:'รายงานสมาคม',ok:{text:'สมาคมส่งทีมวิจัยมา จ่ายค่าข้อมูลให้ท่าน',effects:[{money:120},{rel:{npc:'clerk_yoon',n:3}}]}}]},
+{id:'alley_thugs',title:'เสียงร้องในซอยมืด',trigger:'month',at:'city',when:{awakened:true},cooldown:8,weight:2,src:'logic4.js:262',
+ text:'ฮันเตอร์นอกกฎหมายสามคนรุมรีดไถพ่อค้าแผงลอยในซอยหลังตลาด',
+ choices:[
+  {text:'เข้าไปจัดการ',fight:{enemy:'thugs'},ok:{text:'พวกมันวิ่งหนีกระเจิง พ่อค้าก้มหัวขอบคุณไม่หยุด',effects:[{reputation:2},{exp:20}]},fail:{text:'พวกมันมีหลายคนเกินไป ท่านต้องถอย',effects:[]}},
+  {text:'ถ่ายคลิปแจ้งสมาคม',check:{stat:'agi',dc:'easy'},ok:{text:'สมาคมจับได้ทั้งแก๊ง',effects:[{stat:{int:1}}]},fail:{text:'ถูกจับได้ว่าถ่ายคลิป ต้องวิ่งหนี',effects:[{hp:-10}]}},
+  {text:'เดินผ่านไป',ok:{text:'ท่านไม่อยากยุ่ง',effects:[]}}]},
+{id:'orphan_patient',title:'ผู้ป่วยไร้ญาติ',trigger:'enter',at:'hospital',when:{awakened:true},cooldown:24,weight:1,src:'logic4.js:266',
+ text:'เด็กหญิงที่รอดจาก Dungeon Break นอนอยู่เตียงข้าง ๆ ไม่มีใครมาเยี่ยม ค่ารักษายังค้างอยู่ก้อนใหญ่',
+ choices:[
+  {text:'จ่ายค่ารักษาให้ (300)',when:{money:{min:300}},lockText:'เงินไม่พอ',ok:{text:'นางยิ้มครั้งแรกตั้งแต่เข้าโรงพยาบาล',effects:[{money:-300},{reputation:3}]}},
+  {text:'อยู่เป็นเพื่อนคุย',ok:{text:'นางเล่าว่าอยากเป็นฮันเตอร์เหมือนท่าน',effects:[{stat:{cha:2}}]}},
+  {text:'ขอย้ายเตียง',ok:{text:'ท่านอยากพักผ่อนเงียบ ๆ',effects:[{stat:{vit:1}}]}}]},
+{id:'escort_governor',title:'ภารกิจคุ้มกันผู้ว่าการ',trigger:'month',at:'association',when:{all:[{worldFlag:'guild_northstar'},{rank:{min:'D'}}]},cooldown:12,weight:3,src:'logic4.js:274 (เดิมสำหรับสาย "คนของสมาคม" ตอนนี้ผูกกับกิลด์ดาวเหนือ)',
+ text:'สมาคมมอบหมายให้คุ้มกันผู้ว่าการเมืองระหว่างเยี่ยมย่านเกต มีข่าวว่ากลุ่มต่อต้านฮันเตอร์จะก่อเหตุ',
+ choices:[
+  {text:'ตรวจเส้นทางล่วงหน้า',check:{stat:'int',dc:'mid'},ok:{text:'ท่านเจอระเบิดใต้รถก่อนออกเดินทาง',effects:[{reputation:6},{money:500}]},fail:{text:'ระเบิดดังกลางขบวน ผู้ว่าการรอดแต่ท่านเจ็บ',effects:[{hp:-30},{money:250}]}},
+  {text:'ยืนประกบตัวตลอดทาง',check:{stat:'vit',dc:'mid'},ok:{text:'ท่านใช้ตัวบังกระสุนลูกหลง ผู้ว่าการจับมือขอบคุณ',effects:[{reputation:5},{money:400}]},fail:{text:'ท่านโดนกระสุนเข้าไหล่',effects:[{hp:-45},{injury:1},{money:400}]}},
+  {text:'ขอเปลี่ยนเป็นงานอื่น',ok:{text:'หัวหน้าสมาคมจดชื่อท่านไว้ในแฟ้มสีเหลือง',effects:[{reputation:-2}]}}]},
+{id:'reporter',title:'นักข่าวขอสัมภาษณ์',trigger:'month',when:hunter,cooldown:18,weight:2,src:'logic4.js:278',
+ text:'นักข่าวช่องดังขอสัมภาษณ์เรื่องเกตล่าสุดที่ท่านเคลียร์ เธอถามว่าท่านคิดอย่างไรกับฮันเตอร์ที่ทิ้งชาวบ้านระหว่าง Dungeon Break',
+ choices:[
+  {text:'ตอบตรง ๆ ว่าคนแบบนั้นไม่ควรเป็นฮันเตอร์',ok:{text:'คลิปถูกแชร์ทั่วประเทศ กิลด์ใหญ่บางแห่งไม่พอใจ',effects:[{reputation:6}]}},
+  {text:'ตอบกลาง ๆ',check:{stat:'cha',dc:'easy'},ok:{text:'ทุกฝ่ายพอใจ',effects:[{reputation:2},{stat:{cha:1}}]},fail:{text:'คำตอบฟังดูเลี่ยง คนดูไม่ชอบ',effects:[{reputation:-1}]}},
+  {text:'ปฏิเสธการสัมภาษณ์',ok:{text:'ท่านเดินหนีกล้อง',effects:[]}}]},
+{id:'border_village',title:'ชาวบ้านชายแดนขอความช่วยเหลือ',trigger:'month',when:hunter,cooldown:10,weight:2,src:'logic4.js:286',
+ text:'หมู่บ้านชายแดนมีสัตว์อสูรหลุดออกจากเกตที่ไม่มีใครดูแล ชาวบ้านมีเงินจ่ายแค่ข้าวกับไข่ไก่',
+ choices:[
+  {text:'ไปช่วย',fight:{enemy:'border_beast'},ok:{text:'หมู่บ้านจัดงานเลี้ยงให้ท่านทั้งคืน',effects:[{reputation:2},{exp:40}]},fail:{text:'ท่านไล่มันไปได้ แต่เจ็บไม่น้อย',effects:[{reputation:1}]}},
+  {text:'บอกให้ไปจ้างกิลด์',ok:{text:'ชาวบ้านมองท่านด้วยสายตาผิดหวัง',effects:[]}},
+  {text:'ขอเงินค่าจ้างก่อน',check:{stat:'cha',dc:'mid'},ok:{text:'ชาวบ้านรวมเงินกันได้ก้อนหนึ่ง',effects:[{money:200}]},fail:{text:'ชาวบ้านไล่ท่านออกจากหมู่บ้าน',effects:[{reputation:-2}]}}]},
+]);
+})(globalThis.AW);
+
+// ==== data/worlds/hunter/actions.js ====
+// Hunter World: กิจกรรมประจำสถานที่ (ใช้ AP เดือนละ 2) เป็นเหตุการณ์แบบ trigger 'action'
+// อัตราเติบโตเดิม (PATHS ใน logic4.js:11-19) คือ 0.2–0.6 ต่อเดือนแบบอัตโนมัติ ตอนนี้ผู้เล่นเลือกเองครั้งละ +1
+(function(AW){
+const H=(AW.data.parts=AW.data.parts||{}).hunter=AW.data.parts.hunter||{};
+const act=(id,at,title,text,effects,o={})=>Object.assign({id,title,trigger:'action',at,cost:{ap:1},text,choices:[{text:'ทำ',ok:{text,effects}}]},o);
+const buy=(id,name,price,when)=>act('buy_'+id,'market','ซื้อ'+name+' ('+price+')','ท่านซื้อ'+name+'แล้วสวมใส่ทันที',[{money:-price},{item:{id}},{equip:id}],{cost:{ap:0},when:Object.assign({money:{min:price}},when||{}),src:'logic4.js:45-46'});
+H.events=(H.events||[]).concat([
+ act('rest','home','พักผ่อน','ท่านนอนยาวจนสาย ร่างกายสดชื่น',[{hp:60}],{src:'new'}),
+ act('study_home','home','อ่านหนังสือ','ท่านอ่านตำราจนดึก',[{stat:{int:1}}],{src:'logic4.js:12 (เรียนหนังสือ)'}),
+ act('class','school','เรียนหนังสือ','ท่านตั้งใจฟังครูทั้งวัน',[{stat:{int:1}}],{src:'logic4.js:12'}),
+ act('sport','school','ซ้อมกีฬา','ท่านวิ่งรอบสนามจนเหงื่อท่วม',[{stat:{str:1,vit:1}}],{src:'logic4.js:13',cost:{ap:2}}),
+ act('hangout','school','เที่ยวกับเพื่อน','ท่านกับฮาจุนเดินเล่นจนค่ำ',[{stat:{cha:1}},{rel:{npc:'best_friend',n:2}}],{src:'logic4.js:14'}),
+ act('part_time','city','ทำงานพิเศษ','ท่านทำงานกะดึกได้ค่าแรงมา',[{money:40}],{src:'logic4.js:15'}),
+ act('sell_stone','city','ขายหินมานา (+60)','ร้านรับซื้อให้ราคาตามตลาด',[{item:{id:'mana_stone',n:-1}},{money:60}],{src:'new',when:{item:{id:'mana_stone'}},cost:{ap:0}}),
+ act('sell_core','city','ขายแกนอสูร (+150)','นักวิจัยรับซื้อไปศึกษา',[{item:{id:'monster_core',n:-1}},{money:150}],{src:'new',when:{item:{id:'monster_core'}},cost:{ap:0}}),
+ act('train_str','gym','ยกน้ำหนักกับครูฝึกคัง (20)','ครูฝึกคังเพิ่มน้ำหนักทีละแผ่น',[{money:-20},{stat:{str:1}},{rel:{npc:'master_kang',n:1}}],{src:'new',when:{money:{min:20}}}),
+ act('train_agi','gym','ฝึกความเร็ว (20)','ท่านวิ่งหลบลูกบอลจนขาสั่น',[{money:-20},{stat:{agi:1}}],{src:'new',when:{money:{min:20}}}),
+ act('train_vit','gym','ฝึกความอึด (20)','ท่านแช่น้ำแข็งตามตำราครูฝึก',[{money:-20},{stat:{vit:1}}],{src:'new',when:{money:{min:20}}}),
+ act('meditate','gym','ฝึกควบคุมมานา (30)','ท่านนั่งสมาธิในห้องกันเสียงจนมานาไหลเรียบ',[{money:-30},{mana:2},{stat:{int:1}}],{src:'new',when:{all:[{awakened:true},{money:{min:30}}]}}),
+ act('treat','hospital','รักษาตัว (100)','หมอฮันเตอร์ใช้มานารักษาแผลจนหายสนิท',[{money:-100},{cure:true},{hp:999}],{src:'logic4.js:25 (โรงพยาบาลฮันเตอร์)',when:{money:{min:100}}}),
+ buy('iron_dagger','มีดสั้นเหล็ก',150),
+ buy('leather_vest','เสื้อหนังกันมีด',120),
+ buy('mana_blade_d','อาวุธมานาเกรด D',600,{rank:{min:'D'}}),
+ buy('light_armor_d','เกราะเบาเกรด D',550,{rank:{min:'D'}}),
+ buy('crystal_blade_c','อาวุธผลึกเกรด C',2200,{rank:{min:'C'}}),
+]);
+// ภารกิจ: Auto Resolve ผ่าน Combat · tags ใช้นับเกณฑ์แรงก์ · 'any' นับทุกภารกิจ
+const reg={worldFlag:'registered'};
+H.missions=[
+ {id:'sewer_slime',name:'กวาดล้างสไลม์ในท่อระบายน้ำ',rank:'E',at:'association',enemy:'slime_g',when:{all:[reg,{rank:{min:'E'}}]},win:[{money:60},{exp:70},{item:{id:'mana_stone'}}],tags:['rank_e'],src:'new (มอนสเตอร์จาก MON_BY_RANK logic4.js:39)'},
+ {id:'goblin_gate',name:'เกตแรงก์ E: ฝูงก็อบลิน',rank:'E',at:'gate_zone',enemy:'goblins',when:{rank:{min:'E'}},win:[{money:100},{exp:100},{item:{id:'mana_stone',n:2}}],tags:['rank_e'],src:'logic4.js:384-391 (enterGate)'},
+ {id:'porter',name:'แบกของให้ทีมแรงก์ C',rank:'E',at:'association',enemy:'border_beast',when:{all:[reg,{rank:{max:'D'}}]},win:[{money:90},{exp:60}],tags:['rank_e'],src:'logic4.js:258 (ทีมสำรวจรับคนแบกของ)'},
+ {id:'exam_d',name:'สอบเลื่อนแรงก์ D',rank:'E',at:'association',enemy:'exam_d',when:{all:[reg,{rank:{is:'E'}},{canPromote:'hunter'}]},win:[{rankUp:'hunter'},{exp:50}],tags:['exam'],src:'new'},
+ {id:'skeleton_gate',name:'เกตแรงก์ D: โครงกระดูกนักรบ',rank:'D',at:'gate_zone',enemy:'skel_w',when:{rank:{min:'D'}},win:[{money:220},{exp:180},{item:{id:'monster_core'}}],tags:['rank_d'],src:'logic4.js:39-40'},
+ {id:'werewolf_hunt',name:'ล่ามนุษย์หมาป่าขาว',rank:'D',at:'association',enemy:'wolf_w',when:{all:[reg,{rank:{min:'D'}}]},win:[{money:260},{exp:220}],tags:['rank_d'],src:'logic4.js:40'},
+ {id:'goblin_king',name:'งานกิลด์เขี้ยวเหล็ก: ราชาก็อบลิน',rank:'D',at:'gate_zone',enemy:'goblin_king',when:{all:[{rank:{min:'D'}},{worldFlag:'guild_ironfang'}]},win:[{money:300},{exp:300},{item:{id:'monster_core'}}],tags:['rank_d'],src:'logic4.js:387 (BOSSES)'},
+ {id:'exam_c',name:'สอบเลื่อนแรงก์ C',rank:'D',at:'association',enemy:'exam_c',when:{all:[reg,{rank:{is:'D'}},{canPromote:'hunter'}]},win:[{rankUp:'hunter'},{exp:100}],tags:['exam'],src:'new'},
+ {id:'skel_archer_gate',name:'เกตแรงก์ C: โครงกระดูกนักธนู',rank:'C',at:'gate_zone',enemy:'skel_a',when:{rank:{min:'C'}},win:[{money:450},{exp:350},{item:{id:'monster_core',n:2}}],tags:['rank_c'],src:'logic4.js:39-40'},
+ {id:'black_wolf',name:'ล่ามนุษย์หมาป่าดำ',rank:'C',at:'association',enemy:'wolf_b',when:{all:[reg,{rank:{min:'C'}}]},win:[{money:500},{exp:400}],tags:['rank_c'],src:'logic4.js:40'},
+];
+})(globalThis.AW);
+
+// ==== data/worlds/hunter/world.js ====
+// Hunter World: ประกอบนิยามโลกจากไฟล์ข้อมูลในโฟลเดอร์นี้ (base, events_life, events_hunter, actions)
+// state ของโลกเก็บเฉพาะเรื่องของโลก (flags การลงทะเบียน กิลด์ ข่าวเกต) ส่วนข้อมูลผู้เล่นอยู่ใน Player System
+(function(AW){
+const H=AW.data.parts.hunter;
 AW.data.worlds.push({
  id:'hunter',name:'โลกฮันเตอร์',
- description:'โลกสมัยใหม่ที่ประตูมิติเปิดขึ้นกลางเมือง ผู้ตื่นพลังลงทะเบียนเป็นฮันเตอร์กับสมาคม (ข้อมูลตัวอย่าง)',
- timeRate:1,entry:'seonhwa_plaza',assetNs:'hunter',storyNs:'hunter',
- config:{currency:'วอน',startAge:15,rules:{ranks:['F','E','D','C','B','A','S'],gateBreakChance:0.02}},
- data:{
-  locations:[
-   {id:'seonhwa_plaza',name:'ลานกลางเมืองซอนฮวา',bg:'bg.city_day'},
-   {id:'association',name:'สมาคมฮันเตอร์สาขาซอนฮวา',bg:'bg.association_hall'},
-   {id:'apartment',name:'ห้องเช่าย่านเก่า',bg:'bg.apartment'},
-   {id:'gate_zone',name:'เขตกักกันประตูมิติ',bg:'bg.gate_blue'}],
-  npcs:[{id:'clerk_yoon',name:'ยุนแชอา',role:'เจ้าหน้าที่สมาคม',at:'association'}],
-  quests:[{id:'register_hunter',name:'ลงทะเบียนฮันเตอร์',at:'association'}],
-  events:[{id:'gate_alert',name:'ประกาศเตือนประตูมิติ'}],
-  gates:[{id:'rift_fantasy',name:'รอยแยกสีน้ำเงิน',to:'fantasy',months:0},
-         {id:'deep_rift_fantasy',name:'รอยแยกลึก (ใช้เวลา 3 เดือน)',to:'fantasy',months:3}],
-  assets:['hunter.bg.city_day','hunter.bg.association_hall','hunter.bg.apartment','hunter.bg.gate_blue','hunter.mon.goblin']},
- state:()=>({location:'seonhwa_plaza',visits:0,monthsLived:0,gateAlerts:0,flags:{}}),
+ description:'โลกยุคปัจจุบันที่เกตเปิดมาได้ 20 ปี ผู้ตื่นพลังลงทะเบียนเป็นฮันเตอร์กับสมาคม',
+ timeRate:1,entry:'home',assetNs:'hunter',storyNs:'hunter',stateVersion:2,
+ config:{currency:'วอน',startAge:15,eventChance:0.45,rankSystem:H.rankSystem,rules:{ranks:H.rankSystem.order}},
+ data:{locations:H.locations,npcs:H.npcs,classes:H.classes,skills:H.skills,items:H.items,enemies:H.enemies,events:H.events,missions:H.missions,
+  quests:[{id:'reach_rank_c',name:'เป็นฮันเตอร์แรงก์ C',src:'new'}],
+  gates:[{id:'rift_fantasy',name:'รอยแยกสีน้ำเงิน (ทดสอบ)',to:'fantasy',months:0},
+         {id:'deep_rift_fantasy',name:'รอยแยกลึก 3 เดือน (ทดสอบ)',to:'fantasy',months:3}],
+  assets:['hunter.bg.city_day','hunter.bg.association_hall','hunter.bg.apartment','hunter.bg.gate_blue','hunter.bg.training_center','hunter.bg.market','hunter.bg.hunter_hospital','hunter.mon.goblin','hunter.mon.dire_wolf','hunter.mon.golem','hunter.mon.gate_boss']},
+ state:()=>({visits:0,monthsLived:0,gateAlerts:0,flags:{}}),
  module:{
-  enter(w,{aborted}){w.mutate(s=>{if(!aborted)s.visits++;s.location=s.location||w.def.entry})},
-  // เดือนละครั้งตามเวลาท้องถิ่น ทำงานแม้ผู้เล่นอยู่โลกอื่น
-  update(w,{month}){w.mutate(s=>{s.monthsLived++;if(month%6===0)s.gateAlerts++})}
+  enter(w,{aborted}){if(!aborted)w.mutate(s=>{s.visits++})},
+  update(w,{month}){w.mutate(s=>{s.monthsLived++;if(month%6===0)s.gateAlerts++})},
+  // v1 (Phase 2) มี location ใน state ของโลก ตอนนี้ตำแหน่งย้ายไปอยู่ที่ Player
+  migrate(s,from){if(from===1){delete s.location;s.flags=s.flags||{}}}
  }
 });
 })(globalThis.AW);
@@ -400,7 +1085,7 @@ AW.data.worlds.push({
 AW.data.worlds.push({
  id:'fantasy',name:'แดนอาร์เคน',
  description:'อาณาจักรเวทมนตร์ที่ถูกกองทัพจอมมารกดดันจากทางเหนือ (ข้อมูลตัวอย่าง)',
- timeRate:0.5,entry:'eldran_gate',assetNs:'fantasy',storyNs:'fantasy',
+ timeRate:0.5,entry:'eldran_gate',assetNs:'fantasy',storyNs:'fantasy',stateVersion:2,
  config:{currency:'เหรียญทอง',rules:{seasons:['ฤดูใบไม้ผลิ','ฤดูร้อน','ฤดูใบไม้ร่วง','ฤดูหนาว'],manaDensity:2}},
  data:{
   locations:[
@@ -409,57 +1094,95 @@ AW.data.worlds.push({
    {id:'royal_castle',name:'ปราสาทหลวง',bg:'bg.castle'}],
   npcs:[{id:'mage_liora',name:'ลิโอรา',role:'นักเวทราชสำนัก',at:'royal_castle'}],
   quests:[{id:'meet_king',name:'เข้าเฝ้ากษัตริย์',at:'royal_castle'}],
-  events:[{id:'demon_scouts',name:'หน่วยลาดตระเวนของจอมมาร'}],
+  events:[{id:'demon_scouts',title:'หน่วยลาดตระเวนของจอมมาร',trigger:'month',weight:1,cooldown:12,text:'ชาวเมืองลือกันว่าเห็นเงาปีกดำบินผ่านกำแพงเมืองเมื่อคืน (เหตุการณ์ทดสอบ)',choices:[{text:'ฟังต่อ',ok:{text:'ข่าวลือเงียบไปเอง',effects:[]}}]}],
   gates:[{id:'rift_hunter',name:'รอยแยกกลับโลกฮันเตอร์',to:'hunter',months:0}],
   assets:['fantasy.bg.forest','fantasy.bg.town','fantasy.bg.castle','fantasy.mon.slime']},
- state:()=>({location:'eldran_gate',visits:0,monthsLived:0,season:0,flags:{}}),
+ state:()=>({visits:0,monthsLived:0,season:0,flags:{}}),
  module:{
   enter(w,{aborted}){w.mutate(s=>{if(!aborted)s.visits++})},
-  update(w,{month}){w.mutate(s=>{s.monthsLived++;s.season=Math.floor(month/3)%4})}
+  update(w,{month}){w.mutate(s=>{s.monthsLived++;s.season=Math.floor(month/3)%4})},
+  migrate(s,from){if(from===1)delete s.location}
  }
 });
 })(globalThis.AW);
 
 // ==== src/ui/shell.js ====
-// หน้าทดสอบ Core + World System (Phase 2): ไม่ใช่ UI ของเกมจริง ใช้ตรวจ loop, save, asset, debug, โลก และ gate ในเบราว์เซอร์
+// หน้าเล่น Phase 3 (Hunter World vertical slice) + เครื่องมือทดสอบ (เวลา เซฟ debug gate)
+// UI อ่าน state และเรียก API ของระบบเท่านั้น ไม่มีกติกาเกมในไฟล์นี้
+// ปุ่มที่สร้างใหม่ทุกครั้งใช้ event delegation (data-*) จึงกดได้แม้เวลาเดินเร็ว
 (function(AW){
-const $=s=>document.querySelector(s),esc=s=>String(s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+const $=s=>document.querySelector(s),esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+let result=null,_last=0;
 function boot(){const E=new AW.core.Engine({assets:{imageFactory:src=>{const i=new Image();i.src=src;return i},canvasFactory:(w,h)=>{const c=document.createElement('canvas');c.width=w;c.height=h;return c}}});
- E.assets.registerAll(AW.data.assets);E.use(AW.systems.WorldsModule);const wr=E.worlds.registerAll(AW.data.worlds);if(wr.bad.length)wr.bad.forEach(m=>E.debug.error(m));
+ E.assets.registerAll(AW.data.assets);AW.systems.installGameplay(E);const wr=E.worlds.registerAll(AW.data.worlds);if(wr.bad.length)wr.bad.forEach(m=>E.debug.error(m));
  window.addEventListener('error',e=>E.debug.error('window: '+e.message));
  E.bus.on('month',({month})=>E.debug.log('เดือน '+month),{owner:'shell'});
- AW.engine=E;newGame('demo');render();E.bus.on('world:enter',()=>{_gw=null;update()},{owner:'shell'});setInterval(draw,200);
- E.bus.on('month:after',update,{owner:'shell'});E.bus.on('loop:pause',update,{owner:'shell'});return E}
-function newGame(seed){const E=AW.engine;E.newGame({seed});E.worlds.start('hunter')}
-function bgId(){const E=AW.engine,id=E.worlds.current,c=id&&E.worlds.ctx(id);if(!c)return 'hunter.bg.city_day';const l=c.locations.get(c.get().location)||c.locations.get(c.def.entry);return c.def.assetNs+'.'+l.bg}
+ AW.engine=E;newGame('demo');render();setInterval(draw,200);
+ E.bus.on('month:after',()=>update(),{owner:'shell'});E.bus.on('loop:pause',()=>update(),{owner:'shell'});E.bus.on('world:enter',()=>update(true),{owner:'shell'});return E}
+function newGame(seed){const E=AW.engine;E.newGame({seed});E.worlds.start('hunter');result=null}
+function createPlayer(name,gender){const E=AW.engine,r=E.rng,st={};for(const k of AW.systems.Rules.STATS)st[k]=r.int(8,12);E.player.create({name,gender,stats:st,money:50})}
+function bgId(){const E=AW.engine,p=E.player.get(),w=p.location.world||E.worlds.current,c=w&&E.worlds.ctx(w);if(!c)return 'hunter.bg.city_day';const l=c.locations.get(p.location.loc)||c.locations.get(c.def.entry);return c.def.assetNs+'.'+l.bg}
 function draw(){const cv=$('#stage');if(!cv)return;const g=cv.getContext('2d'),E=AW.engine;g.imageSmoothingEnabled=false;g.clearRect(0,0,cv.width,cv.height);
- g.drawImage(E.assets.get(bgId()),0,0,576,324);g.drawImage(E.assets.get('shared.char.base_m'),200,230,80,64);g.drawImage(E.assets.get('hunter.mon.goblin'),380,180,128,128);g.drawImage(E.assets.get('hunter.item.mana_stone'),30,30,32,32)}
-function render(){ $('#app').innerHTML=`<header><b>Multiverse Hunter · Core Test (Phase 2)</b><span id="status"></span><span id="world"></span></header>
+ g.drawImage(E.assets.get(bgId()),0,0,576,324);g.drawImage(E.assets.get('shared.char.base_m'),200,230,80,64)}
+function render(){$('#app').innerHTML=`<header><b>Multiverse Hunter · Phase 3 (Hunter World)</b><span id="status"></span><span id="world"></span></header>
+ <div id="create"></div>
  <canvas id="stage" width="576" height="324"></canvas>
+ <div id="player" class="panel"></div>
+ <div id="modal"></div>
+ <div class="row" id="locs"></div><div class="row" id="acts"></div><div id="miss"></div>
  <div class="row">${[0,1,3,10].map(s=>`<button data-s="${s}">${s?s+'x':'หยุด'}</button>`).join('')}<button id="step">+1 เดือน</button><button id="menu">เปิด/ปิดเมนู (หยุดเวลา)</button><button id="new">เกมใหม่</button></div>
  <div class="row">${[0,1,2].map(i=>`<button data-save="${i}">เซฟช่อง ${i}</button><button data-load="${i}">โหลดช่อง ${i}</button>`).join('')}</div>
-<div class="row" id="gates"></div>
+ <div class="row" id="gates"></div><div id="journal" class="panel"></div>
 <div id="info"></div>`;
- wire();update()}
+ wire();update(true)}
+const RN=()=>AW.systems.STAT_NAME;
+function statusLine(){const E=AW.engine,m=E.loop.month,p=E.player.get(),meta=E.state.get('meta');
+ const age=p.created?`อายุ ${Math.floor(p.age/12)} ปี ${p.age%12} เดือน`:`อายุ ${15+Math.floor(m/12)} ปี ${m%12} เดือน (ยังไม่สร้างตัวละคร)`;
+ return `เดือน ${m} (${age}) · seed ${meta.seed} · ${E.loop.paused?'หยุด: '+[...E.loop.reasons].join(', '):'ความเร็ว '+E.loop.speed+'x'}`}
+function worldLine(){const E=AW.engine,cur=E.worlds.current,tr=E.state.get('worlds_time').traveling;
+ return `โลก: ${tr?'กำลังเดินทาง':cur?esc(E.worlds.ctx(cur)?E.worlds.ctx(cur).def.name:cur+' (ยังไม่ติดตั้ง)'):'-'} · `+E.worlds.ids().map(id=>`${id} เดือน ${E.time.month(id)}`).join(' · ')}
+function playerPanel(){const E=AW.engine,P=E.player,p=P.get();if(!p.created)return '';const c=E.worlds.ctx(p.location.world),loc=c&&c.locations.get(p.location.loc);
+ const rank=Object.keys(p.ranks).map(k=>`${k}: ${p.ranks[k]}`).join(' ')||'ยังไม่มีแรงก์';
+ return `<b>${esc(p.name)}</b> · ${p.class?esc(P.className(p.class)):'ยังไม่ตื่นพลัง'} · แรงก์ ${esc(rank)} · เลเวล ${p.level} (EXP ${p.exp}/${P.expNeed()}) · มานา ${p.mana}<br>
+ พลังชีวิต ${p.hp}/${P.maxHp()}${p.injury?` · <span class="err">บาดเจ็บ ${p.injury} เดือน</span>`:''} · เงิน ${p.money} · ชื่อเสียง ${p.reputation} · AP ${p.ap}/2 · อยู่ที่ <b>${esc(loc?loc.name:p.location.loc)}</b><br>
+ ${AW.systems.Rules.STATS.map(k=>`${RN()[k]} ${p.stats[k]}`).join(' · ')}<br>
+ <small>อุปกรณ์: ${['weapon','armor'].map(s=>p.equipment[s]?esc(P.itemName(p.equipment[s])):'-').join(' / ')} · กระเป๋า: ${Object.keys(p.inventory).map(q=>esc(P.itemName(q))+' x'+p.inventory[q]).join(', ')||'ว่าง'} · สกิล: ${p.skills.map(q=>esc(P.skillName(q))).join(', ')||'-'}</small>`}
+function modal(){const E=AW.engine;if(result){const r=result;return `<div class="card"><b>${esc(r.title)}</b><p>${esc(r.choice?'› '+r.choice:'')}</p>${r.fight?`<pre>${r.fight.lines.map(esc).join('\n')}</pre>`:''}<p>${r.success===false?'<span class="err">ไม่สำเร็จ</span> ':''}${esc(r.text||'')}</p>${r.effects&&r.effects.length?`<p class="ok">${r.effects.map(esc).join(' · ')}</p>`:''}<button data-ok="1">ตกลง</button></div>`}
+ const p=E.events.pending();if(!p)return '';
+ return `<div class="card"><b>${esc(p.def.title)}</b><p>${esc(E.events.fmt(p.def.text))}</p>${E.events.choices().map(c=>`<button data-choice="${c.i}" ${c.ok?'':'disabled'}>${esc(c.text)}${c.chance<1?` (${Math.round(c.chance*100)}%)`:''}${c.ok?'':' · '+esc(c.lockText||'เลือกไม่ได้')}</button>`).join('')}</div>`}
+function locs(){const E=AW.engine,p=E.player.get(),c=p.created&&E.worlds.ctx(p.location.world);if(!c)return '';
+ return 'ไปที่: '+[...c.locations.values()].map(l=>`<button data-loc="${l.id}" ${l.id===p.location.loc||!E.player.canEnter(l.id)||E.events.get().pending?'disabled':''} title="${esc(l.desc||'')}">${esc(l.name)}</button>`).join('')}
+function acts(){const E=AW.engine;if(!E.player.get().created)return '';const a=E.events.actions();return a.length?'ทำ: '+a.map(x=>`<button data-act="${x.id}" ${x.ok?'':'disabled'}>${esc(x.title)}${x.ap?` (AP ${x.ap})`:''}</button>`).join(''):''}
+function miss(){const E=AW.engine;if(!E.player.get().created)return '';const m=E.missions.available();return m.length?'<div class="row">ภารกิจ: '+m.map(x=>`<button data-mis="${x.id}" ${x.ok?'':'disabled'} title="${esc(x.why)}">[${x.rank}] ${esc(x.name)} · ${esc(x.enemy)} (${Math.round(x.chance*100)}%)${x.ok?'':' · '+esc(x.why)}</button>`).join('')+'</div>':''}
+function journal(){const E=AW.engine;return '<b>บันทึก</b><br>'+E.events.get().log.slice(0,8).map(l=>`<small>เดือน ${l.m}: ${esc(l.t)}</small>`).join('<br>')}
+function createForm(){const p=AW.engine.player.get();return p.created?'':`<div class="card"><b>เริ่มชีวิตใหม่ในโลกฮันเตอร์</b><p>อายุ 15 ปี นักเรียน ม.4</p><input id="pname" maxlength="24" placeholder="ชื่อตัวละคร" value="ซอนอู"> <select id="pgender"><option value="m">ชาย</option><option value="f">หญิง</option></select> <button id="pcreate">เริ่ม</button></div>`}
+function gates(){const E=AW.engine;return E.worlds.gatesHere().map(g=>`<button data-gate="${g.id}">${esc(g.name)}</button>`).join('')||(E.worlds.current&&!E.worlds.has(E.worlds.current)?E.worlds.ids().map(id=>`<button data-go="${id}">กลับไป ${id}</button>`).join(''):'')}
 function info(){const E=AW.engine,r=E.assets.report();return `<p>ภาพ: จริง ${r.real} · placeholder ${r.placeholder} · โลกที่ลงทะเบียน ${E.registries.world.all().length} · เซฟเกมเดิมที่พบ (ไม่แตะ) ${E.save.legacyKeys().length}</p>
  <p>เซฟใหม่: ${E.save.list().map(s=>esc(s.key)+(s.broken?' (เสีย)':` v${s.v} เดือน ${s.meta&&s.meta.month}`)).join(' · ')||'ยังไม่มี'}</p>
  <details id="dbg" ${window.__dbgOpen?'open':''}><summary>Debug</summary><p class="err">${E.debug.errors.map(esc).join('<br>')||'ไม่มี error'}</p><pre>${esc(JSON.stringify(E.state.snapshot(),null,1))}</pre><pre>${E.debug.lines.slice(-12).map(l=>esc(l.lvl+' '+l.msg)).join('\n')}</pre></details>`}
-let _last=0,_gw;function worldLine(){const E=AW.engine,cur=E.worlds.current,tr=E.state.get('worlds_time').traveling;
- return `โลก: ${tr?'กำลังเดินทาง':cur?esc(E.worlds.ctx(cur)?E.worlds.ctx(cur).def.name:cur+' (ยังไม่ติดตั้ง)'):'-'} · `+E.worlds.ids().map(id=>`${id} เดือน ${E.time.month(id)}`).join(' · ')}
-function gates(){const E=AW.engine,el=$('#gates');if(!el||_gw===E.worlds.current)return;_gw=E.worlds.current;
- el.innerHTML=E.worlds.gatesHere().map(g=>`<button data-gate="${g.id}">${esc(g.name)}</button>`).join('')||(E.worlds.current&&!E.worlds.has(E.worlds.current)?E.worlds.ids().map(id=>`<button data-go="${id}">กลับไป ${id}</button>`).join(''):'');
- el.querySelectorAll('[data-gate]').forEach(b=>b.onclick=()=>{try{E.worlds.travelVia(b.dataset.gate)}catch(e){E.debug.error(e.message)}_last=0;update()});
- el.querySelectorAll('[data-go]').forEach(b=>b.onclick=()=>{try{E.worlds.travel(b.dataset.go)}catch(e){E.debug.error(e.message)}_last=0;update()})}
-function update(){const E=AW.engine,m=E.loop.month,meta=E.state.get('meta'),st=$('#status');if(!st)return;
- st.textContent=`เดือน ${m} (อายุ ${15+Math.floor(m/12)} ปี ${m%12} เดือน) · seed ${meta.seed} · ${E.loop.paused?'หยุด: '+[...E.loop.reasons].join(', '):'ความเร็ว '+E.loop.speed+'x'}`;
- $('#world').textContent=worldLine();gates();
- const now=Date.now();if(now-_last<500&&E.loop.speed)return;_last=now;$('#info').innerHTML=info();$('#dbg').ontoggle=e=>window.__dbgOpen=e.target.open}
+const set=(sel,html)=>{const el=$(sel);if(el&&el.__h!==html){el.innerHTML=html;el.__h=html}};
+function update(force){const E=AW.engine;if(!$('#status'))return;$('#status').textContent=statusLine();$('#world').textContent=worldLine();
+ const now=Date.now();if(!force&&E.loop.speed&&now-_last<300)return;_last=now;
+ set('#create',createForm());set('#player',playerPanel());set('#modal',modal());set('#locs',locs());set('#acts',acts());set('#miss',miss());set('#journal',journal());set('#gates',gates());
+ set('#info',info());const d=$('#dbg');if(d)d.ontoggle=e=>window.__dbgOpen=e.target.open}
+// ผลที่ต้องแสดง: คำตอบเหตุการณ์ (มี choice) หรือรายงานภารกิจ (มี name+fight) · ถ้ามีเหตุการณ์ใหม่ค้าง modal จะแสดงต่อหลังกดตกลง
+function act(fn){const E=AW.engine;try{const r=fn();if(r&&r.name&&r.fight)result={title:'ภารกิจ: '+r.name,success:r.win,text:r.win?'ภารกิจสำเร็จ':'ภารกิจล้มเหลว',fight:r.fight,effects:r.effects};else if(r&&r.choice!==undefined)result=r}
+ catch(e){E.debug.error(e.message);result={title:'ทำไม่ได้',text:e.message}}update(true)}
 function wire(){const E=AW.engine;
- document.querySelectorAll('[data-s]').forEach(b=>b.onclick=()=>{E.loop.setSpeed(+b.dataset.s);update()});
- $('#step').onclick=()=>{E.loop.step(1);update()};$('#new').onclick=()=>{newGame(String(Date.now()));_gw=null;_last=0;update()};
+ document.querySelectorAll('[data-s]').forEach(b=>b.onclick=()=>{E.loop.setSpeed(+b.dataset.s);update(true)});
+ $('#step').onclick=()=>{E.loop.step(1);update(true)};$('#new').onclick=()=>{newGame(String(Date.now()));update(true)};
  $('#menu').onclick=()=>{E.loop.reasons.has('menu')?E.loop.resume('menu'):E.loop.pause('menu')};
- document.querySelectorAll('[data-save]').forEach(b=>b.onclick=()=>{E.saveTo(+b.dataset.save);_last=0;update()});
- document.querySelectorAll('[data-load]').forEach(b=>b.onclick=()=>{try{E.loadFrom(+b.dataset.load)}catch(e){E.debug.error(e.message)}_gw=null;_last=0;update()});
+ document.querySelectorAll('[data-save]').forEach(b=>b.onclick=()=>{E.saveTo(+b.dataset.save);update(true)});
+ document.querySelectorAll('[data-load]').forEach(b=>b.onclick=()=>{try{E.loadFrom(+b.dataset.load);if(!E.worlds.current)E.worlds.start('hunter')}catch(e){E.debug.error(e.message)}result=null;update(true)});
+ $('#app').addEventListener('click',e=>{const b=e.target.closest('button');if(!b||b.disabled)return;const d=b.dataset;
+  if(b.id==='pcreate'){createPlayer($('#pname').value.trim()||'ซอนอู',$('#pgender').value);update(true)}
+  else if(d.ok){result=null;update(true)}
+  else if(d.choice!==undefined)act(()=>E.events.answer(+d.choice));
+  else if(d.loc)act(()=>{E.player.moveTo(d.loc)});
+  else if(d.act)act(()=>E.events.doAction(d.act));
+  else if(d.mis)act(()=>E.missions.start(d.mis));
+  else if(d.gate)act(()=>{E.worlds.travelVia(d.gate)});
+  else if(d.go)act(()=>{E.worlds.travel(d.go)})});
  draw()}
 AW.ui.boot=boot;
 })(globalThis.AW);

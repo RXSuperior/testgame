@@ -1,5 +1,13 @@
 # Changelog
 
+## Phase 3 — Hunter World Vertical Slice (2026-11-11)
+- Player System (shared across worlds), Rules, Rank System, Combat Resolver (auto), Event System (Ask/Answer, data only), Mission System.
+- Hunter World content in data/worlds/hunter: 8 school events and 9 hunter events moved from the old source, plus new main story, 18 actions, 10 missions, ranks E–C with clear promotion rules and exams.
+- Atomic world registration with rollback; GameState.unregister.
+- Per-world state versions + migrate hook; Phase 2 saves load (tested with a real Phase 2 save).
+- Playable UI: character creation, events, locations, actions, missions, journal.
+- docs/MULTIVERSE_POLICY.md, docs/phase3/*.
+
 ## Phase 2 — World System & Multiverse Architecture (2026-11-11)
 - World System (src/systems/worlds.js), installed with engine.use(WorldsModule): register and validate worlds, lifecycle hooks, per-world state slices, gate travel, errors from world hooks isolated.
 - Test worlds: hunter (rate 1.0) and fantasy (rate 0.5) with sample locations, NPC, quest, event, gates. Not real content.

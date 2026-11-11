@@ -1,6 +1,6 @@
 // ทดสอบ Core ด้วย Node (ไม่ต้องมีเบราว์เซอร์): node tests/core.test.js
 const fs=require('fs'),path=require('path'),vm=require('vm');
-const R=path.join(__dirname,'..');const ORDER=['ns','rng','bus','state','loop','worldtime','save','registry','assets','debug','engine'].map(n=>`src/core/${n}.js`).concat(['src/systems/worlds.js','data/worlds/hunter.js','data/worlds/fantasy.js']);
+const R=path.join(__dirname,'..');const ORDER=['ns','rng','bus','state','loop','worldtime','save','registry','assets','debug','engine'].map(n=>`src/core/${n}.js`).concat(['src/systems/worlds.js','src/systems/rules.js','src/systems/player.js','src/systems/ranks.js','src/systems/combat.js','src/systems/events.js','src/systems/missions.js','data/worlds/hunter/base.js','data/worlds/hunter/events_life.js','data/worlds/hunter/events_hunter.js','data/worlds/hunter/actions.js','data/worlds/hunter/world.js','data/worlds/fantasy.js']);
 const ctx={console,Date,Math,JSON,setInterval,clearInterval};ctx.globalThis=ctx;vm.createContext(ctx);
 for(const f of ORDER)vm.runInContext(fs.readFileSync(path.join(R,f),'utf8'),ctx,{filename:f});
 const C=ctx.AW.core;let pass=0,fail=0;const results=[];
@@ -153,5 +153,104 @@ T('world: dispose แล้วเดินทางไปไม่ได้ เ�
 T('world: newGame ล้างข้อมูลโลกกลับค่าเริ่มต้น',()=>{const E=mkG();E.worlds.travelVia('rift_fantasy');E.loop.step(3);E.newGame();ok(E.worlds.current===null&&E.worlds.ctx('fantasy').get().visits===0&&E.time.month('hunter')===0)});
 T('world: ไม่มี global ร่วม: นิยามโลก freeze แก้ไม่ได้',()=>{const E=mkG();const d=E.registries.world.get('hunter');ok(strictSet(()=>{'use strict';d.data.locations.push({})}));ok(strictSet(()=>{'use strict';d.config.rules.ranks[0]='Z'}))});
 T('world: ctx.asset อยู่ใน namespace ของโลก (placeholder)',()=>{const E=mkG();const img=E.worlds.ctx('hunter').asset('bg.city_day');ok(img&&img.placeholder)});
+
+
+// ===== Phase 3 =====
+const S=ctx.AW.systems;
+const mkGP=(st=new Mem(),defs=ctx.AW.data.worlds)=>{const E=mk(st);E.assets.registerAll(ctx.AW.data.assets);S.installGameplay(E);const r=E.worlds.registerAll(defs);if(r.bad.length)throw new Error(r.bad.join(' | '));return E};
+const play=(seed='p3',st)=>{const E=mkGP(st);E.newGame({seed});E.worlds.start('hunter');E.player.create({name:'ทดสอบ',stats:{str:10,agi:10,int:10,vit:10,cha:10,luk:10},money:100});return E};
+const adv=(E,n)=>{for(let i=0;i<n;i++){clearEv(E);E.loop.tick(true)}clearEv(E)};
+const clearEv=E=>{let g=0;while(E.events.pending()&&g++<20){const c=E.events.choices().find(x=>x.ok);E.events.answer(c.i)}};
+// สร้างผู้เล่นที่ตื่นพลังแล้วโดยผ่านเหตุการณ์จริง
+const awaken=(E,cls=0)=>{clearEv(E);E.state.mutate('player','player',p=>{p.bornAt=E.loop.month-12*18-7});E.loop.tick(true);let g=0;while(E.events.pending()&&E.events.pending().id!=='hunter.awakening'&&g++<5)clearEv(E)||E.loop.tick(true);
+ if(!E.player.get().class){ok(E.events.pending()&&E.events.pending().id==='hunter.awakening','awakening ไม่เกิด');E.events.answer(cls)}clearEv(E);return E};
+const register=E=>{E.player.moveTo('association');ok(E.events.pending().id==='hunter.rank_evaluation');E.events.answer(0);ok(E.events.pending().id==='hunter.registration');E.events.answer(0);clearEv(E);return E};
+// --- Player ---
+T('p3 player: เริ่มอายุ 15 ที่จุดเริ่มโลก',()=>{const E=play();const p=E.player.get();ok(p.age===180&&p.location.world==='hunter'&&p.location.loc==='home'&&p.created)});
+T('p3 player: อายุตาม global ไม่ใช่ local (fantasy 0.5, gate พิเศษ +3)',()=>{const E=play();adv(E,10);E.worlds.travelVia('deep_rift_fantasy');adv(E,4);
+ ok(E.player.get().age===180+17,'age '+E.player.get().age);ok(E.time.month('fantasy')===Math.floor(17/2)&&E.time.month('hunter')===17)});
+T('p3 player: ข้อมูลกลางข้ามโลก เงิน/ของ/อุปกรณ์/แรงก์คงอยู่ ตำแหน่งเปลี่ยนเป็นโลกใหม่',()=>{const E=play();clearEv(E);E.player.addItem('hunter.iron_dagger');E.player.equip('hunter.iron_dagger');E.player.addMoney(500);E.player.setRank('hunter','E');
+ const b=E.player.get();E.worlds.travelVia('rift_fantasy');const a=E.player.get();ok(a.money===b.money&&a.inventory['hunter.iron_dagger']===1&&a.equipment.weapon==='hunter.iron_dagger'&&a.ranks.hunter==='E');
+ ok(a.location.world==='fantasy'&&a.location.loc==='eldran_gate');E.worlds.travelVia('rift_hunter');ok(E.player.get().location.loc==='home'&&E.player.itemName('hunter.iron_dagger')==='มีดสั้นเหล็ก')});
+T('p3 player: ตำแหน่งที่ไม่มีอยู่ถูกปฏิเสธ',()=>{const E=play();clearEv(E);throws(()=>E.player.moveTo('nowhere'),/ไม่มีสถานที่/);throws(()=>E.player.setLocation('murim','x'),/ไม่มีสถานที่/);throws(()=>E.player.setLocation('fantasy','home'),/ไม่มีสถานที่/);ok(E.player.get().location.loc==='home')});
+T('p3 player: สถานที่มีเงื่อนไข (สมาคมต้องตื่นพลัง)',()=>{const E=play();clearEv(E);throws(()=>E.player.moveTo('association'),/ยังเข้าไม่ได้/);E.player.moveTo('school');ok(E.player.get().location.loc==='school')});
+T('p3 player: ระบบอื่นเขียน player ไม่ได้ อ่านแล้วแก้ไม่ได้',()=>{const E=play();throws(()=>E.state.mutate('events','player',p=>{p.money=1e9}),/เขียน/);ok(strictSet(()=>{'use strict';E.player.get().money=1e9}));ok(E.player.get().money===100)});
+T('p3 player: เงินติดลบไม่ได้ ไอเทมไม่พอไม่ได้ ไอเทมไม่มีจริงไม่ได้',()=>{const E=play();throws(()=>E.player.addMoney(-101),/เงินไม่พอ/);throws(()=>E.player.removeItem('hunter.mana_stone'),/ไม่พอ/);throws(()=>E.player.addItem('hunter.nope'),/ไม่มีไอเทม/);ok(E.player.get().money===100)});
+T('p3 player: ไม่ผูกกับโลกฮันเตอร์ (สร้างในโลก fantasy อย่างเดียวได้)',()=>{const E=mkGP(new Mem(),[ctx.AW.data.worlds[1]]);E.newGame();E.worlds.start('fantasy');E.player.create({name:'เอลฟ์'});ok(E.player.get().location.world==='fantasy'&&E.player.get().age===180);adv(E,3);ok(E.player.get().age===183)});
+T('p3 player: เซฟ/โหลดผู้เล่น',()=>{const st=new Mem();const E=play('sv',st);clearEv(E);E.player.addMoney(77);E.player.moveTo('city');E.loop.step(3);clearEv(E);E.saveTo(0);const F=mkGP(st);F.loadFrom(0);
+ ok(JSON.stringify(F.player.get())===JSON.stringify(E.player.get()))});
+// --- Events ---
+T('p3 event: intro ขึ้นทันทีหลังสร้างตัวละคร เวลาหยุดจนกว่าจะตอบ',()=>{const E=play();ok(E.events.pending().id==='hunter.intro'&&E.loop.paused);ok(E.loop.step(3)===0);const r=E.events.answer(0);ok(r.success&&r.effects.join().includes('ปัญญา')&&!E.loop.paused&&E.player.get().flags.path_study)});
+T('p3 event: once ไม่เกิดซ้ำ',()=>{const E=play();clearEv(E);ok(!E.events.eligible('hunter.intro'));throws(()=>E.events.answer(0),/ไม่มีเหตุการณ์/)});
+T('p3 event: เลือกตัวเลือกที่ล็อก/จ่ายไม่ไหวไม่ได้',()=>{const E=awaken(play());E.player.moveTo('association');E.events.answer(0);E.state.mutate('player','player',p=>{p.money=10});
+ const cs=E.events.choices();ok(!cs[0].ok);throws(()=>E.events.answer(0),/ยังเลือก/);ok(E.events.pending().id==='hunter.registration')});
+T('p3 event: check ใช้สูตรเดิม และโอกาสขึ้นกับค่าสถานะ',()=>{const E=play();clearEv(E);E.events.present('hunter.midterm');const lo=E.events.choices()[0].chance;E.player.addStats({int:30});const hi=E.events.choices()[0].chance;ok(hi>lo&&lo>=0.05&&hi<=0.97,lo+' '+hi)});
+T('p3 event: กิจกรรมใช้ AP และหมด AP แล้วทำไม่ได้',()=>{const E=play();clearEv(E);E.player.moveTo('school');E.events.doAction('hunter.class');E.events.doAction('hunter.hangout');ok(E.player.get().ap===0);throws(()=>E.events.doAction('hunter.class'),/AP/);E.loop.step(1);clearEv(E);ok(E.player.get().ap===2)});
+const tw=(o={})=>({id:'tw',name:'T',description:'',timeRate:1,entry:'a',module:{},config:{},assetNs:'tw',storyNs:'tw',data:Object.assign({locations:[{id:'a',name:'A'}],enemies:[{id:'dummy',name:'หุ่น',power:1}],
+ events:[{id:'e1',title:'หนึ่ง',trigger:'action',at:'a',cost:{ap:0},text:'t',choices:[{text:'ต่อ',ok:{text:'ไป e2',effects:[{unlock:'e3'}]},next:'e2'}]},
+  {id:'e2',title:'สอง',trigger:'month',text:'t',weight:0,choices:[{text:'จบ',ok:{text:'จบ',effects:[{money:5}]}}]},
+  {id:'e3',title:'สาม',trigger:'action',at:'a',cost:{ap:0},locked:true,text:'t',choices:[{text:'ok',ok:{text:'ok',effects:[{flag:'e3'}]}}]}]},o)});
+T('p3 event: ลำดับต่อเนื่อง (next) และปลดล็อก (unlock)',()=>{const E=mkGP(new Mem(),[tw()]);E.newGame();E.worlds.start('tw');E.player.create();ok(!E.events.eligible('tw.e3'));E.events.doAction('tw.e1');
+ ok(E.events.pending().id==='tw.e2'&&E.loop.paused);E.events.answer(0);ok(!E.loop.paused&&E.player.get().money===5&&E.events.eligible('tw.e3'));E.events.doAction('tw.e3');ok(E.player.get().flags.e3)});
+T('p3 event: ข้อมูลผิดถูกปฏิเสธตอนลงทะเบียน (atomic)',()=>{const bads=[
+  {events:[{id:'x',title:'x',trigger:'month',text:'t',when:{evil:1},choices:[{text:'a',ok:{text:'a'}}]}]},
+  {events:[{id:'x',title:'x',trigger:'month',text:'t',choices:[{text:'a',ok:{text:'a',effects:[{hack:1}]}}]}]},
+  {events:[{id:'x',title:'x',trigger:'month',text:'t',choices:[{text:'a',check:{stat:'int',dc:'mid'},ok:{text:'a'}}]}]},
+  {events:[{id:'x',title:'x',trigger:'month',text:'t',choices:[{text:'a',fight:{enemy:'ghost'},ok:{text:'a'},fail:{text:'b'}}]}]},
+  {events:[{id:'x',title:'x',trigger:'month',text:'t',choices:[{text:'a',ok:{text:'a'},next:'nope'}]}]},
+  {events:[{id:'x',title:'x',trigger:'enter',text:'t',choices:[{text:'a',ok:{text:'a'}}]}]},
+  {events:[{id:'x',title:'x',trigger:'month',text:'t',choices:[]}]},
+  {missions:[{id:'m',name:'m',enemy:'ghost'}]},
+  {locations:[{id:'a',name:'A',when:{money:5}}]}];
+ for(const b of bads){const E=mkGP(new Mem(),[]);throws(()=>E.worlds.register(tw(b)),/ไม่ถูกต้อง/);ok(!E.registries.world.has('tw')&&!E.state.slices.has('world:tw')&&!E.time.has('tw'),JSON.stringify(b))}});
+T('p3 rules: เงื่อนไขครบทุกชนิดทำงาน',()=>{const E=awaken(play());register(E);const v=E.view('hunter'),C=S.Rules.check;
+ ok(C({age:{min:18}},v)&&!C({age:{max:17}},v));ok(C({awakened:true},v));ok(C({rank:{min:'E'}},v)&&!C({rank:{min:'C'}},v)&&C({rank:{is:E.player.get().ranks.hunter}},v));
+ ok(C({stat:{str:{min:1}}},v)&&C({statTotal:{min:10}},v)&&C({level:{min:1}},v)&&C({money:{min:0}},v));ok(C({item:{id:'hunter_license'}},v)&&!C({item:{id:'mana_stone'}},v));
+ ok(C({location:'association'},v)&&C({world:'hunter'},v)&&C({worldFlag:'registered'},v)&&C({done:'awakening'},v)&&C({notDone:'reached_c'},v));
+ ok(C({rel:{npc:'clerk_yoon',min:1}},v)&&C({missions:{tag:'rank_e',max:0}},v)&&C({injured:false},v)&&C({not:{flag:'zzz'}},v)&&C({any:[{flag:'zzz'},{awakened:true}]},v)&&!C({all:[{flag:'zzz'},{awakened:true}]},v));
+ ok(S.Rules.validateCond({money:5}).length&&S.Rules.validateCond({foo:1}).length&&!S.Rules.validateCond({money:{min:5}}).length)});
+// --- Hunter flow ---
+T('p3 hunter: ตื่นพลังเกิดเองช่วงอายุ 17.5-18.5 ได้อาชีพ สกิล ค่าสถานะ',()=>{const E=play();clearEv(E);const before=E.player.get().stats.str;awaken(E,0);const p=E.player.get();ok(p.class==='hunter.sword'&&p.skills.includes('hunter.slash')&&p.stats.str>=before+5&&p.mana>=10)});
+T('p3 hunter: ตื่นพลังไม่เกิดก่อนอายุ 17.5',()=>{const E=play();clearEv(E);for(let i=0;i<24;i++){E.loop.tick(true);clearEv(E)}ok(!E.player.get().class&&!E.events.get().done['hunter.awakening'])});
+T('p3 hunter: ประเมินแรงก์และลงทะเบียน แล้วเข้าย่านเกตได้',()=>{const E=awaken(play());throws(()=>E.player.moveTo('gate_zone'),/ยังเข้าไม่ได้/);register(E);const p=E.player.get();
+ ok(['E','D'].includes(p.ranks.hunter)&&E.worlds.ctx('hunter').get().flags.registered&&p.inventory['hunter.hunter_license']===1);E.player.moveTo('gate_zone');ok(E.player.get().location.loc==='gate_zone')});
+T('p3 hunter: ประเมินซ้ำไม่ได้',()=>{const E=register(awaken(play()));throws(()=>E.ranks.init('hunter',E.view('hunter')),/ประเมินแรงก์ไปแล้ว/)});
+T('p3 mission: ก่อนลงทะเบียนไม่มีภารกิจ หลังลงทะเบียนมี',()=>{const E=awaken(play());E.player.moveTo('city');ok(E.missions.available().length===0);register(E);ok(E.missions.available().some(m=>m.id==='hunter.sewer_slime'))});
+T('p3 mission: ทำภารกิจใช้ AP ได้รางวัล นับ tag มีรายงาน',()=>{const E=register(awaken(play()));E.state.mutate('player','player',p=>{p.ranks.hunter='E'});const b=E.player.get();
+ const r=E.missions.start('hunter.sewer_slime');ok(r.fight&&r.fight.lines.length>=3&&typeof r.win==='boolean');const a=E.player.get();ok(a.ap===b.ap-1);
+ if(r.win)ok(a.money===b.money+60&&a.inventory['hunter.mana_stone']===1&&E.state.get('missions').byTag.rank_e===1);else ok(E.state.get('missions').byTag.rank_e===undefined)});
+T('p3 mission: แพ้ไม่ได้รางวัล บาดเจ็บหนักรับงานไม่ได้',()=>{const E=register(awaken(play()));E.state.mutate('player','player',p=>{p.ranks.hunter='D'});E.player.moveTo('association');
+ let r,g=0;do{E.state.mutate('player','player',p=>{p.ap=2;p.injury=0;p.hp=1;p.stats={str:0,agi:0,int:0,vit:0,cha:0,luk:0};p.mana=0;p.level=1});r=E.missions.start('hunter.werewolf_hunt')}while(r.win&&g++<20);
+ ok(!r.win&&!E.state.get('missions').byTag.rank_d&&E.player.get().injury===3);ok(E.missions.available().every(m=>!m.ok&&/บาดเจ็บ/.test(m.why)));throws(()=>E.missions.start('hunter.sewer_slime'),/บาดเจ็บ/)});
+T('p3 combat: resolve ไม่แตะ state, seed เดิมได้ผลเดิม, พลังโตตามอาวุธ',()=>{const E=register(awaken(play()));const snap=JSON.stringify(E.state.snapshot());E.rng=new C.Rng('x');const a=E.combat.resolve({worldId:'hunter',enemy:'goblins'});
+ ok(JSON.stringify(E.state.snapshot())===snap);E.rng=new C.Rng('x');const b=E.combat.resolve({worldId:'hunter',enemy:'goblins'});ok(JSON.stringify(a)===JSON.stringify(b));
+ const p0=E.combat.profile('hunter').power;E.player.addItem('hunter.mana_blade_d');E.player.equip('hunter.mana_blade_d');ok(E.combat.profile('hunter').power===p0+30)});
+T('p3 combat: โหมดใหม่ลงทะเบียนได้ ภารกิจใช้ได้โดยไม่แก้ Mission',()=>{const E=register(awaken(play()));let used=0;E.combat.register('test',(req)=>{used++;return Object.assign(S.autoResolve(req,E.rng),{mode:'test',win:true})});
+ throws(()=>E.combat.register('auto',()=>{}),/ซ้ำ/);const rep=E.combat.resolve({worldId:'hunter',enemy:'goblins',mode:'test'});ok(used===1&&rep.mode==='test'&&rep.win);throws(()=>E.combat.resolve({worldId:'hunter',enemy:'goblins',mode:'none'}),/ไม่มีโหมด/)});
+T('p3 rank: เลื่อนแรงก์ไม่ได้ถ้าไม่ผ่านเกณฑ์ แม้เวลาผ่าน 5 ปี',()=>{const E=register(awaken(play()));const r0=E.player.get().ranks.hunter;for(let i=0;i<60;i++){E.loop.tick(true);clearEv(E)}
+ ok(E.player.get().ranks.hunter===r0&&!E.ranks.canPromote('hunter'));ok(!E.missions.available().some(m=>m.id.includes('exam')));ok(E.ranks.promote('hunter')===null)});
+T('p3 rank: ผ่านเกณฑ์แล้วสอบได้ ชนะสอบจึงเลื่อน',()=>{const E=register(awaken(play()));E.state.mutate('player','player',p=>{p.ranks.hunter='E';p.level=6;p.stats.str+=80});E.state.mutate('missions','missions',m=>{m.byTag.rank_e=4});
+ ok(E.ranks.canPromote('hunter')==='D'&&E.player.get().ranks.hunter==='E');E.player.moveTo('city');clearEv(E);E.player.moveTo('association');clearEv(E);ok(E.missions.available().some(m=>m.id==='hunter.exam_d'));
+ let r,g=0;do{E.state.mutate('player','player',p=>{p.ap=2;p.injury=0;p.hp=999});r=E.missions.start('hunter.exam_d')}while(!r.win&&g++<20);ok(E.player.get().ranks.hunter==='D'&&r.effects.join().includes('แรงก์ D'))});
+T('p3 rank: บอทเล่นจริงถึงแรงก์ C ได้ บอทไม่ทำอะไรไม่ได้แรงก์',()=>{const Sim=require('./sim.js'),cx=Sim.boot();const a=Sim.play(cx,'t1','active'),b=Sim.play(cx,'t2','idle',96);
+ ok(a.rank==='C'&&a.age<26&&!a.errs.length,JSON.stringify([a.rank,a.age,a.errs]));ok(b.rank==='-'&&!b.errs.length)});
+// --- Save compat ---
+T('p3 save: เซฟจริงจาก Phase 2 โหลดได้ (migrate โลก + สร้างผู้เล่น)',()=>{const st=new Mem();st.setItem('mvh1:slot0',fs.readFileSync(path.join(__dirname,'fixtures/phase2_save.json'),'utf8'));const E=mkGP(st);ok(E.loadFrom(0));
+ const h=E.worlds.ctx('hunter').get(),f=E.worlds.ctx('fantasy').get(),p=E.player.get();ok(!('location' in h)&&h._v===2&&h.visits===2&&f._v===2&&f.flags.met&&!('location' in f));
+ ok(p.created&&p.age===180+E.loop.month&&p.location.world==='hunter'&&p.location.loc==='home'&&p.flags.fromOldSave);ok(E.time.month('fantasy')===E.time.month('fantasy')&&E.worlds.current==='hunter');
+ E.loop.step(1);clearEv(E);E.saveTo(1);const F=mkGP(st);F.loadFrom(1);ok(JSON.stringify(F.state.snapshot())===JSON.stringify(E.state.snapshot()))});
+T('p3 save: เซฟ Phase 1.1 (ไม่มีโลก) โหลดได้ ไม่สร้างผู้เล่นถ้ายังไม่มีโลกปัจจุบัน',()=>{const st=new Mem();const o=mk(st);o.newGame();o.loop.step(5);o.saveTo(0);const E=mkGP(st);ok(E.loadFrom(0)&&!E.player.get().created&&E.loop.month===5)});
+T('p3 save: ตำแหน่งเสียในเซฟถูกซ่อมเป็นจุดเริ่ม',()=>{const st=new Mem();const E=play('x',st);clearEv(E);E.saveTo(0);const raw=JSON.parse(st.getItem('mvh1:slot0')),b=JSON.parse(raw.body);b.data.player.location.loc='gone';raw.body=JSON.stringify(b);raw.sum=C.saveChecksum(raw.body);st.setItem('mvh1:slot0',JSON.stringify(raw));
+ const F=mkGP(st);F.loadFrom(0);ok(F.player.get().location.loc==='home')});
+T('p3 save: เหตุการณ์ค้างในเซฟ โหลดแล้วยังค้างและเวลาหยุด',()=>{const st=new Mem();const E=play('pend',st);E.saveTo(0);const F=mkGP(st);F.loadFrom(0);ok(F.events.pending().id==='hunter.intro'&&F.loop.paused)});
+// --- Atomic registration ---
+T('p3 atomic: id ซ้ำใน registry ไม่สร้างอะไรเพิ่ม',()=>{const E=mkE();E.worlds.register(wdef());throws(()=>E.worlds.register(wdef()),/ซ้ำ/);ok(E.worlds.ids().length===1&&E.state.owner('world:t1')==='world:t1')});
+T('p3 atomic: slice ชนกับเจ้าของอื่น ถอย registry และ WorldTime',()=>{const E=mkE();E.state.register('world:t1','someone',()=>({}));throws(()=>E.worlds.register(wdef()),/ติดตั้งไม่สำเร็จ/);ok(!E.registries.world.has('t1')&&!E.time.has('t1')&&E.state.owner('world:t1')==='someone'&&!E.worlds.has('t1'))});
+T('p3 atomic: WorldTime ชน ถอย registry และ slice',()=>{const E=mkE();E.time.addWorld('t1',1);throws(()=>E.worlds.register(wdef()),/ติดตั้งไม่สำเร็จ/);ok(!E.registries.world.has('t1')&&!E.state.slices.has('world:t1')&&!E.worlds.has('t1'))});
+T('p3 atomic: install hook throw ถอยทุกอย่าง ไม่มี world:installed',()=>{const E=mkE();let n=0,inst=0;E.bus.on('world:installed',()=>inst++);throws(()=>E.worlds.register(wdef({module:{install(){n++;throw new Error('boom')}}})),/boom/);
+ ok(n===1&&inst===0&&!E.registries.world.has('t1')&&!E.state.slices.has('world:t1')&&!E.time.has('t1')&&!E.worlds.has('t1'));E.worlds.register(wdef());ok(E.worlds.has('t1'))});
+T('p3 atomic: ล้มเหลวแล้วข้อมูล orphan จากเซฟไม่หาย',()=>{const st=new Mem();const A=mkE(st);A.worlds.register(wdef({state:()=>({k:0})}));A.newGame();A.worlds.ctx('t1').mutate(s=>{s.k=42});A.saveTo(0);
+ const B=mkE(st);B.loadFrom(0);throws(()=>B.worlds.register(wdef({state:()=>({k:0}),module:{install(){throw new Error('x')}}})),/x/);ok(B.state.orphans['world:t1'].k===42);B.worlds.register(wdef({state:()=>({k:0})}));ok(B.worlds.ctx('t1').get().k===42)});
+T('p3 atomic: ตัวตรวจเนื้อหาล้ม ไม่เรียก install',()=>{const E=mkGP(new Mem(),[]);let n=0;throws(()=>E.worlds.register(tw({events:[{id:'x',title:'x',trigger:'zzz',text:'t',choices:[{text:'a',ok:{text:'a'}}]}]})),/ไม่ถูกต้อง/);ok(n===0&&!E.registries.world.has('tw'))});
 
 console.log(results.join('\n'));console.log(`\n${pass} ผ่าน · ${fail} ไม่ผ่าน`);process.exit(fail?1:0);

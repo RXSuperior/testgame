@@ -5,15 +5,17 @@ Private project. A new build, separate from the old game "ต่างโลก�
 - Build: `python3 tools/build.py` → `dist/index.html`
 - Unit tests: `node tests/core.test.js`
 - Browser tests: `python3 tests/smoke.py` (Playwright)
+- Balance sim: `node tests/sim.js 10 [active|idle]`
+- Rules for worlds and the player: docs/MULTIVERSE_POLICY.md
 
 ## Structure
 ```
 src/core/     engine core: ns, rng, bus, state, loop, worldtime, save, registry, assets, debug, engine
-src/systems/  worlds.js (World System)
+src/systems/  worlds.js (World System), player.js, rules.js, ranks.js, combat.js, events.js, missions.js
 src/ui/       shell.js (test page)
 src/template.html
 data/assets/  manifest.js (asset ids per world, all placeholders for now)
-data/worlds/  one file per world: hunter.js, fantasy.js (test worlds). How to add one: docs/phase2/WORLD_MODULE_GUIDE.md
+data/worlds/  hunter/ (playable Hunter World: data only), fantasy.js (test world). How to add one: docs/phase2/WORLD_MODULE_GUIDE.md
 tests/        core.test.js (node), smoke.py (browser)
 tools/        build.py
 docs/         reports

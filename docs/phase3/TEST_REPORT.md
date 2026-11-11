@@ -1,0 +1,62 @@
+# Phase 3 test report (2026-11-11)
+
+Commands: `python3 tools/build.py`, `node tests/core.test.js`, `python3 tests/smoke.py`, `node tests/sim.js 10`
+
+- Build: dist/index.html 111,637 bytes from 27 files. `node --check` passed.
+- **Unit: 145 pass, 0 fail** (106 old + 39 new)
+  - Player:
+    - starts at 15
+    - age follows global time (fantasy 0.5 + special gate)
+    - data shared across worlds
+    - location checks, location conditions
+    - ownership, money/items guards
+    - works without the Hunter world
+    - save/load
+  - Events:
+    - intro pauses time
+    - once
+    - locked/unaffordable choice refused
+    - check odds
+    - AP
+    - next + unlock
+    - 9 kinds of bad content refused with nothing left behind
+    - every condition type
+  - Hunter:
+    - awakening (and not before 17.5)
+    - evaluation + registration + gate zone opens
+    - no repeat evaluation
+  - Missions: before/after registration, rewards and tags, losing and injury block
+  - Combat: no state change, same seed same result, weapon raises power, new modes can be added
+  - Rank:
+    - no promotion after 5 years without meeting the conditions
+    - exam win promotes
+    - active bot reaches C, idle bot gets nothing
+  - Save:
+    - **a real Phase 2 save** (tests/fixtures/phase2_save.json, made with code from tag phase2) loads, migrates and saves again identically
+    - Phase 1.1 save
+    - broken location repaired
+    - pending event kept
+  - Atomic registration:
+    - duplicate id
+    - slice clash
+    - WorldTime clash
+    - install hook throws (rolled back; installs fine afterwards)
+    - orphan data kept after a failure
+    - content validator fails
+- Check that the tests catch the bugs:
+  - with rollback removed, 4 atomic tests fail
+  - with the choice-lock check removed, its test fails
+- **Browser: 30 pass, 0 fail** (20 old + 10 new)
+  - create character
+  - opening event pauses time
+  - answer, see the result
+  - move + action spends AP
+  - awakening
+  - evaluation
+  - registration
+  - Auto Resolve mission with a report
+  - save/reload/load identical
+  - real Phase 2 save loads in the browser
+  - no pageerror, old game index.html sha256 unchanged
+
+Not tested: browsers other than Chromium, real devices, real people playing the whole loop by hand (the bot played it).

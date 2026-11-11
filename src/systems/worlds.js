@@ -5,7 +5,7 @@
 // ดู docs/phase2/WORLD_SYSTEM_DESIGN.md และ WORLD_MODULE_GUIDE.md
 (function(AW){
 'use strict';
-const C=AW.core,ID=/^[a-z][a-z0-9_]*$/,HOOKS=['install','enter','leave','update','dispose'];
+const C=AW.core,ID=/^[a-z][a-z0-9_]*$/,HOOKS=['install','enter','leave','update','dispose','migrate'];
 const sliceOf=id=>'world:'+id;
 const kindOf=v=>Array.isArray(v)?'array':v===null?'null':typeof v;
 
@@ -22,9 +22,11 @@ function validateWorld(d,{assets}={}){const e=[];
  if(d.state){let s;try{s=d.state()}catch(x){e.push('state() error: '+x.message)}if(s!==undefined&&kindOf(s)!=='object')e.push('state() ต้องคืน object');
   else if(s){try{JSON.stringify(s)}catch(x){e.push('state ต้องเป็น JSON')}}}
  const data=d.data||{};
- for(const k of['locations','npcs','quests','events','gates','assets'])if(data[k]!==undefined&&!Array.isArray(data[k]))e.push('data.'+k+' ต้องเป็น array');
+ for(const k of Object.keys(data))if(!Array.isArray(data[k]))e.push('data.'+k+' ต้องเป็น array');
+ if(d.stateVersion!==undefined&&(!Number.isInteger(d.stateVersion)||d.stateVersion<1))e.push('stateVersion ต้องเป็นจำนวนเต็ม >= 1');
+ if((d.stateVersion||1)>1&&!(d.module&&typeof d.module.migrate==='function'))e.push('stateVersion > 1 ต้องมี module.migrate');
  if(e.length)return e;
- for(const k of['locations','npcs','quests','events','gates']){const seen=new Set();for(const x of data[k]||[]){if(!x||!ID.test(x.id||''))e.push('data.'+k+': id ผิดรูปแบบ "'+(x&&x.id)+'"');else if(seen.has(x.id))e.push('data.'+k+': id ซ้ำ "'+x.id+'"');else seen.add(x.id)}}
+ for(const k of Object.keys(data)){if(k==='assets')continue;const seen=new Set();for(const x of data[k]){if(!x||!ID.test(x.id||''))e.push('data.'+k+': id ผิดรูปแบบ "'+(x&&x.id)+'"');else if(seen.has(x.id))e.push('data.'+k+': id ซ้ำ "'+x.id+'"');else seen.add(x.id)}}
  if(e.length)return e;
  const locs=data.locations||[];if(!locs.some(l=>l&&l.id===d.entry))e.push('entry "'+d.entry+'" ไม่อยู่ใน data.locations');
  for(const g of data.gates||[]){{if(!ID.test(g.to||''))e.push('gate '+g.id+' ไม่มีปลายทาง');if(!Number.isInteger(g.months??0)||(g.months??0)<0)e.push('gate '+g.id+' months ต้องเป็นจำนวนเต็ม >= 0')}}
@@ -32,27 +34,45 @@ function validateWorld(d,{assets}={}){const e=[];
  return e}
 
 class WorldSystem{
- constructor(engine){this.E=engine;this.reg=engine.registries.world;this.live=new Map();
+ constructor(engine){this.E=engine;this.reg=engine.registries.world;this.live=new Map();this.validators=[];
+  engine.bus.on('game:loaded',()=>this._migrateAll(),{prio:100,owner:'worlds'});
   engine.bus.on('world:month',({world,month})=>{const w=this.live.get(world);if(w&&w.def.module.update)this._hook(w,'update',{month})},{prio:10,owner:'worlds'})}
- // ลงทะเบียน + ติดตั้ง · ผิดอย่างใดอย่างหนึ่งต้องไม่เหลือร่องรอย
+ // ลงทะเบียน + ติดตั้งแบบ atomic: ตรวจก่อน แล้วทำทีละขั้น ถ้าขั้นใดล้ม ถอยทุกขั้นที่ทำไปแล้ว
+ // ลำดับ: registry -> state slice -> WorldTime -> install hook (เรียกเป็นขั้นสุดท้าย ถ้า hook throw ถือว่าติดตั้งไม่สำเร็จ)
  register(def){const errs=def&&typeof def==='object'?validateWorld(def,{assets:this.E.assets}):['ไม่ใช่ object'];
+  if(!errs.length)errs.push(...this.reg.check(def));
+  if(!errs.length)for(const v of this.validators)errs.push(...(v(def)||[]));
   if(errs.length)throw new Error(`world "${def&&def.id}" ไม่ถูกต้อง: ${errs.join('; ')}`);
-  C.deepFreeze(def);this.reg.add(def);this._install(def);return def.id}
+  C.deepFreeze(def);const id=def.id,S=this.E.state,name=sliceOf(id),undo=[];
+  try{
+   this.reg.add(def);undo.push(()=>this.reg.items.delete(id));
+   if(S.slices.has(name))throw new Error('slice '+name+' มีอยู่แล้ว (เจ้าของ '+S.owner(name)+')');
+   const hadOrphan=name in S.orphans;S.register(name,name,()=>{const v=(def.state||(()=>({})))();return def.stateVersion?Object.assign({_v:def.stateVersion},v):v});
+   undo.push(()=>S.unregister(name,name,{keep:hadOrphan}));
+   this.E.time.addWorld(id,def.timeRate);undo.push(()=>this.E.time.removeWorld(id));
+   const w=this._make(def);this.live.set(id,w);undo.push(()=>this.live.delete(id));
+   const f=def.module.install;if(f)f(w.ctx);
+  }catch(err){for(const u of undo.reverse()){try{u()}catch(e){}}this.E.bus.emit('world:error',{world:id,hook:'register',err});throw new Error(`world "${id}" ติดตั้งไม่สำเร็จ: ${err.message}`)}
+  this.E.bus.emit('world:installed',{world:id});return id}
  registerAll(defs){const ok=[],bad=[];for(const d of defs){try{ok.push(this.register(d))}catch(x){bad.push(x.message)}}return{ok,bad}}
- _install(def){const id=def.id,S=this.E.state,name=sliceOf(id),init=def.state||(()=>({}));
-  const sub=r=>new Map((r||[]).map(x=>[x.id,x]));
-  const data=def.data||{},w={def,locations:sub(data.locations),npcs:sub(data.npcs),quests:sub(data.quests),events:sub(data.events),gates:sub(data.gates),disposed:false};
-  if(!S.slices.has(name))S.register(name,name,init);else if(S.owner(name)!==name)throw new Error('slice '+name+' มีเจ้าของอื่น');
-  this.E.time.addWorld(id,def.timeRate);
-  w.ctx=Object.freeze({id,def,config:def.config,rules:def.config.rules||{},locations:w.locations,npcs:w.npcs,quests:w.quests,events:w.events,
+ _make(def){const id=def.id,S=this.E.state,name=sliceOf(id),data=def.data||{},lists={};
+  for(const k of Object.keys(data))if(k!=='assets')lists[k]=new Map(data[k].map(x=>[x.id,x]));
+  const w={def,lists,locations:lists.locations||new Map(),gates:lists.gates||new Map(),disposed:false};
+  w.ctx=Object.freeze({id,def,config:def.config,rules:def.config.rules||{},locations:w.locations,npcs:lists.npcs||new Map(),quests:lists.quests||new Map(),events:lists.events||new Map(),
+   list:k=>lists[k]||new Map(),
    get:()=>S.get(name),mutate:fn=>S.mutate(name,name,fn),
    month:()=>this.E.time.month(id),globalMonth:()=>this.E.loop.month,
    asset:k=>this.E.assets.get(def.assetNs+'.'+k),storyId:k=>def.storyNs+'.'+k,
    emit:(ev,payload)=>this.E.bus.emit('world:event',{world:id,ev,payload})});
-  this.live.set(id,w);this._hook(w,'install');this.E.bus.emit('world:installed',{world:id})}
+  return w}
+ // หลังโหลดเซฟ: ถ้า state ของโลกเก่ากว่า stateVersion ให้ module.migrate แปลงทีละเวอร์ชัน
+ _migrateAll(){for(const w of this.live.values()){const want=w.def.stateVersion||1;let v=w.ctx.get()._v||1;if(v>=want)continue;
+  w.ctx.mutate(s=>{while(v<want){w.def.module.migrate(s,v);v++}s._v=want})}}
  // error จาก hook ของโลกถูกแยก ไม่ทำให้ระบบอื่นค้าง: แจ้ง 'world:error' แล้วไปต่อ
  _hook(w,h,arg){const f=w.def.module[h];if(!f)return true;try{f(w.ctx,arg);return true}catch(err){this.E.bus.emit('world:error',{world:w.def.id,hook:h,err});this.E.debug&&this.E.debug.error(`world ${w.def.id}.${h}: ${err.message}`);return false}}
  dispose(id){const w=this.live.get(id);if(!w)throw new Error('ไม่มีโลก '+id);this._hook(w,'dispose');w.disposed=true;this.live.delete(id);this.E.time.removeWorld(id);this.E.bus.emit('world:disposed',{world:id})}
+ // ระบบอื่น (Event, Mission) เพิ่มตัวตรวจเนื้อหาโลกได้ ทำงานก่อนลงทะเบียน ถ้าไม่ผ่านไม่ลงทะเบียน
+ addValidator(fn){this.validators.push(fn)}
  has(id){return this.live.has(id)}
  ctx(id){const w=this.live.get(id);return w?w.ctx:null}
  ids(){return[...this.live.keys()]}

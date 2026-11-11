@@ -73,3 +73,9 @@ If something throws during the trip, WorldTime clears `traveling` and puts the p
 | state.js | orphan slices kept on restore and in snapshot, adopted on register | data from worlds that are not installed must not be lost |
 | worldtime.js | `removeWorld`, `has`; try/catch in `travel` with `gate:abort` | dispose; travel must never get stuck |
 | engine.js | world registry required fields: added description, module, config, assetNs, storyNs | the world contract asked for in Phase 2 |
+
+## Update in Phase 3
+- Registration is atomic: registry → slice → WorldTime → install hook. If any step fails, including an install hook that throws, every step is rolled back.
+- Systems can add content validators (`worlds.addValidator`). These run before anything is registered.
+- `stateVersion` + `module.migrate(state, fromVersion)` upgrade a world's saved state after load.
+- `ctx.list(kind)` gives a Map for any data list (items, enemies, missions...).

@@ -14,6 +14,8 @@ class GameState{
  // slice ที่มีในเซฟแต่ยังไม่มีใครลงทะเบียน (orphan) จะถูกเก็บไว้ไม่หาย และถูกรับไปใช้เมื่อมีการ register ชื่อนั้นทีหลัง
  register(name,owner,init){if(this.slices.has(name))throw new Error(`slice "${name}" ซ้ำ (เจ้าของเดิม ${this.slices.get(name).owner})`);this.slices.set(name,{owner,init});
   const o=this.orphans[name],fresh=init();delete this.orphans[name];this.data[name]=deepFreeze(clone(o!==undefined&&kind(o)===kind(fresh)?o:fresh))}
+ // ถอน slice (ใช้ตอน rollback การติดตั้งที่ไม่สำเร็จ) เจ้าของเท่านั้น · keep=true คืนข้อมูลไปเป็น orphan
+ unregister(name,owner,{keep=false}={}){if(this.owner(name)!==owner)throw new Error(`"${owner}" ถอน slice "${name}" ไม่ได้`);if(keep)this.orphans[name]=this.data[name];this.slices.delete(name);delete this.data[name]}
  owner(name){const s=this.slices.get(name);if(!s)throw new Error(`ไม่มี slice "${name}"`);return s.owner}
  get(name){if(!this.slices.has(name))throw new Error(`ไม่มี slice "${name}"`);return this.data[name]}
  mutate(owner,name,fn){const o=this.owner(name);if(o!==owner)throw new Error(`"${owner}" เขียน slice "${name}" ไม่ได้ (เจ้าของคือ "${o}")`);
