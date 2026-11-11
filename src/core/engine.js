@@ -1,10 +1,12 @@
 // Engine: ประกอบ core ทั้งหมดเข้าด้วยกัน และเป็นจุดที่โมดูลอนาคต (World, Story, Character) เสียบเข้ามา
 // โมดูล = { id, deps:[...], install(engine) } ติดตั้งตามลำดับ deps
 (function(AW){
+'use strict';
 const C=AW.core;
 class Engine{
  constructor(opts={}){this.bus=new C.Bus();this.debug=new C.Debug(this.bus);this.state=new C.GameState(this.bus);
   this.loop=new C.Loop(this.state,this.bus,{timer:opts.timer||globalThis,baseMs:opts.baseMs||1200});
+  this.time=new C.WorldTime(this.state,this.bus,this.loop);
   this.state.register('meta','engine',()=>({seed:null,rng:0,created:0,name:''}));
   this.save=new C.SaveSystem(this.state,{storage:opts.storage||globalThis.localStorage,migrations:opts.migrations||{}});
   this.assets=new C.AssetRegistry(opts.assets||{});

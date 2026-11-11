@@ -8,7 +8,7 @@ Private project. A new build, separate from the old game "ต่างโลก�
 
 ## Structure
 ```
-src/core/     engine core: ns, rng, bus, state, loop, save, registry, assets, debug, engine
+src/core/     engine core: ns, rng, bus, state, loop, worldtime, save, registry, assets, debug, engine
 src/ui/       shell.js (Phase 1 test page)
 src/template.html
 data/assets/  manifest.js (asset ids per world, all placeholders for now)

@@ -1,5 +1,11 @@
 # Test report
 
+## Phase 1.1 (2026-11-11)
+- Build: dist/index.html 25,648 bytes from 14 files, `node --check` passed.
+- Unit: 83 pass, 0 fail (34 old + 49 new: 14 state, 21 save, 14 time).
+- Check that the tests catch the bugs: against the phase1 code, 10 of the new state tests fail and 18 of the new save tests fail. With the new code, all pass.
+- Browser: 15 pass, 0 fail (13 old + frozen state in the page, import rejects broken data and backs up the slot). Old game index.html sha256 unchanged.
+
 ## Phase 1 (2026-11-11)
 Commands: `python3 tools/build.py`, `node tests/core.test.js`, `python3 tests/smoke.py`
 

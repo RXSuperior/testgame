@@ -37,20 +37,32 @@ AW.core.Bus=Bus;
 
 // ==== src/core/state.js ====
 // Game State: แบ่งเป็น slice แต่ละ slice มีเจ้าของ (ระบบเดียวที่เขียนได้)
-// อ่าน: state.get(name) · เขียน: state.mutate(owner,name,fn) ถ้าไม่ใช่เจ้าของจะ throw
+// อ่าน: state.get(name) ได้ object ที่ freeze ทั้งต้นไม้ แก้ไม่ได้ (strict mode จะ throw)
+// เขียน: state.mutate(owner,name,fn) fn ได้สำเนาที่แก้ได้ แล้วสำเนานั้นจะถูก freeze เป็นค่าใหม่ (copy-on-write)
+// อ่านไม่เสียค่าใช้จ่าย เขียนเสียค่า clone ของ slice นั้น slice เดียว
+// ข้อมูลใน slice ต้องเป็น JSON ล้วน (เพราะต้องเซฟได้)
 (function(AW){
+'use strict';
 const SCHEMA_VERSION=1;
+const clone=v=>v===undefined?v:JSON.parse(JSON.stringify(v));
+function deepFreeze(o){if(o&&typeof o==='object'&&!Object.isFrozen(o)){Object.freeze(o);for(const k of Object.keys(o))deepFreeze(o[k])}return o}
+const kind=v=>Array.isArray(v)?'array':v===null?'null':typeof v;
 class GameState{
  constructor(bus){this.bus=bus;this.slices=new Map();this.data={}}
- register(name,owner,init){if(this.slices.has(name))throw new Error(`slice "${name}" ซ้ำ (เจ้าของเดิม ${this.slices.get(name).owner})`);this.slices.set(name,{owner,init});this.data[name]=init()}
+ register(name,owner,init){if(this.slices.has(name))throw new Error(`slice "${name}" ซ้ำ (เจ้าของเดิม ${this.slices.get(name).owner})`);this.slices.set(name,{owner,init});this.data[name]=deepFreeze(clone(init()))}
  owner(name){const s=this.slices.get(name);if(!s)throw new Error(`ไม่มี slice "${name}"`);return s.owner}
  get(name){if(!this.slices.has(name))throw new Error(`ไม่มี slice "${name}"`);return this.data[name]}
- mutate(owner,name,fn){const o=this.owner(name);if(o!==owner)throw new Error(`"${owner}" เขียน slice "${name}" ไม่ได้ (เจ้าของคือ "${o}")`);const r=fn(this.data[name]);this.bus&&this.bus.emit('state:changed',{name,owner});return r}
- reset(){for(const[n,s]of this.slices)this.data[n]=s.init()}
- snapshot(){return{version:SCHEMA_VERSION,data:JSON.parse(JSON.stringify(this.data))}}
- restore(snap){if(!snap||snap.version!==SCHEMA_VERSION)throw new Error('เวอร์ชันเซฟไม่ตรง ต้องผ่าน migration ก่อน');this.reset();for(const n of Object.keys(snap.data)){if(this.slices.has(n))this.data[n]=snap.data[n]}}
+ mutate(owner,name,fn){const o=this.owner(name);if(o!==owner)throw new Error(`"${owner}" เขียน slice "${name}" ไม่ได้ (เจ้าของคือ "${o}")`);
+  const draft=clone(this.data[name]);const r=fn(draft);this.data[name]=deepFreeze(draft);this.bus&&this.bus.emit('state:changed',{name,owner});return r}
+ reset(){for(const[n,s]of this.slices)this.data[n]=deepFreeze(clone(s.init()))}
+ snapshot(){return{version:SCHEMA_VERSION,data:clone(this.data)}}
+ // ตรวจรูปแบบ snapshot โดยไม่แตะ state: คืน null ถ้าผ่าน หรือข้อความ error
+ check(snap){if(!snap||typeof snap!=='object')return'snapshot ไม่ใช่ object';if(snap.version!==SCHEMA_VERSION)return'เวอร์ชันเซฟไม่ตรง ('+snap.version+')';
+  if(kind(snap.data)!=='object')return'data ต้องเป็น object';
+  for(const[n,s]of this.slices){if(!(n in snap.data))continue;const a=kind(snap.data[n]),b=kind(s.init());if(a!==b)return`slice "${n}" ผิดชนิด (${a} แทน ${b})`}return null}
+ restore(snap){const e=this.check(snap);if(e)throw new Error(e);this.reset();for(const n of Object.keys(snap.data)){if(this.slices.has(n))this.data[n]=deepFreeze(clone(snap.data[n]))}}
 }
-AW.core.GameState=GameState;AW.core.SCHEMA_VERSION=SCHEMA_VERSION;
+AW.core.GameState=GameState;AW.core.SCHEMA_VERSION=SCHEMA_VERSION;AW.core.deepFreeze=deepFreeze;
 })(globalThis.AW);
 
 // ==== src/core/loop.js ====
@@ -58,11 +70,12 @@ AW.core.GameState=GameState;AW.core.SCHEMA_VERSION=SCHEMA_VERSION;
 // ลำดับต่อ tick: month:before -> month -> month:after (ระบบต่าง ๆ ฟังเหตุการณ์เหล่านี้)
 // หยุดได้หลายเหตุผลพร้อมกัน (เปิดเมนู, มีเหตุการณ์รอ, ต่อสู้) เดินต่อเมื่อเหตุผลหมด
 (function(AW){
+'use strict';
 class Loop{
  constructor(state,bus,{owner='loop',baseMs=1200,timer=globalThis}={}){this.state=state;this.bus=bus;this.owner=owner;this.baseMs=baseMs;this.timer=timer;this.speed=0;this.reasons=new Set();this.h=null;
   state.register('time',owner,()=>({month:0}))}
  get month(){return this.state.get('time').month}
- tick(){if(this.reasons.size)return false;const m=this.month+1;this.bus.emit('month:before',{month:m});this.state.mutate(this.owner,'time',t=>{t.month=m});this.bus.emit('month',{month:m});this.bus.emit('month:after',{month:m});return true}
+ tick(force=false){if(this.reasons.size&&!force)return false;const m=this.month+1;this.bus.emit('month:before',{month:m});this.state.mutate(this.owner,'time',t=>{t.month=m});this.bus.emit('month',{month:m});this.bus.emit('month:after',{month:m});return true}
  step(n=1){let d=0;for(let i=0;i<n;i++)if(this.tick())d++;return d}
  setSpeed(s){this.speed=s;if(this.h){this.timer.clearInterval(this.h);this.h=null}if(s>0)this.h=this.timer.setInterval(()=>this.tick(),this.baseMs/s);this.bus.emit('loop:speed',{speed:s})}
  pause(r){this.reasons.add(r);this.bus.emit('loop:pause',{reasons:[...this.reasons]})}
@@ -72,30 +85,77 @@ class Loop{
 AW.core.Loop=Loop;
 })(globalThis.AW);
 
+// ==== src/core/worldtime.js ====
+// Multiverse Time: ทุกโลกมีเวลาท้องถิ่นของตัวเอง เดินตาม global tick คูณ timeRate
+// เก็บเป็นจำนวนเต็มหน่วย 1/1000 เดือน (acc) จึงไม่มีเศษทศนิยมคลาดสะสม: เดือนท้องถิ่น = floor(acc/1000)
+// ทุกโลกที่ลงทะเบียนเดินเวลาทุก tick แม้ผู้เล่นไม่อยู่ · อายุผู้เล่นคิดจาก global month เท่านั้น
+// ดู docs/MULTIVERSE_TIME_DESIGN.md
+(function(AW){
+'use strict';
+const UNIT=1000,OWNER='worldtime';
+class WorldTime{
+ constructor(state,bus,loop){this.state=state;this.bus=bus;this.loop=loop;this.rates=new Map();
+  state.register('worlds_time',OWNER,()=>({current:null,traveling:null,acc:{}}));
+  bus.on('month',()=>this._advance(1),{prio:50,owner:OWNER})}
+ static rateUnits(rate){const u=Math.round(rate*UNIT);if(!(rate>0)||u<1||u>100*UNIT||Math.abs(u-rate*UNIT)>1e-9)throw new Error('timeRate ไม่ถูกต้อง: '+rate);return u}
+ addWorld(id,rate){if(this.rates.has(id))throw new Error('โลกซ้ำ: '+id);this.rates.set(id,WorldTime.rateUnits(rate))}
+ _acc(id){const a=this.state.get('worlds_time').acc[id];return a||0}
+ month(id){if(!this.rates.has(id))throw new Error('ไม่มีโลก '+id);return Math.floor(this._acc(id)/UNIT)}
+ fraction(id){return(this._acc(id)%UNIT)/UNIT}
+ get current(){return this.state.get('worlds_time').current}
+ _advance(n){const ev=[];this.state.mutate(OWNER,'worlds_time',t=>{for(const[id,u]of this.rates){const a=t.acc[id]||0,b=a+u*n;t.acc[id]=b;
+   for(let m=Math.floor(a/UNIT)+1;m<=Math.floor(b/UNIT);m++)ev.push({world:id,month:m})}});
+  for(const e of ev)this.bus.emit('world:month',e)}
+ // เข้าโลกแรก (ไม่ใช่การเดินทาง)
+ enter(id){this.month(id);this.state.mutate(OWNER,'worlds_time',t=>{t.current=id})}
+ // Gate ปกติ months=0: ทันที global time ไม่เดิน · Gate พิเศษ months>0: global time เดินจริง n tick (อายุ +n ทุกโลกเดินตาม rate)
+ travel(to,{months=0}={}){this.month(to);if(!Number.isInteger(months)||months<0)throw new Error('เวลาเดินทางต้องเป็นจำนวนเต็ม >= 0');
+  const from=this.current;if(this.state.get('worlds_time').traveling)throw new Error('กำลังเดินทางอยู่');
+  this.state.mutate(OWNER,'worlds_time',t=>{t.traveling={from,to,left:months};t.current=null});this.bus.emit('gate:depart',{from,to,months});
+  for(let i=0;i<months;i++){this.loop.tick(true);this.state.mutate(OWNER,'worlds_time',t=>{t.traveling.left--})}
+  this.state.mutate(OWNER,'worlds_time',t=>{t.traveling=null;t.current=to});this.bus.emit('gate:arrive',{from,to,months});return months}
+}
+AW.core.WorldTime=WorldTime;AW.core.TIME_UNIT=UNIT;
+})(globalThis.AW);
+
 // ==== src/core/save.js ====
 // Save System: คีย์ใหม่ 'mvh1:*' ไม่แตะคีย์ของเกมเดิม ('hunter-path-*')
 // ทุกเซฟมี schema version, เวลาบันทึก, checksum · เขียนทับช่องเดิมจะเก็บเวอร์ชันก่อนหน้าไว้ที่ '.prev'
+// import ทับช่องที่มีเซฟอยู่ จะสำรองของเดิมไว้ที่ '.preimport' ก่อน
 // migrations[v] แปลงเซฟจากเวอร์ชัน v ไป v+1
 (function(AW){
-const PREFIX='mvh1:',PROTECTED=/^hunter-path-/;
+'use strict';
+const PREFIX='mvh1:',PROTECTED=/^hunter-path-/,SLOT=/^[a-z0-9_]{1,24}$/;
 function checksum(s){let h=0;for(let i=0;i<s.length;i++)h=(Math.imul(h,31)+s.charCodeAt(i))|0;return(h>>>0).toString(16)}
 class SaveSystem{
  constructor(state,{storage=globalThis.localStorage,migrations={}}={}){this.state=state;this.st=storage;this.migrations=migrations}
- key(slot){return PREFIX+'slot'+slot}
- _set(k,v){if(PROTECTED.test(k))throw new Error('ห้ามเขียนคีย์ของเกมเดิม: '+k);this.st.setItem(k,v)}
+ key(slot){const s=String(slot);if(!SLOT.test(s))throw new Error('ชื่อช่องเซฟไม่ถูกต้อง: '+s);return PREFIX+'slot'+s}
+ _set(k,v){if(PROTECTED.test(k)||!k.startsWith(PREFIX))throw new Error('ห้ามเขียนคีย์นอก '+PREFIX+': '+k);this.st.setItem(k,v)}
  save(slot,meta={}){const snap=this.state.snapshot(),body=JSON.stringify(snap);const rec=JSON.stringify({v:snap.version,at:Date.now(),meta,sum:checksum(body),body});
   const k=this.key(slot),old=this.st.getItem(k);if(old)this._set(k+'.prev',old);this._set(k,rec);return true}
- read(slot,{prev=false}={}){const raw=this.st.getItem(this.key(slot)+(prev?'.prev':''));if(!raw)return null;const rec=JSON.parse(raw);
-  if(checksum(rec.body)!==rec.sum)throw new Error('เซฟเสียหาย (checksum ไม่ตรง)');return rec}
+ // ตรวจข้อความเซฟทั้งก้อน: JSON, ฟิลด์, checksum, version, โครงสร้าง slice · คืน {rec,snap} ที่ migrate แล้ว หรือ throw
+ parse(text){let rec;try{rec=JSON.parse(text)}catch(e){throw new Error('เซฟไม่ใช่ JSON')}
+  if(!rec||typeof rec!=='object'||Array.isArray(rec))throw new Error('เซฟผิดรูปแบบ');
+  if(!Number.isInteger(rec.v)||rec.v<0)throw new Error('เซฟไม่มี version');
+  if(typeof rec.body!=='string'||typeof rec.sum!=='string')throw new Error('เซฟขาด body หรือ checksum');
+  if(typeof rec.at!=='number'||(rec.meta!==undefined&&(typeof rec.meta!=='object'||rec.meta===null)))throw new Error('เซฟผิดรูปแบบ (at/meta)');
+  if(checksum(rec.body)!==rec.sum)throw new Error('เซฟเสียหาย (checksum ไม่ตรง)');
+  if(rec.v>AW.core.SCHEMA_VERSION)throw new Error('เซฟมาจากเวอร์ชันใหม่กว่าเกม ('+rec.v+')');
+  let snap;try{snap=JSON.parse(rec.body)}catch(e){throw new Error('body เสียหาย')}
+  if(!snap||snap.version!==rec.v)throw new Error('version ใน body ไม่ตรงกับหัวเซฟ');
+  snap=this.migrate(snap);const err=this.state.check(snap);if(err)throw new Error('โครงสร้างเซฟผิด: '+err);return{rec,snap}}
+ read(slot,{prev=false}={}){const raw=this.st.getItem(this.key(slot)+(prev?'.prev':''));if(!raw)return null;return this.parse(raw).rec}
  migrate(snap){let s=snap;while(s.version<AW.core.SCHEMA_VERSION){const f=this.migrations[s.version];if(!f)throw new Error('ไม่มี migration จากเวอร์ชัน '+s.version);s=f(s)}return s}
- load(slot,opts){const rec=this.read(slot,opts);if(!rec)return false;this.state.restore(this.migrate(JSON.parse(rec.body)));return true}
- list(){const out=[];for(let i=0;i<this.st.length;i++){const k=this.st.key(i);if(k.startsWith(PREFIX)&&!k.endsWith('.prev')){try{const r=JSON.parse(this.st.getItem(k));out.push({key:k,at:r.at,meta:r.meta,v:r.v})}catch(e){out.push({key:k,broken:true})}}}return out}
+ load(slot,{prev=false}={}){const raw=this.st.getItem(this.key(slot)+(prev?'.prev':''));if(!raw)return false;this.state.restore(this.parse(raw).snap);return true}
+ list(){const out=[];for(let i=0;i<this.st.length;i++){const k=this.st.key(i);if(k.startsWith(PREFIX)&&!k.includes('.')){try{const r=this.parse(this.st.getItem(k)).rec;out.push({key:k,at:r.at,meta:r.meta,v:r.v})}catch(e){out.push({key:k,broken:true,error:e.message})}}}return out}
  remove(slot){this.st.removeItem(this.key(slot));}
  exportSlot(slot){return this.st.getItem(this.key(slot))}
- importSlot(slot,text){const rec=JSON.parse(text);if(checksum(rec.body)!==rec.sum)throw new Error('ไฟล์เซฟเสียหาย');this._set(this.key(slot),text)}
+ // ตรวจครบก่อนเขียน ถ้าไม่ผ่านไม่แตะ storage เลย · ถ้าช่องมีเซฟอยู่ สำรองไว้ที่ '.preimport'
+ importSlot(slot,text){if(typeof text!=='string')throw new Error('ข้อมูล import ต้องเป็นข้อความ');this.parse(text);const k=this.key(slot),old=this.st.getItem(k);
+  if(old)this._set(k+'.preimport',old);this._set(k,text);return{backup:old?k+'.preimport':null}}
  legacyKeys(){const out=[];for(let i=0;i<this.st.length;i++){const k=this.st.key(i);if(PROTECTED.test(k))out.push(k)}return out}
 }
-AW.core.SaveSystem=SaveSystem;AW.core.SAVE_PREFIX=PREFIX;
+AW.core.SaveSystem=SaveSystem;AW.core.SAVE_PREFIX=PREFIX;AW.core.saveChecksum=checksum;
 })(globalThis.AW);
 
 // ==== src/core/registry.js ====
@@ -156,10 +216,12 @@ AW.core.Debug=Debug;
 // Engine: ประกอบ core ทั้งหมดเข้าด้วยกัน และเป็นจุดที่โมดูลอนาคต (World, Story, Character) เสียบเข้ามา
 // โมดูล = { id, deps:[...], install(engine) } ติดตั้งตามลำดับ deps
 (function(AW){
+'use strict';
 const C=AW.core;
 class Engine{
  constructor(opts={}){this.bus=new C.Bus();this.debug=new C.Debug(this.bus);this.state=new C.GameState(this.bus);
   this.loop=new C.Loop(this.state,this.bus,{timer:opts.timer||globalThis,baseMs:opts.baseMs||1200});
+  this.time=new C.WorldTime(this.state,this.bus,this.loop);
   this.state.register('meta','engine',()=>({seed:null,rng:0,created:0,name:''}));
   this.save=new C.SaveSystem(this.state,{storage:opts.storage||globalThis.localStorage,migrations:opts.migrations||{}});
   this.assets=new C.AssetRegistry(opts.assets||{});
