@@ -4,7 +4,7 @@ Private project. A new build, separate from the old game "ต่างโลก�
 
 - Build: `python3 tools/build.py` → `dist/index.html`
 - Unit tests: `node tests/core.test.js`
-- Browser tests: `python3 tests/smoke.py` (Playwright) and `python3 tests/ui_smoke.py` (UI pages, modals, responsive)
+- Browser tests: `python3 tests/smoke.py` (Playwright) `python3 tests/ui_smoke.py` (UI pages, modals) and `python3 tests/responsive.py` (8 screen widths)
 - Debug panel: open `dist/index.html?debug=1` or turn on developer mode in Settings
 - Balance sim: `node tests/sim.js 10 [active|idle]`
 - NPC performance: `node tests/perf.js`

@@ -29,7 +29,7 @@ pre{background:#080b14;border:1px solid var(--line);border-radius:10px;padding:1
 h2,h3,h4{margin:0 0 8px;font-weight:700;letter-spacing:.2px} h2{font-size:20px} h3{font-size:16px} h4{font-size:14px;color:var(--muted)}
 
 /* ---------- layout ---------- */
-.app{display:grid;grid-template-columns:var(--side) minmax(0,1fr) var(--right);grid-template-rows:var(--hdr) 1fr;grid-template-areas:"hdr hdr hdr" "side main right";min-height:100vh}
+.app{display:grid;grid-template-columns:var(--side) minmax(0,1fr) var(--right);grid-template-rows:auto 1fr;grid-template-areas:"hdr hdr hdr" "side main right";min-height:100vh}
 .hdr{grid-area:hdr;position:sticky;top:0;z-index:30;display:flex;align-items:center;gap:14px;padding:8px 16px;background:rgba(11,15,26,.92);backdrop-filter:blur(8px);border-bottom:1px solid var(--line);min-width:0}
 .side{grid-area:side;position:sticky;top:var(--hdr);height:calc(100vh - var(--hdr));overflow-y:auto;padding:12px 10px;border-right:1px solid var(--line);background:rgba(16,22,42,.6)}
 .main{grid-area:main;padding:16px;min-width:0}
@@ -43,6 +43,8 @@ h2,h3,h4{margin:0 0 8px;font-weight:700;letter-spacing:.2px} h2{font-size:20px} 
 .hstats{display:flex;align-items:center;gap:14px;flex:1;min-width:0;overflow:hidden}
 .hstat{display:flex;flex-direction:column;min-width:0;font-size:12px;color:var(--muted);white-space:nowrap}
 .hstat b{color:var(--text);font-size:14px;overflow:hidden;text-overflow:ellipsis}
+.hstat.name b{max-width:150px;display:block}
+.only-compact{display:none}
 .hctl{display:flex;gap:4px;align-items:center;flex-wrap:nowrap}
 .hctl button{min-height:32px;padding:4px 9px;font-size:13px}
 .hctl button.on{border-color:var(--blue);box-shadow:var(--glow)}
@@ -61,6 +63,7 @@ h2,h3,h4{margin:0 0 8px;font-weight:700;letter-spacing:.2px} h2{font-size:20px} 
 .nav button{display:flex;align-items:center;gap:10px;width:100%;text-align:left;background:transparent;border-color:transparent;min-height:40px;color:var(--muted)}
 .nav button .ic{width:22px;text-align:center;font-size:16px}
 .nav button.active{color:var(--text);background:linear-gradient(90deg,rgba(76,195,255,.18),rgba(155,123,255,.08));border-color:rgba(76,195,255,.4)}
+.nav .lbl{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .nav .sep{margin:10px 8px 4px;font-size:11px;color:var(--dim);text-transform:uppercase;letter-spacing:1px}
 
 /* ---------- cards & panels ---------- */
@@ -124,22 +127,45 @@ h2,h3,h4{margin:0 0 8px;font-weight:700;letter-spacing:.2px} h2{font-size:20px} 
 .devp{border-color:rgba(242,193,78,.4)}
 .devp summary{cursor:pointer;color:var(--gold)}
 
+/* ---------- header สองแถว (จอไม่กว้างพอสำหรับแถวเดียว): แถวบน = ชื่อเกม + ปุ่มเวลา · แถวล่าง = ค่าสถานะ ห่อบรรทัดได้ ไม่ทับกัน ---------- */
+@media (max-width:1365px){
+ .hdr{flex-wrap:wrap;gap:6px 10px;padding:8px 12px}
+ .brand{order:0;font-size:14px}
+ .hctl{order:1;margin-left:auto}
+ .hctl button{min-height:30px;padding:3px 8px;font-size:12px}
+ .hstats{order:2;flex:1 1 100%;flex-wrap:wrap;gap:6px 16px;overflow:visible}
+ .hstat{flex:0 0 auto}
+}
 /* ---------- tablet ---------- */
 @media (max-width:1199px){
  .app{grid-template-columns:200px minmax(0,1fr);grid-template-areas:"hdr hdr" "side main" "side right"}
  .right{position:static;height:auto;border-left:0;border-top:1px solid var(--line)}
  .app.no-right{grid-template-columns:200px minmax(0,1fr)}
  .hstat.opt{display:none}
+ .bar{width:80px}
+ .only-compact{display:block}
+}
+/* tablet แคบ: เมนูซ้ายยุบเป็นแถบไอคอน (ชื่อเมนูอยู่ใน tooltip) */
+@media (max-width:1023px){
+ .app,.app.no-right{grid-template-columns:64px minmax(0,1fr)}
+ .side{padding:10px 6px}
+ .nav button{justify-content:center;padding:8px 0;gap:0}
+ .nav button .lbl,.nav .sep{display:none}
+ .nav button .ic{width:auto;font-size:18px}
+ .hstat.name b{max-width:110px}
 }
 /* ---------- mobile ---------- */
 @media (max-width:767px){
- :root{--hdr:auto}
  .app,.app.no-right{grid-template-columns:minmax(0,1fr);grid-template-areas:"hdr" "main" "right";padding-bottom:72px}
+ .nav button{justify-content:flex-start;padding:8px 12px;gap:10px}
+ .nav button .lbl,.nav .sep{display:block}
  .hdr{flex-wrap:wrap;gap:8px;padding:8px 10px}
  .brand{display:none}
- .hstats{order:2;width:100%;gap:10px;overflow-x:auto;flex:1 1 100%}
- .hstat.opt,.hstat.opt2{display:none}
- .hctl{order:1;margin-left:auto;flex-wrap:wrap}
+ .hstats{order:2;width:100%;gap:6px 12px;flex:1 1 100%;flex-wrap:wrap}
+ .hstat.opt,.hstat.opt2,.hstat.opt3{display:none}
+ .hstat.name b{max-width:96px}
+ .hctl{order:1;margin-left:auto;flex-wrap:wrap;justify-content:flex-end}
+ .hctl button{min-height:36px}
  .menu-btn{display:inline-flex}
  .opt-right{display:none}
  .side{position:fixed;inset:0 25% 0 0;z-index:70;height:100vh;transform:translateX(-105%);transition:transform .2s;background:var(--bg2);top:0}
@@ -154,6 +180,13 @@ h2,h3,h4{margin:0 0 8px;font-weight:700;letter-spacing:.2px} h2{font-size:20px} 
  .scene{max-height:none}
  button{min-height:44px}
  #toasts{left:12px;right:12px;bottom:80px;max-width:none}
+}
+/* ---------- มือถือจอแคบ (≤ 420px): ค่าสถานะใน header อยู่แถวเดียว ---------- */
+@media (max-width:420px){
+ .hstats{gap:4px 10px}
+ .bar{width:64px}
+ .hstat.name b{max-width:84px}
+ .hstat b{font-size:13px}
 }
 </style></head><body><div id="app" class="app"><div class="loading">กำลังโหลดโลกฮันเตอร์…</div></div>
 <script>// ==== src/core/ns.js ====
@@ -3229,12 +3262,12 @@ const U=AW.ui.u,esc=U.esc;
 // ---- header: ชื่อ อายุ/เดือน HP MP เงิน แรงก์ เลเวล/EXP AP เวลา ความเร็ว ----
 function header(E){const P=E.player,p=P.get(),m=E.loop.month,rs=E.worlds.current&&E.worlds.ctx(E.worlds.current),rank=p.created&&rs&&rs.config.rankSystem?p.ranks[rs.config.rankSystem.id]:null;
  const age=p.created?`${Math.floor(p.age/12)} ปี ${p.age%12} ด.`:'-',speed=E.loop.paused||!E.loop.speed?'หยุด':E.loop.speed+'x';
- const stats=p.created?`<div class="hstat" title="ชื่อตัวละคร"><span>${esc(p.class?P.className(p.class):'ยังไม่ตื่นพลัง')}</span><b>${esc(p.name)}</b></div>
+ const stats=p.created?`<div class="hstat name" title="${esc(p.name)}"><span>${esc(p.class?P.className(p.class):'ยังไม่ตื่นพลัง')}</span><b>${esc(p.name)}</b></div>
   <div class="hstat" title="แรงก์ฮันเตอร์">${U.rank(rank)}</div>
   <div class="hstat" title="พลังชีวิต"><span>HP ${Math.max(0,p.hp)}/${P.maxHp()}</span>${U.bar('hp',p.hp,P.maxHp(),'HP')}</div>
   <div class="hstat opt2" title="มานาสูงสุดในการต่อสู้"><span>MP ${P.maxMp()}</span>${U.bar('mp',P.maxMp(),P.maxMp(),'MP')}</div>
   <div class="hstat" title="เงิน"><span>เงิน</span><b class="gold-t">${U.n(p.money)}</b></div>
-  <div class="hstat opt" title="เลเวลและค่าประสบการณ์"><span>Lv ${p.level}</span>${U.bar('xp',p.exp,P.expNeed(),'EXP')}</div>
+  <div class="hstat opt3" title="เลเวลและค่าประสบการณ์"><span>Lv ${p.level}</span>${U.bar('xp',p.exp,P.expNeed(),'EXP')}</div>
   <div class="hstat" title="แรงกายต่อเดือน (AP) ใช้ทำกิจกรรม/ภารกิจ"><span>AP</span><span class="ap">${[0,1].map(i=>`<i class="${i<p.ap?'on':''}"></i>`).join('')}</span></div>
   <div class="hstat opt" title="อายุ"><span>อายุ</span><b>${age}</b></div>`:'<div class="hstat"><b>ยังไม่สร้างตัวละคร</b></div>';
  return `<button class="menu-btn ghost sm" data-nav-toggle="1" aria-label="เปิดเมนู">☰</button><span class="brand">MULTIVERSE HUNTER</span>
@@ -3247,7 +3280,7 @@ function statusLine(E){const m=E.loop.month,meta=E.state.get('meta');return `เ
 const NAV=[['dashboard','⌂','หน้าหลัก'],['character','☺','ตัวละคร'],['inventory','▣','กระเป๋า'],['skills','✦','สกิล'],['equipment','⚔','อุปกรณ์'],['party','⚑','ทีม'],['missions','✉','ภารกิจ'],['map','⌖','แผนที่ / โลก'],
  ['relations','♡','ความสัมพันธ์'],['family','⌂','ครอบครัว'],['economy','¤','การเงิน'],['sep','','ฮันเตอร์'],['association','⛨','สมาคมฮันเตอร์'],['guild','⚜','กิลด์'],['dungeon','⛰','ดันเจี้ยน'],['tower','♜','หอคอย'],['market','☾','ตลาดมืด'],['sep','','ระบบ'],['settings','⚙','ระบบ / ตั้งค่า']];
 const BNAV=[['dashboard','⌂','หน้าหลัก'],['character','☺','ตัวละคร'],['missions','✉','ภารกิจ'],['map','⌖','แผนที่'],['more','☰','เมนู']];
-function side(cur){return `<nav class="nav" aria-label="เมนูหลัก">${NAV.map(([id,ic,t])=>id==='sep'?`<div class="sep">${esc(t)}</div>`:`<button data-nav="${id}" class="${id===cur?'active':''}" ${id===cur?'aria-current="page"':''}><span class="ic">${ic}</span>${esc(t)}</button>`).join('')}</nav>`}
+function side(cur){return `<nav class="nav" aria-label="เมนูหลัก">${NAV.map(([id,ic,t])=>id==='sep'?`<div class="sep">${esc(t)}</div>`:`<button data-nav="${id}" class="${id===cur?'active':''}" ${id===cur?'aria-current="page"':''} title="${esc(t)}"><span class="ic" aria-hidden="true">${ic}</span><span class="lbl">${esc(t)}</span></button>`).join('')}</nav>`}
 function bnav(cur){return BNAV.map(([id,ic,t])=>`<button ${id==='more'?'data-nav-toggle="1"':`data-nav="${id}"`} class="${id===cur?'active':''}"><span class="ic">${ic}</span>${esc(t)}</button>`).join('')}
 // ---- แผงขวา: NPC ที่พบ · งานที่ทำอยู่ · เหตุการณ์ล่าสุด · ข่าวโลก · บันทึกประจำเดือน ----
 function right(E){const p=E.player.get();if(!p.created)return '<div class="panel"><h4>ยินดีต้อนรับ</h4><small>สร้างตัวละครเพื่อเริ่มเล่น</small></div>';
@@ -3256,7 +3289,8 @@ function right(E){const p=E.player.get();if(!p.created)return '<div class="panel
  if(s&&s.status==='active')active.push(`การต่อสู้ รอบ ${s.round}`);if(pm)active.push('ภารกิจ: '+((E.missions.def(pm.q)||{}).name||pm.q));if(r&&r.status==='active')active.push('สำรวจ: '+((E.dungeon.def(r.dungeon)||{}).name||''));
  if(ta)active.push('ปีนหอคอยชั้น '+ta.floor);if(ev)active.push('เหตุการณ์: '+ev.def.title);
  const log=E.events.get().log,news=log.filter(l=>/ข่าว|เกต|หอคอย/.test(l.t)).slice(0,4),EL=E.economy.get().ledger[0],LL=E.life.get().ledger[0];
- return `<div class="panel"><h4>งานที่กำลังทำ</h4>${active.length?active.map(a=>`<small>• ${esc(a)}</small>`).join('<br>'):'<small class="dim">ว่าง</small>'}</div>
+ const age=Math.floor(p.age/12)+' ปี '+(p.age%12)+' เดือน';
+ return `<div class="panel only-compact"><h4>เวลา</h4><small>เดือน ${E.loop.month} · ${esc(worldLine(E))} · อายุ ${age} · ${E.loop.paused||!E.loop.speed?'หยุดเวลา':'ความเร็ว '+E.loop.speed+'x'}</small></div><div class="panel"><h4>งานที่กำลังทำ</h4>${active.length?active.map(a=>`<small>• ${esc(a)}</small>`).join('<br>'):'<small class="dim">ว่าง</small>'}</div>
  <div class="panel"><h4>คนที่รู้จัก</h4>${met.length?met.map(x=>{const n=E.npcs.get(x.from);return `<div class="row" style="margin:2px 0"><button class="sm ghost" data-dlg="${x.from}" title="เปิดบทสนทนา">${esc(n.name)}</button><small>${esc(E.rels.typeName(E.rels.type(x.from,'player'))||'')} ${x.aff}</small></div>`}).join(''):'<small class="dim">ยังไม่รู้จักใคร</small>'}</div>
  <div class="panel"><h4>เหตุการณ์ล่าสุด</h4><div class="feed" id="journal">${log.slice(0,8).map(l=>`<small>เดือน ${l.m}: ${esc(l.t)}</small>`).join('')||'<small class="dim">ยังไม่มี</small>'}</div></div>
  <div class="panel"><h4>ข่าวสารโลก</h4><div class="feed">${news.map(l=>`<small>${esc(l.t)}</small>`).join('')||'<small class="dim">ยังไม่มีข่าว</small>'}</div></div>
@@ -3482,12 +3516,15 @@ function render(){$('#app').className='app';$('#app').innerHTML=`<header class="
  ${AW.ui.pages.map(p=>`<section class="page" data-page="${p.id}" id="pg-${p.id}" aria-label="${esc(p.title)}"></section>`).join('')}</main>
  <aside class="right" id="right" aria-label="ข้อมูลเสริม"></aside><nav class="bnav" id="bnav" aria-label="เมนูมือถือ"></nav><div id="dlg"></div><div id="confirm"></div><div id="toasts"></div>`;
  wire();update(true)}
+// ความสูง header เปลี่ยนตามความกว้างจอ (หนึ่งหรือสองแถว) · แถบเมนู/แผงขวาที่ sticky ใช้ค่านี้ จึงไม่ถูก header บัง
+function syncHdr(){const h=$('#hdr');if(h)document.documentElement.style.setProperty('--hdr',h.offsetHeight+'px')}
+window.addEventListener('resize',()=>syncHdr());
 const set=(sel,html)=>{const el=$(sel);if(el&&el.__h!==html){el.innerHTML=html;el.__h=html}return el};
 function focusOn(E){const s=E.combat.session(),r=E.dungeon.run();return !!((s&&s.status==='active')||(r&&r.status==='active'))}
 function update(force){const E=AW.engine;if(!$('#hdr'))return;const now=Date.now();if(!force&&E.loop.speed&&now-_last<300)return;_last=now;
  const p=E.player.get(),focus=focusOn(E);if(!focus)st.override=false;
  const app=$('#app');app.classList.toggle('focus',focus&&!st.override);app.classList.toggle('no-right',!st.right);
- set('#hdr',L().header(E));$('#world').textContent=L().worldLine(E);$('#status').textContent=L().statusLine(E);
+ set('#hdr',L().header(E));syncHdr();$('#world').textContent=L().worldLine(E);$('#status').textContent=L().statusLine(E);
  set('#side',L().side(st.page));$('#side').classList.toggle('open',st.navOpen);set('#bnav',L().bnav(st.page));
  set('#focusnote',focus&&st.override?`<div class="todo focus-note">กำลังอยู่ในกิจกรรมพิเศษ <button class="sm" data-a="backFocus">กลับไปที่การต่อสู้/ดันเจี้ยน</button></div>`:'');
  set('#create',S().create(E));const mh=S().modal(E,st.result);set('#modal',mh);

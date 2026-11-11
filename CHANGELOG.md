@@ -1,5 +1,10 @@
 # Changelog
 
+## Phase 7A.1 — Responsive polish (2026-11-12)
+- Two-row header below 1366 px (stats wrap without overlapping), measured header height for sticky sidebars, icon-rail sidebar at 768–1023 px, tighter mobile header.
+- New `tests/responsive.py`: 8 widths × 17 pages (overflow, overlap, header covering content, working buttons, console errors).
+- UI only. No changes to src/core, src/systems, data or the save format.
+
 ## Phase 7A — Complete UI/UX Overhaul (2026-11-11)
 - New game UI replaces the test shell: sticky header, left menu, 17 pages, right panel, special screens (combat, dungeon, events, NPC dialogue, gate travel).
 - Location Scene component (16:9) with themed placeholders. Real art plugs in through the asset manifest.

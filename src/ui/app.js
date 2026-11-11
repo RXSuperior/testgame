@@ -21,12 +21,15 @@ function render(){$('#app').className='app';$('#app').innerHTML=`<header class="
  ${AW.ui.pages.map(p=>`<section class="page" data-page="${p.id}" id="pg-${p.id}" aria-label="${esc(p.title)}"></section>`).join('')}</main>
  <aside class="right" id="right" aria-label="ข้อมูลเสริม"></aside><nav class="bnav" id="bnav" aria-label="เมนูมือถือ"></nav><div id="dlg"></div><div id="confirm"></div><div id="toasts"></div>`;
  wire();update(true)}
+// ความสูง header เปลี่ยนตามความกว้างจอ (หนึ่งหรือสองแถว) · แถบเมนู/แผงขวาที่ sticky ใช้ค่านี้ จึงไม่ถูก header บัง
+function syncHdr(){const h=$('#hdr');if(h)document.documentElement.style.setProperty('--hdr',h.offsetHeight+'px')}
+window.addEventListener('resize',()=>syncHdr());
 const set=(sel,html)=>{const el=$(sel);if(el&&el.__h!==html){el.innerHTML=html;el.__h=html}return el};
 function focusOn(E){const s=E.combat.session(),r=E.dungeon.run();return !!((s&&s.status==='active')||(r&&r.status==='active'))}
 function update(force){const E=AW.engine;if(!$('#hdr'))return;const now=Date.now();if(!force&&E.loop.speed&&now-_last<300)return;_last=now;
  const p=E.player.get(),focus=focusOn(E);if(!focus)st.override=false;
  const app=$('#app');app.classList.toggle('focus',focus&&!st.override);app.classList.toggle('no-right',!st.right);
- set('#hdr',L().header(E));$('#world').textContent=L().worldLine(E);$('#status').textContent=L().statusLine(E);
+ set('#hdr',L().header(E));syncHdr();$('#world').textContent=L().worldLine(E);$('#status').textContent=L().statusLine(E);
  set('#side',L().side(st.page));$('#side').classList.toggle('open',st.navOpen);set('#bnav',L().bnav(st.page));
  set('#focusnote',focus&&st.override?`<div class="todo focus-note">กำลังอยู่ในกิจกรรมพิเศษ <button class="sm" data-a="backFocus">กลับไปที่การต่อสู้/ดันเจี้ยน</button></div>`:'');
  set('#create',S().create(E));const mh=S().modal(E,st.result);set('#modal',mh);
