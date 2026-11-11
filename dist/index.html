@@ -1,0 +1,251 @@
+<!DOCTYPE html><html lang="th"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Multiverse Hunter (Core Test)</title>
+<style>body{margin:0;background:#0d1118;color:#e6e8ee;font:14px/1.5 sans-serif}#app{max-width:900px;margin:auto;padding:12px}header{display:flex;flex-direction:column;margin-bottom:8px}header span{color:#9ab}
+canvas{width:100%;image-rendering:pixelated;background:#000;border:1px solid #2a3344}.row{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0}button{background:#1a2230;color:#e6e8ee;border:1px solid #2a3344;border-radius:6px;padding:6px 10px;cursor:pointer}
+pre{background:#0a0d13;padding:8px;max-height:220px;overflow:auto;font-size:11px}.err{color:#ff8a8a}</style></head><body><div id="app"></div>
+<script>// ==== src/core/ns.js ====
+// Namespace กลาง: ทุกโมดูลลงทะเบียนที่ AW ไม่สร้างตัวแปร global อื่น
+(function(g){g.AW=g.AW||{core:{},systems:{},data:{worlds:[],assets:[]},ui:{}}})(globalThis);
+
+// ==== src/core/rng.js ====
+// สุ่มแบบมี seed (mulberry32) สถานะเป็นตัวเลขเดียว เก็บในเซฟได้ ผลซ้ำได้เมื่อ seed เดิม
+(function(AW){
+function hashSeed(s){let h=2166136261>>>0;for(const c of String(s))h=Math.imul(h^c.charCodeAt(0),16777619);return h>>>0}
+class Rng{
+ constructor(seed){this.state=typeof seed==='number'?seed>>>0:hashSeed(seed??Date.now())}
+ next(){let t=this.state=(this.state+0x6D2B79F5)>>>0;t=Math.imul(t^t>>>15,t|1);t^=t+Math.imul(t^t>>>7,t|61);return((t^t>>>14)>>>0)/4294967296}
+ int(a,b){return a+Math.floor(this.next()*(b-a+1))}
+ chance(p){return this.next()<p}
+ pick(arr){return arr[Math.floor(this.next()*arr.length)]}
+}
+AW.core.Rng=Rng;AW.core.hashSeed=hashSeed;
+})(globalThis.AW);
+
+// ==== src/core/bus.js ====
+// Event Bus: ระบบคุยกันผ่านเหตุการณ์ แทนการห่อฟังก์ชันของกันและกัน
+// ตัวรับที่ error ไม่หยุดตัวรับอื่น (error ถูกส่งต่อเป็นเหตุการณ์ 'bus:error')
+(function(AW){
+class Bus{
+ constructor(){this.h=new Map();this.trace=null}
+ on(ev,fn,{prio=0,owner='?'}={}){const l=this.h.get(ev)||[];const e={fn,prio,owner};l.push(e);l.sort((a,b)=>b.prio-a.prio);this.h.set(ev,l);return()=>this.off(ev,fn)}
+ off(ev,fn){const l=this.h.get(ev);if(l)this.h.set(ev,l.filter(e=>e.fn!==fn))}
+ emit(ev,payload){if(this.trace)this.trace(ev,payload);const l=this.h.get(ev);if(!l)return 0;let n=0;
+  for(const e of l.slice()){try{e.fn(payload);n++}catch(err){if(ev!=='bus:error')this.emit('bus:error',{ev,owner:e.owner,err});else console.error(err)}}return n}
+ listeners(ev){return(this.h.get(ev)||[]).map(e=>e.owner)}
+}
+AW.core.Bus=Bus;
+})(globalThis.AW);
+
+// ==== src/core/state.js ====
+// Game State: แบ่งเป็น slice แต่ละ slice มีเจ้าของ (ระบบเดียวที่เขียนได้)
+// อ่าน: state.get(name) · เขียน: state.mutate(owner,name,fn) ถ้าไม่ใช่เจ้าของจะ throw
+(function(AW){
+const SCHEMA_VERSION=1;
+class GameState{
+ constructor(bus){this.bus=bus;this.slices=new Map();this.data={}}
+ register(name,owner,init){if(this.slices.has(name))throw new Error(`slice "${name}" ซ้ำ (เจ้าของเดิม ${this.slices.get(name).owner})`);this.slices.set(name,{owner,init});this.data[name]=init()}
+ owner(name){const s=this.slices.get(name);if(!s)throw new Error(`ไม่มี slice "${name}"`);return s.owner}
+ get(name){if(!this.slices.has(name))throw new Error(`ไม่มี slice "${name}"`);return this.data[name]}
+ mutate(owner,name,fn){const o=this.owner(name);if(o!==owner)throw new Error(`"${owner}" เขียน slice "${name}" ไม่ได้ (เจ้าของคือ "${o}")`);const r=fn(this.data[name]);this.bus&&this.bus.emit('state:changed',{name,owner});return r}
+ reset(){for(const[n,s]of this.slices)this.data[n]=s.init()}
+ snapshot(){return{version:SCHEMA_VERSION,data:JSON.parse(JSON.stringify(this.data))}}
+ restore(snap){if(!snap||snap.version!==SCHEMA_VERSION)throw new Error('เวอร์ชันเซฟไม่ตรง ต้องผ่าน migration ก่อน');this.reset();for(const n of Object.keys(snap.data)){if(this.slices.has(n))this.data[n]=snap.data[n]}}
+}
+AW.core.GameState=GameState;AW.core.SCHEMA_VERSION=SCHEMA_VERSION;
+})(globalThis.AW);
+
+// ==== src/core/loop.js ====
+// Game Loop: 1 tick = 1 เดือนของโลกหลัก
+// ลำดับต่อ tick: month:before -> month -> month:after (ระบบต่าง ๆ ฟังเหตุการณ์เหล่านี้)
+// หยุดได้หลายเหตุผลพร้อมกัน (เปิดเมนู, มีเหตุการณ์รอ, ต่อสู้) เดินต่อเมื่อเหตุผลหมด
+(function(AW){
+class Loop{
+ constructor(state,bus,{owner='loop',baseMs=1200,timer=globalThis}={}){this.state=state;this.bus=bus;this.owner=owner;this.baseMs=baseMs;this.timer=timer;this.speed=0;this.reasons=new Set();this.h=null;
+  state.register('time',owner,()=>({month:0}))}
+ get month(){return this.state.get('time').month}
+ tick(){if(this.reasons.size)return false;const m=this.month+1;this.bus.emit('month:before',{month:m});this.state.mutate(this.owner,'time',t=>{t.month=m});this.bus.emit('month',{month:m});this.bus.emit('month:after',{month:m});return true}
+ step(n=1){let d=0;for(let i=0;i<n;i++)if(this.tick())d++;return d}
+ setSpeed(s){this.speed=s;if(this.h){this.timer.clearInterval(this.h);this.h=null}if(s>0)this.h=this.timer.setInterval(()=>this.tick(),this.baseMs/s);this.bus.emit('loop:speed',{speed:s})}
+ pause(r){this.reasons.add(r);this.bus.emit('loop:pause',{reasons:[...this.reasons]})}
+ resume(r){this.reasons.delete(r);this.bus.emit('loop:pause',{reasons:[...this.reasons]})}
+ get paused(){return this.reasons.size>0}
+}
+AW.core.Loop=Loop;
+})(globalThis.AW);
+
+// ==== src/core/save.js ====
+// Save System: คีย์ใหม่ 'mvh1:*' ไม่แตะคีย์ของเกมเดิม ('hunter-path-*')
+// ทุกเซฟมี schema version, เวลาบันทึก, checksum · เขียนทับช่องเดิมจะเก็บเวอร์ชันก่อนหน้าไว้ที่ '.prev'
+// migrations[v] แปลงเซฟจากเวอร์ชัน v ไป v+1
+(function(AW){
+const PREFIX='mvh1:',PROTECTED=/^hunter-path-/;
+function checksum(s){let h=0;for(let i=0;i<s.length;i++)h=(Math.imul(h,31)+s.charCodeAt(i))|0;return(h>>>0).toString(16)}
+class SaveSystem{
+ constructor(state,{storage=globalThis.localStorage,migrations={}}={}){this.state=state;this.st=storage;this.migrations=migrations}
+ key(slot){return PREFIX+'slot'+slot}
+ _set(k,v){if(PROTECTED.test(k))throw new Error('ห้ามเขียนคีย์ของเกมเดิม: '+k);this.st.setItem(k,v)}
+ save(slot,meta={}){const snap=this.state.snapshot(),body=JSON.stringify(snap);const rec=JSON.stringify({v:snap.version,at:Date.now(),meta,sum:checksum(body),body});
+  const k=this.key(slot),old=this.st.getItem(k);if(old)this._set(k+'.prev',old);this._set(k,rec);return true}
+ read(slot,{prev=false}={}){const raw=this.st.getItem(this.key(slot)+(prev?'.prev':''));if(!raw)return null;const rec=JSON.parse(raw);
+  if(checksum(rec.body)!==rec.sum)throw new Error('เซฟเสียหาย (checksum ไม่ตรง)');return rec}
+ migrate(snap){let s=snap;while(s.version<AW.core.SCHEMA_VERSION){const f=this.migrations[s.version];if(!f)throw new Error('ไม่มี migration จากเวอร์ชัน '+s.version);s=f(s)}return s}
+ load(slot,opts){const rec=this.read(slot,opts);if(!rec)return false;this.state.restore(this.migrate(JSON.parse(rec.body)));return true}
+ list(){const out=[];for(let i=0;i<this.st.length;i++){const k=this.st.key(i);if(k.startsWith(PREFIX)&&!k.endsWith('.prev')){try{const r=JSON.parse(this.st.getItem(k));out.push({key:k,at:r.at,meta:r.meta,v:r.v})}catch(e){out.push({key:k,broken:true})}}}return out}
+ remove(slot){this.st.removeItem(this.key(slot));}
+ exportSlot(slot){return this.st.getItem(this.key(slot))}
+ importSlot(slot,text){const rec=JSON.parse(text);if(checksum(rec.body)!==rec.sum)throw new Error('ไฟล์เซฟเสียหาย');this._set(this.key(slot),text)}
+ legacyKeys(){const out=[];for(let i=0;i<this.st.length;i++){const k=this.st.key(i);if(PROTECTED.test(k))out.push(k)}return out}
+}
+AW.core.SaveSystem=SaveSystem;AW.core.SAVE_PREFIX=PREFIX;
+})(globalThis.AW);
+
+// ==== src/core/registry.js ====
+// Registry กลางสำหรับข้อมูลที่ลงทะเบียน (โลก เรื่อง ตัวละคร ไอเทม ฯลฯ)
+// ตรวจ: id ซ้ำ, ฟิลด์ที่จำเป็น, รูปแบบ id · ใช้เป็น Data Loader ของ World/Story Module ใน Phase ถัดไป
+(function(AW){
+const ID=/^[a-z][a-z0-9_]*$/;
+class Registry{
+ constructor(kind,required=[],validate=null){this.kind=kind;this.required=required;this.validate=validate;this.items=new Map()}
+ add(def){const errs=this.check(def);if(errs.length)throw new Error(`${this.kind} "${def&&def.id}" ไม่ถูกต้อง: ${errs.join('; ')}`);this.items.set(def.id,Object.freeze(def));return def}
+ check(def){const e=[];if(!def||typeof def!=='object')return['ไม่ใช่ object'];if(!ID.test(def.id||''))e.push('id ต้องเป็น a-z0-9_ ขึ้นต้นด้วยตัวอักษร');if(this.items.has(def.id))e.push('id ซ้ำ');
+  for(const f of this.required)if(def[f]===undefined)e.push('ขาดฟิลด์ '+f);if(this.validate)e.push(...(this.validate(def)||[]));return e}
+ get(id){return this.items.get(id)}
+ has(id){return this.items.has(id)}
+ all(){return[...this.items.values()]}
+ loadAll(defs){const ok=[],bad=[];for(const d of defs){try{ok.push(this.add(d).id)}catch(err){bad.push(err.message)}}return{ok,bad}}
+}
+AW.core.Registry=Registry;
+})(globalThis.AW);
+
+// ==== src/core/assets.js ====
+// Asset Registry: เกมอ้างภาพด้วย id เท่านั้น ไม่อ้าง path
+// ถ้ายังไม่มีไฟล์จริง หรือไฟล์ไม่มีสัญญาอนุญาตที่ยืนยัน ระบบจะคืนภาพ placeholder ที่เขียนคำว่า PLACEHOLDER ชัดเจน
+// เปลี่ยนภาพภายหลัง = แก้ manifest ไม่ต้องแก้ game logic
+(function(AW){
+const LICENSES=new Set(['own','cc0','cc-by','craftpix-free','gandalfhardcore','licensed']);
+class AssetRegistry{
+ constructor({imageFactory=null,canvasFactory=null,allowUnlicensed=false}={}){this.defs=new Map();this.cache=new Map();this.img=imageFactory;this.cv=canvasFactory;this.allowUnlicensed=allowUnlicensed}
+ register(def){const need=['id','kind','w','h'];for(const f of need)if(def[f]===undefined)throw new Error(`asset ${def.id}: ขาด ${f}`);if(this.defs.has(def.id))throw new Error('asset id ซ้ำ: '+def.id);
+  this.defs.set(def.id,{frames:1,anchor:'bottom-center',world:'shared',license:null,src:null,...def})}
+ registerAll(list){list.forEach(d=>this.register(d))}
+ usable(d){return !!d.src&&(this.allowUnlicensed||LICENSES.has(d.license))}
+ status(id){const d=this.defs.get(id);if(!d)return 'missing';return this.usable(d)?'real':'placeholder'}
+ get(id){if(this.cache.has(id))return this.cache.get(id);const d=this.defs.get(id);let out;
+  if(d&&this.usable(d)&&this.img){out=this.img(d.src)}else{out=this.placeholder(d||{id,w:32,h:32,kind:'missing'})}this.cache.set(id,out);return out}
+ placeholder(d){if(!this.cv)return{placeholder:true,id:d.id,w:d.w,h:d.h};const c=this.cv(d.w,d.h),g=c.getContext('2d');
+  let h=0;for(const ch of d.id)h=(h*31+ch.charCodeAt(0))>>>0;g.fillStyle=`hsl(${h%360},35%,30%)`;g.fillRect(0,0,d.w,d.h);g.strokeStyle='#ff3b9a';g.lineWidth=2;g.strokeRect(1,1,d.w-2,d.h-2);
+  g.beginPath();g.moveTo(0,0);g.lineTo(d.w,d.h);g.moveTo(d.w,0);g.lineTo(0,d.h);g.stroke();if(d.w>=60){g.fillStyle='#fff';g.font='10px monospace';g.fillText('PLACEHOLDER',4,12);g.fillText(d.id.slice(0,Math.floor(d.w/6)),4,24)}c.placeholder=true;return c}
+ report(){const r={real:0,placeholder:0,byWorld:{}};for(const d of this.defs.values()){const s=this.usable(d)?'real':'placeholder';r[s]++;(r.byWorld[d.world]=r.byWorld[d.world]||{real:0,placeholder:0})[s]++}return r}
+}
+AW.core.AssetRegistry=AssetRegistry;
+})(globalThis.AW);
+
+// ==== src/core/debug.js ====
+// Debug System: บันทึก log วงแหวน, จับ error ทั้งจาก bus และ window, คำสั่งทดสอบ
+(function(AW){
+class Debug{
+ constructor(bus,{max=300}={}){this.bus=bus;this.max=max;this.lines=[];this.errors=[];
+  bus.on('bus:error',e=>this.error(`[${e.owner}] ${e.ev}: ${e.err&&e.err.message}`),{owner:'debug'})}
+ log(msg,lvl='info'){this.lines.push({t:Date.now(),lvl,msg});if(this.lines.length>this.max)this.lines.shift()}
+ error(msg){this.errors.push(msg);this.log(msg,'error')}
+ traceBus(on){this.bus.trace=on?(ev,p)=>{if(!ev.startsWith('state:'))this.log('emit '+ev+(p&&p.month?' m'+p.month:''),'trace')}:null}
+}
+AW.core.Debug=Debug;
+})(globalThis.AW);
+
+// ==== src/core/engine.js ====
+// Engine: ประกอบ core ทั้งหมดเข้าด้วยกัน และเป็นจุดที่โมดูลอนาคต (World, Story, Character) เสียบเข้ามา
+// โมดูล = { id, deps:[...], install(engine) } ติดตั้งตามลำดับ deps
+(function(AW){
+const C=AW.core;
+class Engine{
+ constructor(opts={}){this.bus=new C.Bus();this.debug=new C.Debug(this.bus);this.state=new C.GameState(this.bus);
+  this.loop=new C.Loop(this.state,this.bus,{timer:opts.timer||globalThis,baseMs:opts.baseMs||1200});
+  this.state.register('meta','engine',()=>({seed:null,rng:0,created:0,name:''}));
+  this.save=new C.SaveSystem(this.state,{storage:opts.storage||globalThis.localStorage,migrations:opts.migrations||{}});
+  this.assets=new C.AssetRegistry(opts.assets||{});
+  this.registries={world:new C.Registry('world',['id','name','timeRate','entry']),story:new C.Registry('story',['id','world','chapters']),character:new C.Registry('character',['id','world','name'])};
+  this.modules=new Map();this.rng=new C.Rng(1)}
+ use(mod){if(this.modules.has(mod.id))throw new Error('โมดูลซ้ำ: '+mod.id);for(const d of mod.deps||[])if(!this.modules.has(d))throw new Error(`โมดูล ${mod.id} ต้องการ ${d} ก่อน`);mod.install(this);this.modules.set(mod.id,mod);this.debug.log('ติดตั้งโมดูล '+mod.id);return this}
+ newGame({seed,name=''}={}){this.state.reset();const s=seed??String(Date.now());this.rng=new C.Rng(s);
+  this.state.mutate('engine','meta',m=>{m.seed=s;m.rng=this.rng.state;m.created=Date.now();m.name=name});this.bus.emit('game:new',{seed:s});}
+ saveTo(slot){this.state.mutate('engine','meta',m=>{m.rng=this.rng.state});return this.save.save(slot,{name:this.state.get('meta').name,month:this.loop.month})}
+ loadFrom(slot,o){const ok=this.save.load(slot,o);if(ok){this.rng=new C.Rng(this.state.get('meta').rng);this.bus.emit('game:loaded',{slot})}return ok}
+}
+AW.core.Engine=Engine;
+})(globalThis.AW);
+
+// ==== data/assets/manifest.js ====
+// Asset Manifest: รายการภาพที่เกมต้องใช้ แยกตามโลก
+// src:null = ยังไม่มีไฟล์ เกมจะแสดง placeholder · candidate = ไฟล์ที่มีอยู่แล้วในเกมเดิมที่อาจใช้ได้ (ต้องยืนยันก่อนนำมาใช้)
+// license ต้องเป็นค่าที่ยืนยันแล้ว (own, cc0, cc-by, craftpix-free, gandalfhardcore, licensed) จึงจะแสดงภาพจริง
+(function(AW){const A=(world,kind,list,w,h,extra={})=>list.map(id=>({id:world+'.'+kind+'.'+id,world,kind,w,h,src:null,license:null,...extra}));
+AW.data.assets.push(
+ // ---------- ใช้ร่วมทุกโลก ----------
+ ...A('shared','ui',['frame','button','tab','panel','badge_rank','icon_gold','icon_time','icon_world'],64,64),
+ ...A('shared','char',['base_m','base_f'],80,64,{frames:55,note:'ร่างโมดูลาร์ 7 ท่า เฟรม 80x64 (ต่อยอดระบบชั้นจากเกมเดิม)'}),
+ ...A('shared','fx',['hit','crit','heal','portal_open','portal_close'],128,128,{frames:8}),
+ // ---------- Modern Hunter ----------
+ ...A('hunter','bg',['city_day','city_night','association_hall','guild_office','hunter_hospital','market','training_center','danger_zone','apartment','gov_base','industrial'],576,324,{layers:6}),
+ ...A('hunter','bg',['gate_blue','gate_red','dungeon_cave','dungeon_ruins'],576,324,{layers:6}),
+ ...A('hunter','outfit',['street','hunter_f','hunter_c','hunter_a','hunter_s','suit','medic','gov_agent'],80,64,{frames:55}),
+ ...A('hunter','mon',['goblin','orc','dire_wolf','golem','gate_boss'],128,128,{frames:20}),
+ ...A('hunter','item',['potion','mana_stone','core_e','core_s','phone','id_card'],32,32),
+ // ---------- Fantasy / Demon Realm ----------
+ ...A('fantasy','bg',['forest','town','castle','temple','tavern','demon_castle'],576,324,{layers:6}),
+ ...A('fantasy','outfit',['tunic','robe','armor','noble','priest'],80,64,{frames:55}),
+ ...A('fantasy','mon',['slime','skeleton','wolf','general_rat','general_frost','general_necro','demon_lord'],128,128,{frames:20}),
+ // ---------- Martial World / Murim ----------
+ ...A('murim','bg',['mountain_sect','clan_manor','inn','market_town','bamboo_forest','cliff_cave','arena'],576,324,{layers:6}),
+ ...A('murim','outfit',['disciple','elder','clan_heir','wanderer','assassin','beggar'],80,64,{frames:55}),
+ ...A('murim','wep',['sword','saber','spear','fan','fist_wrap'],80,64,{frames:55}),
+ ...A('murim','mon',['bandit','demonic_cultist','tiger','sect_master'],128,128,{frames:20}),
+);
+// ไฟล์จากเกมเดิมที่อาจนำมาใช้ (ยังไม่ผูก ต้องอนุมัติก่อน)
+AW.data.assetCandidates=[
+ {for:'hunter.bg.city_day',file:'a/bg/awaken/*',source:'CraftPix.net (city skyline)',license:'craftpix-free'},
+ {for:'hunter.bg.city_night',file:'a/bg/hospital/*',source:'CraftPix.net',license:'craftpix-free'},
+ {for:'fantasy.bg.forest',file:'a/gh/c_n*.png',source:'GandalfHardcore',license:'gandalfhardcore'},
+ {for:'shared.char.base_m',file:'a/gh/chars.png',source:'GandalfHardcore',license:'gandalfhardcore'},
+ {for:'fantasy.mon.*',file:'a/m/*',source:'CraftPix.net',license:'craftpix-free'},
+ {for:'fantasy.mon.general_*',file:'a/m2/rat|frost|necro|demonlord.png',source:'ไม่ทราบ',license:null},
+];
+})(globalThis.AW);
+
+// ==== data/worlds/index.js ====
+// World Modules ลงทะเบียนที่นี่ (Phase 1 ยังไม่มีโลก โลกจริงเริ่ม Phase 2)
+(function(AW){})(globalThis.AW);
+
+// ==== src/ui/shell.js ====
+// หน้าทดสอบ Core (Phase 1): ไม่ใช่ UI ของเกมจริง ใช้ตรวจ loop, save, asset, debug ในเบราว์เซอร์
+(function(AW){
+const $=s=>document.querySelector(s),esc=s=>String(s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+function boot(){const E=new AW.core.Engine({assets:{imageFactory:src=>{const i=new Image();i.src=src;return i},canvasFactory:(w,h)=>{const c=document.createElement('canvas');c.width=w;c.height=h;return c}}});
+ E.assets.registerAll(AW.data.assets);const wr=E.registries.world.loadAll(AW.data.worlds);if(wr.bad.length)wr.bad.forEach(m=>E.debug.error(m));
+ window.addEventListener('error',e=>E.debug.error('window: '+e.message));
+ E.bus.on('month',({month})=>E.debug.log('เดือน '+month),{owner:'shell'});
+ AW.engine=E;E.newGame({seed:'demo'});render();setInterval(draw,200);
+ E.bus.on('month:after',update,{owner:'shell'});E.bus.on('loop:pause',update,{owner:'shell'});return E}
+function draw(){const cv=$('#stage');if(!cv)return;const g=cv.getContext('2d'),E=AW.engine;g.imageSmoothingEnabled=false;g.clearRect(0,0,cv.width,cv.height);
+ g.drawImage(E.assets.get('hunter.bg.city_day'),0,0,576,324);g.drawImage(E.assets.get('shared.char.base_m'),200,230,80,64);g.drawImage(E.assets.get('hunter.mon.goblin'),380,180,128,128);g.drawImage(E.assets.get('hunter.item.mana_stone'),30,30,32,32)}
+function render(){ $('#app').innerHTML=`<header><b>Multiverse Hunter · Core Test (Phase 1)</b><span id="status"></span></header>
+ <canvas id="stage" width="576" height="324"></canvas>
+ <div class="row">${[0,1,3,10].map(s=>`<button data-s="${s}">${s?s+'x':'หยุด'}</button>`).join('')}<button id="step">+1 เดือน</button><button id="menu">เปิด/ปิดเมนู (หยุดเวลา)</button><button id="new">เกมใหม่</button></div>
+ <div class="row">${[0,1,2].map(i=>`<button data-save="${i}">เซฟช่อง ${i}</button><button data-load="${i}">โหลดช่อง ${i}</button>`).join('')}</div>
+<div id="info"></div>`;
+ wire();update()}
+function info(){const E=AW.engine,r=E.assets.report();return `<p>ภาพ: จริง ${r.real} · placeholder ${r.placeholder} · โลกที่ลงทะเบียน ${E.registries.world.all().length} · เซฟเกมเดิมที่พบ (ไม่แตะ) ${E.save.legacyKeys().length}</p>
+ <p>เซฟใหม่: ${E.save.list().map(s=>esc(s.key)+(s.broken?' (เสีย)':` v${s.v} เดือน ${s.meta&&s.meta.month}`)).join(' · ')||'ยังไม่มี'}</p>
+ <details id="dbg" ${window.__dbgOpen?'open':''}><summary>Debug</summary><p class="err">${E.debug.errors.map(esc).join('<br>')||'ไม่มี error'}</p><pre>${esc(JSON.stringify(E.state.snapshot(),null,1))}</pre><pre>${E.debug.lines.slice(-12).map(l=>esc(l.lvl+' '+l.msg)).join('\n')}</pre></details>`}
+let _last=0;function update(){const E=AW.engine,m=E.loop.month,meta=E.state.get('meta'),st=$('#status');if(!st)return;
+ st.textContent=`เดือน ${m} (อายุ ${15+Math.floor(m/12)} ปี ${m%12} เดือน) · seed ${meta.seed} · ${E.loop.paused?'หยุด: '+[...E.loop.reasons].join(', '):'ความเร็ว '+E.loop.speed+'x'}`;
+ const now=Date.now();if(now-_last<500&&E.loop.speed)return;_last=now;$('#info').innerHTML=info();$('#dbg').ontoggle=e=>window.__dbgOpen=e.target.open}
+function wire(){const E=AW.engine;
+ document.querySelectorAll('[data-s]').forEach(b=>b.onclick=()=>{E.loop.setSpeed(+b.dataset.s);update()});
+ $('#step').onclick=()=>{E.loop.step(1);update()};$('#new').onclick=()=>{E.newGame({seed:String(Date.now())});_last=0;update()};
+ $('#menu').onclick=()=>{E.loop.reasons.has('menu')?E.loop.resume('menu'):E.loop.pause('menu')};
+ document.querySelectorAll('[data-save]').forEach(b=>b.onclick=()=>{E.saveTo(+b.dataset.save);_last=0;update()});
+ document.querySelectorAll('[data-load]').forEach(b=>b.onclick=()=>{try{E.loadFrom(+b.dataset.load)}catch(e){E.debug.error(e.message)}_last=0;update()});
+ draw()}
+AW.ui.boot=boot;
+})(globalThis.AW);
+</script><script>AW.ui.boot()</script></body></html>
