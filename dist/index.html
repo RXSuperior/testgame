@@ -2054,6 +2054,42 @@ AW.data.assetCandidates=[
 ];
 })(globalThis.AW);
 
+// ==== data/assets/art_meta.js ====
+// Art metadata (Phase 7B.1): เพิ่มข้อมูลงานภาพให้ asset เดิมใน manifest (ไม่สร้าง registry ใหม่ ไม่ลบ placeholder)
+// type/มาตรฐานไฟล์/priority/สถานะการสร้าง/ข้อมูล generation อยู่บน def เดียวกับที่ AssetRegistry ใช้
+// w,h ของเดิม = ขนาดที่ UI วาด (logical) · std = ขนาดไฟล์ต้นฉบับที่ต้องส่งมอบ · ดู docs/phase7b/ASSET_PIPELINE.md
+(function(AW){
+// มาตรฐานไฟล์ต่อประเภท (ART_BIBLE §Asset standards)
+const STD={
+ location:{ratio:'16:9',w:1536,h:864,format:'webp',alpha:false,maxKB:450,folder:'bg'},
+ portrait:{ratio:'3:4',w:1024,h:1365,format:'webp',alpha:false,maxKB:300,folder:'portrait'},
+ fullbody:{ratio:'2:3',w:1024,h:1536,format:'png',alpha:true,maxKB:1200,folder:'char'},
+ monster:{ratio:'3:4',w:1024,h:1365,format:'png',alpha:true,maxKB:900,folder:'mon'},
+ item:{ratio:'1:1',w:1024,h:1024,format:'png',alpha:true,maxKB:300,folder:'item'},
+ skill_icon:{ratio:'1:1',w:512,h:512,format:'webp',alpha:false,maxKB:80,folder:'skill'},
+ skill_fx:{ratio:'1:1',w:1024,h:1024,format:'png',alpha:true,maxKB:600,folder:'fx'},
+ // ชุดภาพเคลื่อนไหวแบบ pixel จากระบบเดิม: ไม่เข้ากับแนว manhwa ต้องตัดสินใจก่อนทำ (ไม่ลบ)
+ sprite_sheet:{ratio:'sheet',w:null,h:null,format:'png',alpha:true,maxKB:600,folder:'sprite',decision:true},
+ ui:{ratio:'-',w:null,h:null,format:'-',alpha:true,maxKB:0,folder:'ui',decision:true}};
+const KIND_TYPE={bg:'location',mon:'monster',item:'item',char:'sprite_sheet',outfit:'sprite_sheet',wep:'sprite_sheet',fx:'sprite_sheet',ui:'ui',portrait:'portrait',skill:'skill_icon'};
+// P0 = ชุดนำร่อง · P1 = UI แสดงอยู่แล้ว · P2 = ข้อมูลอ้างแต่ UI ยังไม่แสดง · P3 = ต้องตัดสินใจ/ยังไม่มีโลก
+const PILOT=['hunter.bg.apartment','hunter.bg.city_day','hunter.bg.association_hall','hunter.bg.school','hunter.bg.dungeon_cave','hunter.bg.gate_blue','fantasy.bg.forest','murim.bg.mountain_sect','shared.portrait.player_m','hunter.portrait.best_friend'];
+const UI_NOW=new Set(['hunter.bg.city_night','hunter.bg.training_center','hunter.bg.market','hunter.bg.hunter_hospital','hunter.bg.gov_base','hunter.bg.industrial','hunter.bg.dungeon_ruins','hunter.bg.gate_red','fantasy.bg.town','fantasy.bg.castle']);
+// asset ใหม่ที่ UI/ชุดนำร่องต้องใช้ (ลงทะเบียนเป็น placeholder ก่อน · ไม่มีไฟล์ปลอม)
+AW.data.assets.push(
+ {id:'hunter.bg.school',world:'hunter',kind:'bg',w:576,h:324,layers:1,src:null,license:null,note:'ฉากโรงเรียน ตอนนี้ location school ใช้ bg.city_day · เปลี่ยนการผูกต้องอนุมัติ (7B.2)'},
+ {id:'shared.portrait.player_m',world:'shared',kind:'portrait',w:240,h:320,src:null,license:null,note:'ภาพอ้างอิงตัวเอกชาย ค่าเริ่มต้น (ระบบยังไม่มีการปรับรูปลักษณ์)'},
+ {id:'shared.portrait.player_f',world:'shared',kind:'portrait',w:240,h:320,src:null,license:null,note:'ภาพอ้างอิงตัวเอกหญิง ค่าเริ่มต้น'},
+ {id:'hunter.portrait.best_friend',world:'hunter',kind:'portrait',w:240,h:320,src:null,license:null,note:'ฮาจุน · รูปลักษณ์ยังไม่ได้กำหนดในข้อมูล ต้องอนุมัติก่อนสร้าง'});
+for(const d of AW.data.assets){const type=KIND_TYPE[d.kind]||'ui',std=STD[type],name=d.id.split('.').slice(2).join('.');
+ Object.assign(d,{type,std,priority:PILOT.includes(d.id)?'P0':UI_NOW.has(d.id)?'P1':std.decision||d.world==='murim'?'P3':'P2',
+  status:d.src?'real':PILOT.includes(d.id)?'planned':'placeholder',version:0,
+  path:std.decision?null:`assets/${d.world}/${std.folder}/${name}.v1.${std.format}`,
+  gen:null});// gen = {tool,model,prompt,negative,seed,date,author,reviewedBy} ใส่เมื่อสร้างจริงเท่านั้น
+}
+AW.data.assetStandards=STD;AW.data.assetPilot=PILOT;
+})(globalThis.AW);
+
 // ==== data/shared/people.js ====
 // ข้อมูลกลางเรื่องคน ใช้ได้ทุกโลก (ข้อมูลล้วน)
 // tempers: นิสัยหลักของ NPC จากเกมเดิม rel12.js:2-7 (TEMPERS) ตัวคูณมีผลจริงกับการคุย ของขวัญ ความไว้ใจ ความนับถือ
@@ -3226,6 +3262,32 @@ AW.ui.pages=AW.ui.pages||[];
 U.page=(id,o)=>AW.ui.pages.push(Object.assign({id},o));
 })(globalThis.AW);
 
+// ==== src/ui/assetpipe.js ====
+// Asset pipeline (Phase 7B.1) ฝั่งเบราว์เซอร์: โหลด · preload ภาพสำคัญ · lazy load ที่เหลือ · ตรวจขนาดภาพ · ตรวจไฟล์หาย · fallback
+// ใช้ AssetRegistry เดิม (E.assets) ไม่มี registry ใหม่: imageFactory ของ registry ถูกห่อด้วย factory() เพื่อติดตามผลโหลดของแต่ละ id
+// ภาพยังไม่ได้ใช้ (ไม่มี src หรือไม่มี license) = registry คืน placeholder เหมือนเดิม
+(function(AW){
+'use strict';
+const P=AW.ui.assets={};
+const state=new Map();// id -> {status:'loading'|'ok'|'missing'|'invalid', w,h, reason}
+let reg=null,bySrc=new Map();
+const ratioOf=r=>{const m=/^(\d+):(\d+)$/.exec(r||'');return m?+m[1]/+m[2]:null};
+// ตรวจขนาดจริงกับมาตรฐาน: สัดส่วนต่างได้ไม่เกิน 1% และไม่เล็กกว่า 50% ของขนาดแนะนำ
+P.check=(def,w,h)=>{const s=def.std;if(!s||!s.w)return '';const r=ratioOf(s.ratio);if(r&&Math.abs(w/h-r)/r>0.01)return `สัดส่วน ${w}x${h} ไม่ตรง ${s.ratio}`;if(w<s.w*0.5||h<s.h*0.5)return `เล็กเกินไป ${w}x${h} (แนะนำ ${s.w}x${s.h})`;return ''};
+// factory ที่ AssetRegistry ใช้สร้างภาพ: ผูก onload/onerror เพื่อรู้สถานะ · ไฟล์หาย/ขนาดผิด = ใส่ placeholder แทนใน cache ของ registry
+P.factory=(make)=>src=>{const img=make(src),id=bySrc.get(src);if(!id)return img;state.set(id,{status:'loading'});
+ img.onload=()=>{const d=reg.defs.get(id),why=P.check(d,img.naturalWidth,img.naturalHeight);if(why){P.fallback(id,'invalid',why)}else state.set(id,{status:'ok',w:img.naturalWidth,h:img.naturalHeight})};
+ img.onerror=()=>P.fallback(id,'missing','โหลดไฟล์ไม่ได้: '+src);return img};
+P.fallback=(id,status,reason)=>{state.set(id,{status,reason});const d=reg.defs.get(id);if(d)reg.cache.set(id,reg.placeholder(d));if(AW.engine)AW.engine.debug.log('asset '+id+': '+reason,'warn')};
+P.attach=E=>{reg=E.assets;bySrc=new Map([...reg.defs.values()].filter(d=>d.src).map(d=>[d.src,d.id]))};
+// พร้อมวาดหรือยัง (ภาพจริงโหลดเสร็จและผ่านการตรวจ) · ใช้ตัดสินใจวาด placeholder ระหว่างรอ
+P.ready=id=>{const d=reg&&reg.defs.get(id);if(!d||!reg.usable(d))return false;const img=reg.get(id);const s=state.get(id);return !!(s&&s.status==='ok'&&img&&img.complete!==false)};
+P.status=id=>{const d=reg&&reg.defs.get(id);if(!d)return 'unknown';if(!reg.usable(d))return 'placeholder';const s=state.get(id);return s?s.status:'idle'};
+// preload: โหลดทันทีเฉพาะ P0/P1 ที่มีไฟล์จริง · ที่เหลือโหลดเมื่อถูกเรียกใช้ครั้งแรก (registry.get) = lazy
+P.preload=(prio=['P0','P1'])=>{const ids=[...reg.defs.values()].filter(d=>reg.usable(d)&&prio.includes(d.priority)).map(d=>d.id);ids.forEach(id=>reg.get(id));return ids};
+P.report=()=>{const r={placeholder:0,idle:0,loading:0,ok:0,missing:[],invalid:[]};for(const d of reg.defs.values()){const s=P.status(d.id);if(s==='missing'||s==='invalid')r[s].push(d.id+': '+(state.get(d.id)||{}).reason);else r[s]=(r[s]||0)+1}return r};
+})(globalThis.AW);
+
 // ==== src/ui/scene.js ====
 // Location Scene component (Phase 7A): เลือกภาพฉากจากสถานที่/กิจกรรมปัจจุบัน แล้ววาดลง canvas 16:9 (576x324)
 // ภาพมาจาก asset manifest ทั้งหมด: ใส่ src+license ใน data/assets/manifest.js แล้วฉากเปลี่ยนเป็นภาพจริงเอง ไม่ต้องแก้ไฟล์นี้
@@ -3249,8 +3311,8 @@ function placeholder(g,id,title){const gr=g.createLinearGradient(0,0,576,324);gr
  g.fillStyle='rgba(10,14,26,.55)';g.beginPath();g.moveTo(0,250);for(let x=0;x<=576;x+=48)g.lineTo(x,200+((x*7)%60));g.lineTo(576,324);g.lineTo(0,324);g.fill();
  g.fillStyle='rgba(242,193,78,.85)';g.font='12px monospace';g.fillText('PLACEHOLDER · '+id+' · 576x324',12,20);g.fillStyle='rgba(232,235,245,.25)';g.font='bold 28px sans-serif';g.fillText(title,12,60)}
 function draw(){const cv=U.$('#stage'),el=U.$('#scene');if(!cv||!el)return;const E=AW.engine,g=cv.getContext('2d'),id=el.dataset.asset,d=E.assets.defs.get(id);g.imageSmoothingEnabled=false;g.clearRect(0,0,576,324);
- if(d&&E.assets.usable(d))g.drawImage(E.assets.get(id),0,0,576,324);else placeholder(g,id,el.dataset.title||'');
- const ch=E.assets.defs.get('shared.char.base_m');if(E.player.get().created&&ch&&E.assets.usable(ch))g.drawImage(E.assets.get('shared.char.base_m'),248,250,80,64)}
+ if(AW.ui.assets.ready(id))g.drawImage(E.assets.get(id),0,0,576,324);else placeholder(g,id,el.dataset.title||'');// ระหว่างโหลด/ไฟล์หาย = ฉากชั่วคราว
+ const ch=E.assets.defs.get('shared.char.base_m');if(E.player.get().created&&ch&&AW.ui.assets.ready('shared.char.base_m'))g.drawImage(E.assets.get('shared.char.base_m'),248,250,80,64)}
 AW.ui.scene={sceneOf,html,draw,SPECIAL};
 })(globalThis.AW);
 
@@ -3502,11 +3564,11 @@ const ss={get:k=>{try{return sessionStorage.getItem(k)}catch(e){return null}},se
 const st=AW.ui.state={page:ss.get('mvh-ui-page')||'dashboard',override:false,right:ss.get('mvh-ui-right')!=='0',dlg:null,result:null,navOpen:false};
 let _last=0,_modalWas='';
 AW.ui.dev=()=>/[?&]debug=1/.test(location.search)||ss.get('mvh-ui-dev')==='1';
-function boot(){const E=new AW.core.Engine({assets:{imageFactory:src=>{const i=new Image();i.src=src;return i},canvasFactory:(w,h)=>{const c=document.createElement('canvas');c.width=w;c.height=h;return c}}});
- E.assets.registerAll(AW.data.assets);AW.systems.installGameplay(E);const wr=E.worlds.registerAll(AW.data.worlds);if(wr.bad.length)wr.bad.forEach(m=>E.debug.error(m));
+function boot(){const make=src=>{const i=new Image();i.decoding='async';i.src=src;return i};const E=new AW.core.Engine({assets:{imageFactory:src=>AW.ui.assets.factory(make)(src),canvasFactory:(w,h)=>{const c=document.createElement('canvas');c.width=w;c.height=h;return c}}});
+ E.assets.registerAll(AW.data.assets);AW.ui.assets.attach(E);AW.systems.installGameplay(E);const wr=E.worlds.registerAll(AW.data.worlds);if(wr.bad.length)wr.bad.forEach(m=>E.debug.error(m));
  window.addEventListener('error',e=>E.debug.error('window: '+e.message));
  E.bus.on('month',({month})=>E.debug.log('เดือน '+month),{owner:'shell'});
- AW.engine=E;newGame('demo');if(!AW.ui.pages.some(p=>p.id===st.page))st.page='dashboard';render();setInterval(AW.ui.scene.draw,200);
+ AW.engine=E;newGame('demo');AW.ui.assets.preload();if(!AW.ui.pages.some(p=>p.id===st.page))st.page='dashboard';render();setInterval(AW.ui.scene.draw,200);
  E.bus.on('month:after',()=>update(),{owner:'shell'});E.bus.on('loop:pause',()=>update(),{owner:'shell'});E.bus.on('world:enter',()=>update(true),{owner:'shell'});return E}
 function newGame(seed){const E=AW.engine;E.newGame({seed});E.worlds.start('hunter');st.result=null;st.dlg=null}
 function createPlayer(name,gender){const E=AW.engine,r=E.rng,s={};for(const k of AW.systems.Rules.STATS)s[k]=r.int(8,12);E.player.create({name,gender,stats:s,money:50})}

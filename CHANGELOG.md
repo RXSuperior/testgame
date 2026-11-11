@@ -1,5 +1,10 @@
 # Changelog
 
+## Phase 7B.1 — Art Bible & asset pipeline preparation (2026-11-12)
+- Art Bible (Premium Korean Manhwa RPG), asset standards, inventory generated from code (93 assets), pilot plan with prompts for 10 images, list of art still needed.
+- Asset metadata on the existing registry entries, browser loader (missing/dimension checks, fallback, preload, lazy loading), `tools/assets.js` check and inventory tool, and the build copies referenced files.
+- No images generated. No changes to src/core, src/systems, world data or saves.
+
 ## Phase 7A.1 — Responsive polish (2026-11-12)
 - Two-row header below 1366 px (stats wrap without overlapping), measured header height for sticky sidebars, icon-rail sidebar at 768–1023 px, tighter mobile header.
 - New `tests/responsive.py`: 8 widths × 17 pages (overflow, overlap, header covering content, working buttons, console errors).

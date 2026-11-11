@@ -20,7 +20,7 @@ function placeholder(g,id,title){const gr=g.createLinearGradient(0,0,576,324);gr
  g.fillStyle='rgba(10,14,26,.55)';g.beginPath();g.moveTo(0,250);for(let x=0;x<=576;x+=48)g.lineTo(x,200+((x*7)%60));g.lineTo(576,324);g.lineTo(0,324);g.fill();
  g.fillStyle='rgba(242,193,78,.85)';g.font='12px monospace';g.fillText('PLACEHOLDER · '+id+' · 576x324',12,20);g.fillStyle='rgba(232,235,245,.25)';g.font='bold 28px sans-serif';g.fillText(title,12,60)}
 function draw(){const cv=U.$('#stage'),el=U.$('#scene');if(!cv||!el)return;const E=AW.engine,g=cv.getContext('2d'),id=el.dataset.asset,d=E.assets.defs.get(id);g.imageSmoothingEnabled=false;g.clearRect(0,0,576,324);
- if(d&&E.assets.usable(d))g.drawImage(E.assets.get(id),0,0,576,324);else placeholder(g,id,el.dataset.title||'');
- const ch=E.assets.defs.get('shared.char.base_m');if(E.player.get().created&&ch&&E.assets.usable(ch))g.drawImage(E.assets.get('shared.char.base_m'),248,250,80,64)}
+ if(AW.ui.assets.ready(id))g.drawImage(E.assets.get(id),0,0,576,324);else placeholder(g,id,el.dataset.title||'');// ระหว่างโหลด/ไฟล์หาย = ฉากชั่วคราว
+ const ch=E.assets.defs.get('shared.char.base_m');if(E.player.get().created&&ch&&AW.ui.assets.ready('shared.char.base_m'))g.drawImage(E.assets.get('shared.char.base_m'),248,250,80,64)}
 AW.ui.scene={sceneOf,html,draw,SPECIAL};
 })(globalThis.AW);

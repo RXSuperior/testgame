@@ -7,11 +7,11 @@ const ss={get:k=>{try{return sessionStorage.getItem(k)}catch(e){return null}},se
 const st=AW.ui.state={page:ss.get('mvh-ui-page')||'dashboard',override:false,right:ss.get('mvh-ui-right')!=='0',dlg:null,result:null,navOpen:false};
 let _last=0,_modalWas='';
 AW.ui.dev=()=>/[?&]debug=1/.test(location.search)||ss.get('mvh-ui-dev')==='1';
-function boot(){const E=new AW.core.Engine({assets:{imageFactory:src=>{const i=new Image();i.src=src;return i},canvasFactory:(w,h)=>{const c=document.createElement('canvas');c.width=w;c.height=h;return c}}});
- E.assets.registerAll(AW.data.assets);AW.systems.installGameplay(E);const wr=E.worlds.registerAll(AW.data.worlds);if(wr.bad.length)wr.bad.forEach(m=>E.debug.error(m));
+function boot(){const make=src=>{const i=new Image();i.decoding='async';i.src=src;return i};const E=new AW.core.Engine({assets:{imageFactory:src=>AW.ui.assets.factory(make)(src),canvasFactory:(w,h)=>{const c=document.createElement('canvas');c.width=w;c.height=h;return c}}});
+ E.assets.registerAll(AW.data.assets);AW.ui.assets.attach(E);AW.systems.installGameplay(E);const wr=E.worlds.registerAll(AW.data.worlds);if(wr.bad.length)wr.bad.forEach(m=>E.debug.error(m));
  window.addEventListener('error',e=>E.debug.error('window: '+e.message));
  E.bus.on('month',({month})=>E.debug.log('เดือน '+month),{owner:'shell'});
- AW.engine=E;newGame('demo');if(!AW.ui.pages.some(p=>p.id===st.page))st.page='dashboard';render();setInterval(AW.ui.scene.draw,200);
+ AW.engine=E;newGame('demo');AW.ui.assets.preload();if(!AW.ui.pages.some(p=>p.id===st.page))st.page='dashboard';render();setInterval(AW.ui.scene.draw,200);
  E.bus.on('month:after',()=>update(),{owner:'shell'});E.bus.on('loop:pause',()=>update(),{owner:'shell'});E.bus.on('world:enter',()=>update(true),{owner:'shell'});return E}
 function newGame(seed){const E=AW.engine;E.newGame({seed});E.worlds.start('hunter');st.result=null;st.dlg=null}
 function createPlayer(name,gender){const E=AW.engine,r=E.rng,s={};for(const k of AW.systems.Rules.STATS)s[k]=r.int(8,12);E.player.create({name,gender,stats:s,money:50})}

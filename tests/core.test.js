@@ -539,4 +539,28 @@ T('p6 balance: ทั้ง 6 สไตล์ถึงแรงก์ B ก่�
 T('p6 perf: NPC 500 คน + หอคอย AI + เศรษฐกิจ 12 เดือน < 25ms/เดือน',()=>{const E=hunterAt('C','pf6');for(let i=E.npcs.all('hunter').length;i<500;i++)E.npcs.generate('hunter',{occupation:['student','npc_hunter','shopkeeper'][i%3]});E.economy.buy('hunter.assoc_insurance');
  const t=Date.now();adv(E,12);const ms=(Date.now()-t)/12;ok(ms<25,'ms/month '+ms.toFixed(1))});
 
+
+// ===== Phase 7B.1: Asset pipeline =====
+{const AT=require('../tools/assets.js'),os=require('os'),SIMC=require('./sim.js').boot();
+ const png=(w,h)=>{const b=Buffer.alloc(33);b.writeUInt32BE(0x89504e47,0);b.writeUInt32BE(0x0d0a1a0a,4);b.writeUInt32BE(13,8);b.write('IHDR',12,'ascii');b.writeUInt32BE(w,16);b.writeUInt32BE(h,20);return Buffer.concat([b,Buffer.from(String(w*h+Math.random()))])};
+ const webpX=(w,h)=>{const b=Buffer.alloc(32);b.write('RIFF',0,'ascii');b.write('WEBP',8,'ascii');b.write('VP8X',12,'ascii');b.writeUIntLE(w-1,24,3);b.writeUIntLE(h-1,27,3);return b};
+ T('p7b registry: ทุก asset มี metadata งานภาพ ไม่มีไฟล์ปลอม และไม่มี registry ซ้ำ',()=>{const A=SIMC.AW.data.assets;ok(A.length===93,'93 '+A.length);
+  ok(A.every(d=>d.type&&d.std&&/^P[0-3]$/.test(d.priority)&&d.status&&(d.path||d.std.decision)),'metadata');ok(A.every(d=>!d.src&&!d.license&&d.gen===null),'no real/fake files');
+  ok(SIMC.AW.data.assetPilot.every(id=>A.some(d=>d.id===id&&d.priority==='P0'&&d.status==='planned')),'pilot');ok(new Set(A.map(d=>d.path).filter(Boolean)).size===A.filter(d=>d.path).length,'paths unique');
+  const g=new SIMC.AW.core.AssetRegistry();g.registerAll(A);ok(g.defs.size===93&&g.report().placeholder===93)});
+ T('p7b registry: path ตามมาตรฐาน assets/<world>/<folder>/<name>.v1.<ext>',()=>{const d=SIMC.AW.data.assets.find(x=>x.id==='hunter.bg.apartment');ok(d.path==='assets/hunter/bg/apartment.v1.webp'&&d.std.w===1536&&d.std.h===864&&d.std.ratio==='16:9');
+  const m=SIMC.AW.data.assets.find(x=>x.id==='hunter.mon.goblin');ok(m.path==='assets/hunter/mon/goblin.v1.png'&&m.std.alpha&&m.std.ratio==='3:4');ok(SIMC.AW.data.assets.find(x=>x.id==='shared.char.base_m').path===null)});
+ T('p7b tool: อ่านขนาดภาพจาก header PNG/WebP และตรวจสัดส่วน/ขนาดขั้นต่ำ',()=>{ok(JSON.stringify(AT.dims(png(1536,864)))==='{"fmt":"png","w":1536,"h":864}');ok(AT.dims(webpX(1024,1365)).h===1365);ok(AT.dims(Buffer.from('not image'))===null);
+  const loc={std:SIMC.AW.data.assetStandards.location};ok(AT.checkDims(loc,{w:1536,h:864})==='');ok(/สัดส่วน/.test(AT.checkDims(loc,{w:1024,h:1024})));ok(/เล็ก/.test(AT.checkDims(loc,{w:320,h:180})))});
+ T('p7b tool: ตรวจพบไฟล์หาย ไฟล์ลอย ไฟล์ซ้ำ ขนาดผิด license ผิด และภาพที่สร้างเองไม่มีข้อมูล prompt',()=>{const root=fs.mkdtempSync(path.join(os.tmpdir(),'p7b-'));fs.mkdirSync(path.join(root,'assets/hunter/bg'),{recursive:true});
+  const a=png(1536,864);fs.writeFileSync(path.join(root,'assets/hunter/bg/apartment.v1.png'),a);fs.writeFileSync(path.join(root,'assets/hunter/bg/copy.png'),a);fs.writeFileSync(path.join(root,'assets/hunter/bg/small.png'),png(300,300));fs.writeFileSync(path.join(root,'assets/hunter/bg/orphan.png'),png(1536,864));
+  const set=(AW,id,o)=>Object.assign(AW.data.assets.find(d=>d.id===id),o);
+  const r=AT.inventory({root,mutate:AW=>{set(AW,'hunter.bg.apartment',{src:'assets/hunter/bg/apartment.v1.png',license:'own',source:'generated',gen:null});set(AW,'hunter.bg.market',{src:'assets/hunter/bg/copy.png',license:'own'});
+   set(AW,'hunter.bg.city_day',{src:'assets/hunter/bg/small.png',license:'own'});set(AW,'hunter.bg.gov_base',{src:'assets/hunter/bg/gone.png',license:'own'});set(AW,'hunter.bg.industrial',{src:'assets/hunter/bg/orphan.png',license:'stolen'})}});
+  const e=r.errors.join('\n');for(const k of['gen.prompt','เนื้อหาซ้ำ','สัดส่วน','ไม่พบไฟล์','license ไม่ถูกต้อง'])ok(e.includes(k),k+' in '+e);
+  const r2=AT.inventory({root});ok(r2.errors.some(x=>x.includes('ไม่มีใน registry')),'orphan files')});
+ T('p7b tool: registry จริงผ่านการตรวจ และรู้ว่าภาพไหนถูกใช้ที่ไหน',()=>{const r=AT.inventory();ok(r.errors.length===0,r.errors.join('|'));const u=id=>r.rows.find(x=>x.id===id).usage.join(';');
+  ok(u('hunter.bg.apartment').includes('locations.home.bg'));ok(u('hunter.bg.dungeon_cave').includes('UI scene.js'));ok(u('hunter.mon.goblin').includes('enemies'));ok(r.rows.filter(x=>x.priority==='P1').every(x=>x.usage.some(y=>y.startsWith('UI')||y.includes('locations'))))});
+}
+
 console.log(results.join('\n'));console.log(`\n${pass} ผ่าน · ${fail} ไม่ผ่าน`);process.exit(fail?1:0);
