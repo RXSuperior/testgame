@@ -9,10 +9,11 @@ Private project. A new build, separate from the old game "ต่างโลก�
 ## Structure
 ```
 src/core/     engine core: ns, rng, bus, state, loop, worldtime, save, registry, assets, debug, engine
-src/ui/       shell.js (Phase 1 test page)
+src/systems/  worlds.js (World System)
+src/ui/       shell.js (test page)
 src/template.html
 data/assets/  manifest.js (asset ids per world, all placeholders for now)
-data/worlds/  world modules (empty in Phase 1)
+data/worlds/  one file per world: hunter.js, fantasy.js (test worlds). How to add one: docs/phase2/WORLD_MODULE_GUIDE.md
 tests/        core.test.js (node), smoke.py (browser)
 tools/        build.py
 docs/         reports

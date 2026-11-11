@@ -48,19 +48,21 @@ const clone=v=>v===undefined?v:JSON.parse(JSON.stringify(v));
 function deepFreeze(o){if(o&&typeof o==='object'&&!Object.isFrozen(o)){Object.freeze(o);for(const k of Object.keys(o))deepFreeze(o[k])}return o}
 const kind=v=>Array.isArray(v)?'array':v===null?'null':typeof v;
 class GameState{
- constructor(bus){this.bus=bus;this.slices=new Map();this.data={}}
- register(name,owner,init){if(this.slices.has(name))throw new Error(`slice "${name}" ซ้ำ (เจ้าของเดิม ${this.slices.get(name).owner})`);this.slices.set(name,{owner,init});this.data[name]=deepFreeze(clone(init()))}
+ constructor(bus){this.bus=bus;this.slices=new Map();this.data={};this.orphans={}}
+ // slice ที่มีในเซฟแต่ยังไม่มีใครลงทะเบียน (orphan) จะถูกเก็บไว้ไม่หาย และถูกรับไปใช้เมื่อมีการ register ชื่อนั้นทีหลัง
+ register(name,owner,init){if(this.slices.has(name))throw new Error(`slice "${name}" ซ้ำ (เจ้าของเดิม ${this.slices.get(name).owner})`);this.slices.set(name,{owner,init});
+  const o=this.orphans[name],fresh=init();delete this.orphans[name];this.data[name]=deepFreeze(clone(o!==undefined&&kind(o)===kind(fresh)?o:fresh))}
  owner(name){const s=this.slices.get(name);if(!s)throw new Error(`ไม่มี slice "${name}"`);return s.owner}
  get(name){if(!this.slices.has(name))throw new Error(`ไม่มี slice "${name}"`);return this.data[name]}
  mutate(owner,name,fn){const o=this.owner(name);if(o!==owner)throw new Error(`"${owner}" เขียน slice "${name}" ไม่ได้ (เจ้าของคือ "${o}")`);
   const draft=clone(this.data[name]);const r=fn(draft);this.data[name]=deepFreeze(draft);this.bus&&this.bus.emit('state:changed',{name,owner});return r}
- reset(){for(const[n,s]of this.slices)this.data[n]=deepFreeze(clone(s.init()))}
- snapshot(){return{version:SCHEMA_VERSION,data:clone(this.data)}}
+ reset(){this.orphans={};for(const[n,s]of this.slices)this.data[n]=deepFreeze(clone(s.init()))}
+ snapshot(){return{version:SCHEMA_VERSION,data:clone(Object.assign({},this.orphans,this.data))}}
  // ตรวจรูปแบบ snapshot โดยไม่แตะ state: คืน null ถ้าผ่าน หรือข้อความ error
  check(snap){if(!snap||typeof snap!=='object')return'snapshot ไม่ใช่ object';if(snap.version!==SCHEMA_VERSION)return'เวอร์ชันเซฟไม่ตรง ('+snap.version+')';
   if(kind(snap.data)!=='object')return'data ต้องเป็น object';
   for(const[n,s]of this.slices){if(!(n in snap.data))continue;const a=kind(snap.data[n]),b=kind(s.init());if(a!==b)return`slice "${n}" ผิดชนิด (${a} แทน ${b})`}return null}
- restore(snap){const e=this.check(snap);if(e)throw new Error(e);this.reset();for(const n of Object.keys(snap.data)){if(this.slices.has(n))this.data[n]=deepFreeze(clone(snap.data[n]))}}
+ restore(snap){const e=this.check(snap);if(e)throw new Error(e);this.reset();for(const n of Object.keys(snap.data)){if(this.slices.has(n))this.data[n]=deepFreeze(clone(snap.data[n]));else this.orphans[n]=deepFreeze(clone(snap.data[n]))}}
 }
 AW.core.GameState=GameState;AW.core.SCHEMA_VERSION=SCHEMA_VERSION;AW.core.deepFreeze=deepFreeze;
 })(globalThis.AW);
@@ -99,6 +101,8 @@ class WorldTime{
   bus.on('month',()=>this._advance(1),{prio:50,owner:OWNER})}
  static rateUnits(rate){const u=Math.round(rate*UNIT);if(!(rate>0)||u<1||u>100*UNIT||Math.abs(u-rate*UNIT)>1e-9)throw new Error('timeRate ไม่ถูกต้อง: '+rate);return u}
  addWorld(id,rate){if(this.rates.has(id))throw new Error('โลกซ้ำ: '+id);this.rates.set(id,WorldTime.rateUnits(rate))}
+ removeWorld(id){this.rates.delete(id)}
+ has(id){return this.rates.has(id)}
  _acc(id){const a=this.state.get('worlds_time').acc[id];return a||0}
  month(id){if(!this.rates.has(id))throw new Error('ไม่มีโลก '+id);return Math.floor(this._acc(id)/UNIT)}
  fraction(id){return(this._acc(id)%UNIT)/UNIT}
@@ -112,7 +116,9 @@ class WorldTime{
  travel(to,{months=0}={}){this.month(to);if(!Number.isInteger(months)||months<0)throw new Error('เวลาเดินทางต้องเป็นจำนวนเต็ม >= 0');
   const from=this.current;if(this.state.get('worlds_time').traveling)throw new Error('กำลังเดินทางอยู่');
   this.state.mutate(OWNER,'worlds_time',t=>{t.traveling={from,to,left:months};t.current=null});this.bus.emit('gate:depart',{from,to,months});
-  for(let i=0;i<months;i++){this.loop.tick(true);this.state.mutate(OWNER,'worlds_time',t=>{t.traveling.left--})}
+  // ถ้า error ระหว่างทาง: ยกเลิก กลับโลกต้นทาง เวลาที่ผ่านไปแล้วไม่ย้อน (ไม่ค้างสถานะ traveling)
+  let done=0;try{for(let i=0;i<months;i++){this.loop.tick(true);done++;this.state.mutate(OWNER,'worlds_time',t=>{t.traveling.left--})}}
+  catch(err){this.state.mutate(OWNER,'worlds_time',t=>{t.traveling=null;t.current=from});this.bus.emit('gate:abort',{from,to,months,elapsed:done,error:err.message});throw err}
   this.state.mutate(OWNER,'worlds_time',t=>{t.traveling=null;t.current=to});this.bus.emit('gate:arrive',{from,to,months});return months}
 }
 AW.core.WorldTime=WorldTime;AW.core.TIME_UNIT=UNIT;
@@ -225,7 +231,7 @@ class Engine{
   this.state.register('meta','engine',()=>({seed:null,rng:0,created:0,name:''}));
   this.save=new C.SaveSystem(this.state,{storage:opts.storage||globalThis.localStorage,migrations:opts.migrations||{}});
   this.assets=new C.AssetRegistry(opts.assets||{});
-  this.registries={world:new C.Registry('world',['id','name','timeRate','entry']),story:new C.Registry('story',['id','world','chapters']),character:new C.Registry('character',['id','world','name'])};
+  this.registries={world:new C.Registry('world',['id','name','description','timeRate','entry','module','config','assetNs','storyNs']),story:new C.Registry('story',['id','world','chapters']),character:new C.Registry('character',['id','world','name'])};
   this.modules=new Map();this.rng=new C.Rng(1)}
  use(mod){if(this.modules.has(mod.id))throw new Error('โมดูลซ้ำ: '+mod.id);for(const d of mod.deps||[])if(!this.modules.has(d))throw new Error(`โมดูล ${mod.id} ต้องการ ${d} ก่อน`);mod.install(this);this.modules.set(mod.id,mod);this.debug.log('ติดตั้งโมดูล '+mod.id);return this}
  newGame({seed,name=''}={}){this.state.reset();const s=seed??String(Date.now());this.rng=new C.Rng(s);
@@ -234,6 +240,85 @@ class Engine{
  loadFrom(slot,o){const ok=this.save.load(slot,o);if(ok){this.rng=new C.Rng(this.state.get('meta').rng);this.bus.emit('game:loaded',{slot})}return ok}
 }
 AW.core.Engine=Engine;
+})(globalThis.AW);
+
+// ==== src/systems/worlds.js ====
+// World System: ลงทะเบียนโลก ติดตั้ง World Module ผ่าน Engine และเดินทางผ่าน Gate
+// ติดตั้ง: engine.use(AW.systems.WorldsModule) แล้วใช้ engine.worlds
+// ทุกโลกได้ slice ของตัวเอง 'world:<id>' เจ้าของ 'world:<id>' โลกอื่นเขียนไม่ได้ (ใช้ state ownership ของ Phase 1.1)
+// เวลาใช้ engine.time (WorldTime) · เซฟใช้ engine.save ไม่มีระบบเซฟใหม่
+// ดู docs/phase2/WORLD_SYSTEM_DESIGN.md และ WORLD_MODULE_GUIDE.md
+(function(AW){
+'use strict';
+const C=AW.core,ID=/^[a-z][a-z0-9_]*$/,HOOKS=['install','enter','leave','update','dispose'];
+const sliceOf=id=>'world:'+id;
+const kindOf=v=>Array.isArray(v)?'array':v===null?'null':typeof v;
+
+// ตรวจนิยามโลก คืนรายการ error (ว่าง = ผ่าน) · ฟิลด์จำเป็นพื้นฐานตรวจโดย Registry อยู่แล้ว
+function validateWorld(d,{assets}={}){const e=[];
+ if(typeof d.name!=='string'||!d.name)e.push('name ต้องเป็นข้อความ');
+ if(typeof d.description!=='string')e.push('description ต้องเป็นข้อความ');
+ try{C.WorldTime.rateUnits(d.timeRate)}catch(x){e.push(x.message)}
+ if(!d.config||kindOf(d.config)!=='object')e.push('config ต้องเป็น object');
+ if(!ID.test(d.assetNs||''))e.push('assetNs ไม่ถูกต้อง');if(!ID.test(d.storyNs||''))e.push('storyNs ไม่ถูกต้อง');
+ const m=d.module;if(!m||typeof m!=='object')e.push('module ต้องเป็น object');
+ else for(const h of Object.keys(m))if(!HOOKS.includes(h)||typeof m[h]!=='function')e.push('module.'+h+' ไม่รู้จักหรือไม่ใช่ฟังก์ชัน');
+ if(d.state!==undefined&&typeof d.state!=='function')e.push('state ต้องเป็นฟังก์ชันคืนค่าเริ่มต้น');
+ if(d.state){let s;try{s=d.state()}catch(x){e.push('state() error: '+x.message)}if(s!==undefined&&kindOf(s)!=='object')e.push('state() ต้องคืน object');
+  else if(s){try{JSON.stringify(s)}catch(x){e.push('state ต้องเป็น JSON')}}}
+ const data=d.data||{};
+ for(const k of['locations','npcs','quests','events','gates','assets'])if(data[k]!==undefined&&!Array.isArray(data[k]))e.push('data.'+k+' ต้องเป็น array');
+ if(e.length)return e;
+ for(const k of['locations','npcs','quests','events','gates']){const seen=new Set();for(const x of data[k]||[]){if(!x||!ID.test(x.id||''))e.push('data.'+k+': id ผิดรูปแบบ "'+(x&&x.id)+'"');else if(seen.has(x.id))e.push('data.'+k+': id ซ้ำ "'+x.id+'"');else seen.add(x.id)}}
+ if(e.length)return e;
+ const locs=data.locations||[];if(!locs.some(l=>l&&l.id===d.entry))e.push('entry "'+d.entry+'" ไม่อยู่ใน data.locations');
+ for(const g of data.gates||[]){{if(!ID.test(g.to||''))e.push('gate '+g.id+' ไม่มีปลายทาง');if(!Number.isInteger(g.months??0)||(g.months??0)<0)e.push('gate '+g.id+' months ต้องเป็นจำนวนเต็ม >= 0')}}
+ for(const a of data.assets||[]){if(typeof a!=='string'||!a.startsWith(d.assetNs+'.'))e.push('asset "'+a+'" อยู่นอก namespace '+d.assetNs);else if(assets&&assets.status(a)==='missing')e.push('asset "'+a+'" ไม่มีใน Asset Registry')}
+ return e}
+
+class WorldSystem{
+ constructor(engine){this.E=engine;this.reg=engine.registries.world;this.live=new Map();
+  engine.bus.on('world:month',({world,month})=>{const w=this.live.get(world);if(w&&w.def.module.update)this._hook(w,'update',{month})},{prio:10,owner:'worlds'})}
+ // ลงทะเบียน + ติดตั้ง · ผิดอย่างใดอย่างหนึ่งต้องไม่เหลือร่องรอย
+ register(def){const errs=def&&typeof def==='object'?validateWorld(def,{assets:this.E.assets}):['ไม่ใช่ object'];
+  if(errs.length)throw new Error(`world "${def&&def.id}" ไม่ถูกต้อง: ${errs.join('; ')}`);
+  C.deepFreeze(def);this.reg.add(def);this._install(def);return def.id}
+ registerAll(defs){const ok=[],bad=[];for(const d of defs){try{ok.push(this.register(d))}catch(x){bad.push(x.message)}}return{ok,bad}}
+ _install(def){const id=def.id,S=this.E.state,name=sliceOf(id),init=def.state||(()=>({}));
+  const sub=r=>new Map((r||[]).map(x=>[x.id,x]));
+  const data=def.data||{},w={def,locations:sub(data.locations),npcs:sub(data.npcs),quests:sub(data.quests),events:sub(data.events),gates:sub(data.gates),disposed:false};
+  if(!S.slices.has(name))S.register(name,name,init);else if(S.owner(name)!==name)throw new Error('slice '+name+' มีเจ้าของอื่น');
+  this.E.time.addWorld(id,def.timeRate);
+  w.ctx=Object.freeze({id,def,config:def.config,rules:def.config.rules||{},locations:w.locations,npcs:w.npcs,quests:w.quests,events:w.events,
+   get:()=>S.get(name),mutate:fn=>S.mutate(name,name,fn),
+   month:()=>this.E.time.month(id),globalMonth:()=>this.E.loop.month,
+   asset:k=>this.E.assets.get(def.assetNs+'.'+k),storyId:k=>def.storyNs+'.'+k,
+   emit:(ev,payload)=>this.E.bus.emit('world:event',{world:id,ev,payload})});
+  this.live.set(id,w);this._hook(w,'install');this.E.bus.emit('world:installed',{world:id})}
+ // error จาก hook ของโลกถูกแยก ไม่ทำให้ระบบอื่นค้าง: แจ้ง 'world:error' แล้วไปต่อ
+ _hook(w,h,arg){const f=w.def.module[h];if(!f)return true;try{f(w.ctx,arg);return true}catch(err){this.E.bus.emit('world:error',{world:w.def.id,hook:h,err});this.E.debug&&this.E.debug.error(`world ${w.def.id}.${h}: ${err.message}`);return false}}
+ dispose(id){const w=this.live.get(id);if(!w)throw new Error('ไม่มีโลก '+id);this._hook(w,'dispose');w.disposed=true;this.live.delete(id);this.E.time.removeWorld(id);this.E.bus.emit('world:disposed',{world:id})}
+ has(id){return this.live.has(id)}
+ ctx(id){const w=this.live.get(id);return w?w.ctx:null}
+ ids(){return[...this.live.keys()]}
+ get current(){return this.E.time.current}
+ // เริ่มเกม: เข้าโลกแรก (ไม่ใช่การเดินทาง)
+ start(id){const w=this.live.get(id);if(!w)throw new Error('ไม่มีโลก '+id);this.E.time.enter(id);this._hook(w,'enter',{from:null,via:null});this.E.bus.emit('world:enter',{world:id,from:null})}
+ gatesHere(){const w=this.live.get(this.current);return w?[...w.gates.values()]:[]}
+ // เดินทางผ่าน gate ของโลกปัจจุบัน
+ travelVia(gateId){const w=this.live.get(this.current);const g=w&&w.gates.get(gateId);if(!g)throw new Error('ไม่มี gate "'+gateId+'" ในโลกปัจจุบัน');return this.travel(g.to,{months:g.months||0,via:gateId})}
+ // ตรวจทุกอย่างก่อนเปลี่ยนสถานะ ถ้าไม่ผ่าน throw โดยไม่แตะอะไร
+ travel(to,{months=0,via=null}={}){const T=this.E.time,from=this.current;
+  if(!this.live.has(to))throw new Error('ไม่มีโลกปลายทาง "'+to+'"');
+  if(T.state.get('worlds_time').traveling)throw new Error('กำลังเดินทางอยู่');
+  if(to===from)throw new Error('อยู่ที่โลก '+to+' แล้ว');
+  if(!Number.isInteger(months)||months<0)throw new Error('เวลาเดินทางต้องเป็นจำนวนเต็ม >= 0');
+  const fw=this.live.get(from);if(fw)this._hook(fw,'leave',{to,via});
+  try{T.travel(to,{months})}catch(err){if(fw)this._hook(fw,'enter',{from:null,via,aborted:true});throw err}
+  this._hook(this.live.get(to),'enter',{from,via});this.E.bus.emit('world:enter',{world:to,from,via});return{from,to,months}}
+}
+AW.systems.WorldSystem=WorldSystem;AW.systems.validateWorld=validateWorld;
+AW.systems.WorldsModule={id:'worlds',deps:[],install(e){e.worlds=new WorldSystem(e)}};
 })(globalThis.AW);
 
 // ==== data/assets/manifest.js ====
@@ -274,39 +359,107 @@ AW.data.assetCandidates=[
 })(globalThis.AW);
 
 // ==== data/worlds/index.js ====
-// World Modules ลงทะเบียนที่นี่ (Phase 1 ยังไม่มีโลก โลกจริงเริ่ม Phase 2)
+// World Modules: แต่ละโลกอยู่ในไฟล์ของตัวเอง (data/worlds/<id>.js) และ push นิยามเข้า AW.data.worlds
+// ลำดับไฟล์กำหนดใน tools/build.py · ไฟล์นี้ไม่มีโค้ด เก็บไว้เป็นจุดอธิบาย
 (function(AW){})(globalThis.AW);
 
+// ==== data/worlds/hunter.js ====
+// โลกทดสอบ Phase 2: Hunter World (ข้อมูลตัวอย่าง ยังไม่ใช่เนื้อหาจริง)
+// เมือง ชื่อ และสถานที่เป็นของที่แต่งขึ้นเอง ภาพอ้างถึง id ใน namespace hunter (ตอนนี้เป็น placeholder ทั้งหมด)
+(function(AW){
+AW.data.worlds.push({
+ id:'hunter',name:'โลกฮันเตอร์',
+ description:'โลกสมัยใหม่ที่ประตูมิติเปิดขึ้นกลางเมือง ผู้ตื่นพลังลงทะเบียนเป็นฮันเตอร์กับสมาคม (ข้อมูลตัวอย่าง)',
+ timeRate:1,entry:'seonhwa_plaza',assetNs:'hunter',storyNs:'hunter',
+ config:{currency:'วอน',startAge:15,rules:{ranks:['F','E','D','C','B','A','S'],gateBreakChance:0.02}},
+ data:{
+  locations:[
+   {id:'seonhwa_plaza',name:'ลานกลางเมืองซอนฮวา',bg:'bg.city_day'},
+   {id:'association',name:'สมาคมฮันเตอร์สาขาซอนฮวา',bg:'bg.association_hall'},
+   {id:'apartment',name:'ห้องเช่าย่านเก่า',bg:'bg.apartment'},
+   {id:'gate_zone',name:'เขตกักกันประตูมิติ',bg:'bg.gate_blue'}],
+  npcs:[{id:'clerk_yoon',name:'ยุนแชอา',role:'เจ้าหน้าที่สมาคม',at:'association'}],
+  quests:[{id:'register_hunter',name:'ลงทะเบียนฮันเตอร์',at:'association'}],
+  events:[{id:'gate_alert',name:'ประกาศเตือนประตูมิติ'}],
+  gates:[{id:'rift_fantasy',name:'รอยแยกสีน้ำเงิน',to:'fantasy',months:0},
+         {id:'deep_rift_fantasy',name:'รอยแยกลึก (ใช้เวลา 3 เดือน)',to:'fantasy',months:3}],
+  assets:['hunter.bg.city_day','hunter.bg.association_hall','hunter.bg.apartment','hunter.bg.gate_blue','hunter.mon.goblin']},
+ state:()=>({location:'seonhwa_plaza',visits:0,monthsLived:0,gateAlerts:0,flags:{}}),
+ module:{
+  enter(w,{aborted}){w.mutate(s=>{if(!aborted)s.visits++;s.location=s.location||w.def.entry})},
+  // เดือนละครั้งตามเวลาท้องถิ่น ทำงานแม้ผู้เล่นอยู่โลกอื่น
+  update(w,{month}){w.mutate(s=>{s.monthsLived++;if(month%6===0)s.gateAlerts++})}
+ }
+});
+})(globalThis.AW);
+
+// ==== data/worlds/fantasy.js ====
+// โลกทดสอบ Phase 2: Fantasy World (ข้อมูลตัวอย่าง) เวลาเดินครึ่งหนึ่งของโลกหลัก
+// ต่อไปจะรับเนื้อหาจอมมาร เทพ 7 องค์ และเรื่องยาว 14 เรื่องจากเกมเดิม (Phase 7)
+(function(AW){
+AW.data.worlds.push({
+ id:'fantasy',name:'แดนอาร์เคน',
+ description:'อาณาจักรเวทมนตร์ที่ถูกกองทัพจอมมารกดดันจากทางเหนือ (ข้อมูลตัวอย่าง)',
+ timeRate:0.5,entry:'eldran_gate',assetNs:'fantasy',storyNs:'fantasy',
+ config:{currency:'เหรียญทอง',rules:{seasons:['ฤดูใบไม้ผลิ','ฤดูร้อน','ฤดูใบไม้ร่วง','ฤดูหนาว'],manaDensity:2}},
+ data:{
+  locations:[
+   {id:'eldran_gate',name:'ซุ้มประตูมิติแห่งเอลดราน',bg:'bg.forest'},
+   {id:'eldran_town',name:'เมืองหลวงเอลดราน',bg:'bg.town'},
+   {id:'royal_castle',name:'ปราสาทหลวง',bg:'bg.castle'}],
+  npcs:[{id:'mage_liora',name:'ลิโอรา',role:'นักเวทราชสำนัก',at:'royal_castle'}],
+  quests:[{id:'meet_king',name:'เข้าเฝ้ากษัตริย์',at:'royal_castle'}],
+  events:[{id:'demon_scouts',name:'หน่วยลาดตระเวนของจอมมาร'}],
+  gates:[{id:'rift_hunter',name:'รอยแยกกลับโลกฮันเตอร์',to:'hunter',months:0}],
+  assets:['fantasy.bg.forest','fantasy.bg.town','fantasy.bg.castle','fantasy.mon.slime']},
+ state:()=>({location:'eldran_gate',visits:0,monthsLived:0,season:0,flags:{}}),
+ module:{
+  enter(w,{aborted}){w.mutate(s=>{if(!aborted)s.visits++})},
+  update(w,{month}){w.mutate(s=>{s.monthsLived++;s.season=Math.floor(month/3)%4})}
+ }
+});
+})(globalThis.AW);
+
 // ==== src/ui/shell.js ====
-// หน้าทดสอบ Core (Phase 1): ไม่ใช่ UI ของเกมจริง ใช้ตรวจ loop, save, asset, debug ในเบราว์เซอร์
+// หน้าทดสอบ Core + World System (Phase 2): ไม่ใช่ UI ของเกมจริง ใช้ตรวจ loop, save, asset, debug, โลก และ gate ในเบราว์เซอร์
 (function(AW){
 const $=s=>document.querySelector(s),esc=s=>String(s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
 function boot(){const E=new AW.core.Engine({assets:{imageFactory:src=>{const i=new Image();i.src=src;return i},canvasFactory:(w,h)=>{const c=document.createElement('canvas');c.width=w;c.height=h;return c}}});
- E.assets.registerAll(AW.data.assets);const wr=E.registries.world.loadAll(AW.data.worlds);if(wr.bad.length)wr.bad.forEach(m=>E.debug.error(m));
+ E.assets.registerAll(AW.data.assets);E.use(AW.systems.WorldsModule);const wr=E.worlds.registerAll(AW.data.worlds);if(wr.bad.length)wr.bad.forEach(m=>E.debug.error(m));
  window.addEventListener('error',e=>E.debug.error('window: '+e.message));
  E.bus.on('month',({month})=>E.debug.log('เดือน '+month),{owner:'shell'});
- AW.engine=E;E.newGame({seed:'demo'});render();setInterval(draw,200);
+ AW.engine=E;newGame('demo');render();E.bus.on('world:enter',()=>{_gw=null;update()},{owner:'shell'});setInterval(draw,200);
  E.bus.on('month:after',update,{owner:'shell'});E.bus.on('loop:pause',update,{owner:'shell'});return E}
+function newGame(seed){const E=AW.engine;E.newGame({seed});E.worlds.start('hunter')}
+function bgId(){const E=AW.engine,id=E.worlds.current,c=id&&E.worlds.ctx(id);if(!c)return 'hunter.bg.city_day';const l=c.locations.get(c.get().location)||c.locations.get(c.def.entry);return c.def.assetNs+'.'+l.bg}
 function draw(){const cv=$('#stage');if(!cv)return;const g=cv.getContext('2d'),E=AW.engine;g.imageSmoothingEnabled=false;g.clearRect(0,0,cv.width,cv.height);
- g.drawImage(E.assets.get('hunter.bg.city_day'),0,0,576,324);g.drawImage(E.assets.get('shared.char.base_m'),200,230,80,64);g.drawImage(E.assets.get('hunter.mon.goblin'),380,180,128,128);g.drawImage(E.assets.get('hunter.item.mana_stone'),30,30,32,32)}
-function render(){ $('#app').innerHTML=`<header><b>Multiverse Hunter · Core Test (Phase 1)</b><span id="status"></span></header>
+ g.drawImage(E.assets.get(bgId()),0,0,576,324);g.drawImage(E.assets.get('shared.char.base_m'),200,230,80,64);g.drawImage(E.assets.get('hunter.mon.goblin'),380,180,128,128);g.drawImage(E.assets.get('hunter.item.mana_stone'),30,30,32,32)}
+function render(){ $('#app').innerHTML=`<header><b>Multiverse Hunter · Core Test (Phase 2)</b><span id="status"></span><span id="world"></span></header>
  <canvas id="stage" width="576" height="324"></canvas>
  <div class="row">${[0,1,3,10].map(s=>`<button data-s="${s}">${s?s+'x':'หยุด'}</button>`).join('')}<button id="step">+1 เดือน</button><button id="menu">เปิด/ปิดเมนู (หยุดเวลา)</button><button id="new">เกมใหม่</button></div>
  <div class="row">${[0,1,2].map(i=>`<button data-save="${i}">เซฟช่อง ${i}</button><button data-load="${i}">โหลดช่อง ${i}</button>`).join('')}</div>
+<div class="row" id="gates"></div>
 <div id="info"></div>`;
  wire();update()}
 function info(){const E=AW.engine,r=E.assets.report();return `<p>ภาพ: จริง ${r.real} · placeholder ${r.placeholder} · โลกที่ลงทะเบียน ${E.registries.world.all().length} · เซฟเกมเดิมที่พบ (ไม่แตะ) ${E.save.legacyKeys().length}</p>
  <p>เซฟใหม่: ${E.save.list().map(s=>esc(s.key)+(s.broken?' (เสีย)':` v${s.v} เดือน ${s.meta&&s.meta.month}`)).join(' · ')||'ยังไม่มี'}</p>
  <details id="dbg" ${window.__dbgOpen?'open':''}><summary>Debug</summary><p class="err">${E.debug.errors.map(esc).join('<br>')||'ไม่มี error'}</p><pre>${esc(JSON.stringify(E.state.snapshot(),null,1))}</pre><pre>${E.debug.lines.slice(-12).map(l=>esc(l.lvl+' '+l.msg)).join('\n')}</pre></details>`}
-let _last=0;function update(){const E=AW.engine,m=E.loop.month,meta=E.state.get('meta'),st=$('#status');if(!st)return;
+let _last=0,_gw;function worldLine(){const E=AW.engine,cur=E.worlds.current,tr=E.state.get('worlds_time').traveling;
+ return `โลก: ${tr?'กำลังเดินทาง':cur?esc(E.worlds.ctx(cur)?E.worlds.ctx(cur).def.name:cur+' (ยังไม่ติดตั้ง)'):'-'} · `+E.worlds.ids().map(id=>`${id} เดือน ${E.time.month(id)}`).join(' · ')}
+function gates(){const E=AW.engine,el=$('#gates');if(!el||_gw===E.worlds.current)return;_gw=E.worlds.current;
+ el.innerHTML=E.worlds.gatesHere().map(g=>`<button data-gate="${g.id}">${esc(g.name)}</button>`).join('')||(E.worlds.current&&!E.worlds.has(E.worlds.current)?E.worlds.ids().map(id=>`<button data-go="${id}">กลับไป ${id}</button>`).join(''):'');
+ el.querySelectorAll('[data-gate]').forEach(b=>b.onclick=()=>{try{E.worlds.travelVia(b.dataset.gate)}catch(e){E.debug.error(e.message)}_last=0;update()});
+ el.querySelectorAll('[data-go]').forEach(b=>b.onclick=()=>{try{E.worlds.travel(b.dataset.go)}catch(e){E.debug.error(e.message)}_last=0;update()})}
+function update(){const E=AW.engine,m=E.loop.month,meta=E.state.get('meta'),st=$('#status');if(!st)return;
  st.textContent=`เดือน ${m} (อายุ ${15+Math.floor(m/12)} ปี ${m%12} เดือน) · seed ${meta.seed} · ${E.loop.paused?'หยุด: '+[...E.loop.reasons].join(', '):'ความเร็ว '+E.loop.speed+'x'}`;
+ $('#world').textContent=worldLine();gates();
  const now=Date.now();if(now-_last<500&&E.loop.speed)return;_last=now;$('#info').innerHTML=info();$('#dbg').ontoggle=e=>window.__dbgOpen=e.target.open}
 function wire(){const E=AW.engine;
  document.querySelectorAll('[data-s]').forEach(b=>b.onclick=()=>{E.loop.setSpeed(+b.dataset.s);update()});
- $('#step').onclick=()=>{E.loop.step(1);update()};$('#new').onclick=()=>{E.newGame({seed:String(Date.now())});_last=0;update()};
+ $('#step').onclick=()=>{E.loop.step(1);update()};$('#new').onclick=()=>{newGame(String(Date.now()));_gw=null;_last=0;update()};
  $('#menu').onclick=()=>{E.loop.reasons.has('menu')?E.loop.resume('menu'):E.loop.pause('menu')};
  document.querySelectorAll('[data-save]').forEach(b=>b.onclick=()=>{E.saveTo(+b.dataset.save);_last=0;update()});
- document.querySelectorAll('[data-load]').forEach(b=>b.onclick=()=>{try{E.loadFrom(+b.dataset.load)}catch(e){E.debug.error(e.message)}_last=0;update()});
+ document.querySelectorAll('[data-load]').forEach(b=>b.onclick=()=>{try{E.loadFrom(+b.dataset.load)}catch(e){E.debug.error(e.message)}_gw=null;_last=0;update()});
  draw()}
 AW.ui.boot=boot;
 })(globalThis.AW);

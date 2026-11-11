@@ -1,6 +1,6 @@
 // ทดสอบ Core ด้วย Node (ไม่ต้องมีเบราว์เซอร์): node tests/core.test.js
 const fs=require('fs'),path=require('path'),vm=require('vm');
-const R=path.join(__dirname,'..');const ORDER=['ns','rng','bus','state','loop','worldtime','save','registry','assets','debug','engine'].map(n=>`src/core/${n}.js`);
+const R=path.join(__dirname,'..');const ORDER=['ns','rng','bus','state','loop','worldtime','save','registry','assets','debug','engine'].map(n=>`src/core/${n}.js`).concat(['src/systems/worlds.js','data/worlds/hunter.js','data/worlds/fantasy.js']);
 const ctx={console,Date,Math,JSON,setInterval,clearInterval};ctx.globalThis=ctx;vm.createContext(ctx);
 for(const f of ORDER)vm.runInContext(fs.readFileSync(path.join(R,f),'utf8'),ctx,{filename:f});
 const C=ctx.AW.core;let pass=0,fail=0;const results=[];
@@ -41,7 +41,7 @@ T('save: export/import',()=>{const a=new Mem(),E=mk(a);E.newGame({seed:'q'});E.l
 // Registry
 T('registry: id ซ้ำถูกปฏิเสธ',()=>{const r=new C.Registry('world',['id','name']);r.add({id:'a',name:'A'});throws(()=>r.add({id:'a',name:'B'}),/ซ้ำ/)});
 T('registry: ขาดฟิลด์/ id ผิดรูปแบบ ถูกปฏิเสธ',()=>{const r=new C.Registry('world',['id','name']);throws(()=>r.add({id:'b'}),/ขาด/);throws(()=>r.add({id:'Bad-ID',name:'x'}),/id/)});
-T('registry: loadAll แยกของดีของเสีย (data loader)',()=>{const E=mk();const res=E.registries.world.loadAll([{id:'test_a',name:'A',timeRate:1,entry:{}},{id:'test_b',name:'B',timeRate:2,entry:{}},{id:'test_a',name:'dup',timeRate:1,entry:{}},{id:'x'}]);ok(res.ok.length===2&&res.bad.length===2)});
+T('registry: loadAll แยกของดีของเสีย (data loader)',()=>{const r=new C.Registry('thing',['id','name']);const res=r.loadAll([{id:'test_a',name:'A'},{id:'test_b',name:'B'},{id:'test_a',name:'dup'},{id:'x'}]);ok(res.ok.length===2&&res.bad.length===2)});
 T('registry: ข้อมูลที่ลงทะเบียนแก้ไม่ได้ (freeze)',()=>{const r=new C.Registry('w',['id']);const d=r.add({id:'z',v:1});'use strict';try{d.v=2}catch(e){}ok(r.get('z').v===1)});
 // Engine modules
 T('engine: โมดูลต้องติดตั้งตาม deps',()=>{const E=mk();throws(()=>E.use({id:'story',deps:['world'],install(){}}),/ต้องการ/);E.use({id:'world',install(e){e.state.register('worlds','world',()=>({}))}});E.use({id:'story',deps:['world'],install(){}});ok(E.modules.size===2)});
@@ -112,5 +112,46 @@ T('time11: เวลาเดินทางผิด/โลกไม่มี �
 T('time11: world:month ยิงครบทุกเดือน (rate 2 = 2 ครั้งต่อ tick)',()=>{const E=mk();E.time.addWorld('f',2);const got=[];E.bus.on('world:month',e=>got.push(e.month));E.loop.step(3);ok(got.join()==='1,2,3,4,5,6')});
 T('time11: เซฟ/โหลดเก็บเวลาแต่ละโลกและเศษ',()=>{const st=new Mem();const setup=()=>{const E=mk(st);E.time.addWorld('a',1);E.time.addWorld('s',0.5);return E};const E=setup();E.newGame();E.time.enter('a');E.loop.step(7);E.saveTo(0);const F=setup();F.loadFrom(0);ok(F.time.month('s')===3&&F.time.fraction('s')===0.5&&F.time.current==='a');F.loop.step(1);ok(F.time.month('s')===4)});
 T('time11: ระบบอื่นแก้เวลาโลกไม่ได้',()=>{const E=mk();E.time.addWorld('a',1);throws(()=>E.state.mutate('story','worlds_time',t=>{t.acc.a=99999}),/เขียน/);ok(strictSet(()=>{'use strict';E.state.get('worlds_time').acc.a=5}))});
+
+
+// ===== Phase 2: World System =====
+const W=ctx.AW.systems;
+if(!ctx.AW.data.assets.length)vm.runInContext(fs.readFileSync(path.join(R,'data/assets/manifest.js'),'utf8'),ctx);
+const mkE=(st=new Mem())=>{const E=mk(st);E.assets.registerAll(ctx.AW.data.assets);E.use(W.WorldsModule);return E};
+const mkG=(st)=>{const E=mkE(st);const r=E.worlds.registerAll(ctx.AW.data.worlds);if(r.bad.length)throw new Error(r.bad.join(' | '));E.newGame({seed:'w'});E.worlds.start('hunter');return E};
+const wdef=(o={})=>Object.assign({id:'t1',name:'T',description:'d',timeRate:1,entry:'a',module:{},config:{},assetNs:'t1',storyNs:'t1',data:{locations:[{id:'a',name:'A'}]}},o);
+T('world: ลงทะเบียนโลกจริง 2 โลกสำเร็จ',()=>{const E=mkG();ok(E.worlds.ids().join()==='hunter,fantasy'&&E.registries.world.has('fantasy')&&E.worlds.current==='hunter')});
+T('world: ปฏิเสธ id ซ้ำ ไม่ติดตั้งซ้ำ',()=>{const E=mkE();E.worlds.register(wdef());throws(()=>E.worlds.register(wdef({name:'B'})),/ซ้ำ/);ok(E.worlds.ids().length===1)});
+T('world: ปฏิเสธข้อมูลไม่ครบ (ทุกฟิลด์จำเป็น)',()=>{for(const f of['name','description','timeRate','entry','module','config','assetNs','storyNs']){const E=mkE(),d=wdef();delete d[f];throws(()=>E.worlds.register(d),/ไม่ถูกต้อง/);ok(!E.worlds.has('t1')&&!E.registries.world.has('t1'),f)}});
+T('world: ปฏิเสธค่าผิด (rate, entry ไม่มี, ns, hook, state, asset นอก ns, id ซ้ำในข้อมูล)',()=>{const bad=[{timeRate:0},{timeRate:1/3},{entry:'zz'},{assetNs:'Bad'},{module:{fly(){}}},{module:{enter:1}},{state:{}},{state:()=>[]},
+ {data:{locations:[{id:'a'}],assets:['hunter.bg.city_day']}},{data:{locations:[{id:'a'}],assets:['t1.bg.none']}},{data:{locations:[{id:'a'},{id:'a'}]}},{data:{locations:[{id:'a'}],gates:[{id:'g',to:'x',months:-1}]}},{data:{locations:'a'}},{id:'Bad'}];
+ for(const b of bad){const E=mkE();throws(()=>E.worlds.register(wdef(b)),/ไม่ถูกต้อง/);ok(E.worlds.ids().length===0&&E.registries.world.all().length===0,JSON.stringify(b))}});
+T('world: registerAll แยกของดีของเสีย',()=>{const E=mkE();const r=E.worlds.registerAll([wdef(),wdef({id:'t2',assetNs:'t2'}),wdef(),{}]);ok(r.ok.join()==='t1,t2'&&r.bad.length===2)});
+T('world: แต่ละโลกมี slice ของตัวเอง โลกอื่นเขียนไม่ได้',()=>{const E=mkG();const h=E.worlds.ctx('hunter');throws(()=>E.state.mutate('world:hunter','world:fantasy',s=>{s.visits=99}),/เขียน/);ok(E.state.owner('world:fantasy')==='world:fantasy');ok(strictSet(()=>{'use strict';h.get().visits=5}))});
+T('world: state สองโลกไม่ปะปน',()=>{const E=mkG();E.worlds.ctx('hunter').mutate(s=>{s.flags.x=1});const f=E.worlds.ctx('fantasy').get(),h=E.worlds.ctx('hunter').get();ok(!('x' in f.flags)&&h.flags.x===1&&!('gateAlerts' in f)&&!('season' in h))});
+T('world: hook install/enter/leave/update/dispose ถูกเรียกตามลำดับ',()=>{const E=mkE(),log=[];const m={};for(const h of['install','enter','leave','update','dispose'])m[h]=(w,a)=>log.push(h+(a&&a.month?':'+a.month:''));
+ E.worlds.register(wdef({module:m}));E.worlds.register(wdef({id:'t2',assetNs:'t2'}));E.newGame();E.worlds.start('t1');E.loop.step(2);E.worlds.travel('t2');E.worlds.dispose('t1');ok(log.join()==='install,enter,update:1,update:2,leave,dispose',log.join())});
+T('world: hook error ไม่ทำให้ค้าง แจ้ง world:error',()=>{const E=mkE();let errs=0;E.bus.on('world:error',()=>errs++);E.worlds.register(wdef({module:{leave(){throw new Error('x')},update(){throw new Error('y')}}}));E.worlds.register(wdef({id:'t2',assetNs:'t2',module:{enter(){throw new Error('z')}}}));
+ E.newGame();E.worlds.start('t1');E.loop.step(1);E.worlds.travel('t2');ok(errs===3&&E.worlds.current==='t2'&&!E.state.get('worlds_time').traveling)});
+T('world: ไปและกลับ',()=>{const E=mkG();E.worlds.travelVia('rift_fantasy');ok(E.worlds.current==='fantasy');E.worlds.travelVia('rift_hunter');ok(E.worlds.current==='hunter'&&E.worlds.ctx('hunter').get().visits===2&&E.worlds.ctx('fantasy').get().visits===1)});
+T('world: Gate ปกติ global ไม่เพิ่ม',()=>{const E=mkG();E.loop.step(4);E.worlds.travelVia('rift_fantasy');E.worlds.travelVia('rift_hunter');ok(E.loop.month===4)});
+T('world: Gate พิเศษ global +3',()=>{const E=mkG();E.loop.step(4);E.worlds.travelVia('deep_rift_fantasy');ok(E.loop.month===7&&E.worlds.current==='fantasy')});
+T('world: WorldTime แต่ละโลกถูกต้อง (1.0 / 0.5)',()=>{const E=mkG();E.loop.step(10);E.worlds.travelVia('deep_rift_fantasy');E.loop.step(5);ok(E.time.month('hunter')===18&&E.time.month('fantasy')===9);
+ const h=E.worlds.ctx('hunter').get(),f=E.worlds.ctx('fantasy').get();ok(h.monthsLived===18&&f.monthsLived===9&&h.gateAlerts===3&&f.season===3,JSON.stringify([h,f]))});
+T('world: เดินทางไปโลกที่ไม่มี ถูกปฏิเสธ ไม่เปลี่ยนอะไร',()=>{const E=mkG();const before=JSON.stringify(E.state.snapshot());throws(()=>E.worlds.travel('murim'),/ไม่มีโลก/);throws(()=>E.worlds.travelVia('nope'),/ไม่มี gate/);ok(JSON.stringify(E.state.snapshot())===before)});
+T('world: ปฏิเสธเดินทางซ้อน / ไปโลกเดิม / เวลาผิด',()=>{const E=mkG();throws(()=>E.worlds.travel('hunter'),/แล้ว/);throws(()=>E.worlds.travel('fantasy',{months:-2}),/เวลาเดินทาง/);let inner=null;E.bus.on('month',()=>{if(!inner){try{E.worlds.travel('hunter')}catch(e){inner=e.message}}});E.worlds.travel('fantasy',{months:1});ok(/กำลังเดินทาง/.test(inner)&&E.worlds.current==='fantasy')});
+T('world: error ระหว่างเดินทาง ไม่ค้างสถานะ กลับโลกต้นทาง',()=>{const E=mkG();let n=0,ab=null;const t=E.loop.tick.bind(E.loop);E.loop.tick=f=>{if(++n===2)throw new Error('boom');return t(f)};E.bus.on('gate:abort',e=>ab=e);
+ throws(()=>E.worlds.travelVia('deep_rift_fantasy'),/boom/);const wt=E.state.get('worlds_time');ok(wt.traveling===null&&wt.current==='hunter'&&ab&&ab.elapsed===1&&E.loop.month===1);E.loop.tick=t;E.worlds.travelVia('rift_fantasy');ok(E.worlds.current==='fantasy')});
+T('world: Save/Load คืนสถานะและเวลาทั้งสองโลก',()=>{const st=new Mem();const E=mkG(st);E.loop.step(7);E.worlds.travelVia('deep_rift_fantasy');E.loop.step(1);E.worlds.ctx('fantasy').mutate(s=>{s.flags.met_liora=true});E.saveTo(0);
+ const F=mkE(st);F.worlds.registerAll(ctx.AW.data.worlds);F.newGame();F.loadFrom(0);const snapA=JSON.stringify(E.state.snapshot()),snapB=JSON.stringify(F.state.snapshot());ok(snapA===snapB,'snapshot ต่าง');
+ ok(F.worlds.current==='fantasy'&&F.time.month('hunter')===11&&F.time.month('fantasy')===5&&F.time.fraction('fantasy')===0.5&&F.worlds.ctx('fantasy').get().flags.met_liora);F.loop.step(1);ok(F.time.month('fantasy')===6)});
+T('world: เซฟ Phase 1.1 (ไม่มีข้อมูลโลก) โหลดได้ โลกเริ่มค่าเริ่มต้น',()=>{const st=new Mem();const old=mk(st);old.newGame();old.loop.step(9);old.saveTo(0);const F=mkE(st);F.worlds.registerAll(ctx.AW.data.worlds);ok(F.loadFrom(0)&&F.loop.month===9&&F.worlds.current===null&&F.worlds.ctx('hunter').get().visits===0&&F.time.month('hunter')===0)});
+T('world: โลกในเซฟแต่ยังไม่ติดตั้ง ข้อมูลไม่หาย (เซฟต่อแล้วยังอยู่ ติดตั้งทีหลังได้คืน)',()=>{const st=new Mem();const E=mkG(st);E.loop.step(4);E.worlds.travelVia('rift_fantasy');E.worlds.ctx('fantasy').mutate(s=>{s.flags.k=1});E.saveTo(0);
+ const F=mkE(st);F.worlds.register(ctx.AW.data.worlds[0]);F.loadFrom(0);ok(F.worlds.current==='fantasy'&&!F.worlds.has('fantasy'));F.loop.step(2);F.worlds.travel('hunter');F.saveTo(1);
+ const G=mkE(st);G.worlds.registerAll(ctx.AW.data.worlds);G.loadFrom(1);ok(G.worlds.ctx('fantasy').get().flags.k===1&&G.time.month('fantasy')===2&&G.loop.month===6,'fantasy เวลาหยุดตอนไม่ได้ติดตั้ง')});
+T('world: dispose แล้วเดินทางไปไม่ได้ เวลาโลกนั้นหยุด ข้อมูลยังอยู่',()=>{const E=mkG();E.worlds.dispose('fantasy');throws(()=>E.worlds.travel('fantasy'),/ไม่มีโลก/);E.loop.step(2);ok(E.state.get('world:fantasy').visits===0&&!E.time.has('fantasy'))});
+T('world: newGame ล้างข้อมูลโลกกลับค่าเริ่มต้น',()=>{const E=mkG();E.worlds.travelVia('rift_fantasy');E.loop.step(3);E.newGame();ok(E.worlds.current===null&&E.worlds.ctx('fantasy').get().visits===0&&E.time.month('hunter')===0)});
+T('world: ไม่มี global ร่วม: นิยามโลก freeze แก้ไม่ได้',()=>{const E=mkG();const d=E.registries.world.get('hunter');ok(strictSet(()=>{'use strict';d.data.locations.push({})}));ok(strictSet(()=>{'use strict';d.config.rules.ranks[0]='Z'}))});
+T('world: ctx.asset อยู่ใน namespace ของโลก (placeholder)',()=>{const E=mkG();const img=E.worlds.ctx('hunter').asset('bg.city_day');ok(img&&img.placeholder)});
 
 console.log(results.join('\n'));console.log(`\n${pass} ผ่าน · ${fail} ไม่ผ่าน`);process.exit(fail?1:0);

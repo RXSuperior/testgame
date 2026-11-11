@@ -1,5 +1,11 @@
 # Changelog
 
+## Phase 2 — World System & Multiverse Architecture (2026-11-11)
+- World System (src/systems/worlds.js), installed with engine.use(WorldsModule): register and validate worlds, lifecycle hooks, per-world state slices, gate travel, errors from world hooks isolated.
+- Test worlds: hunter (rate 1.0) and fantasy (rate 0.5) with sample locations, NPC, quest, event, gates. Not real content.
+- Core: GameState keeps orphan slices (worlds in a save that are not installed); WorldTime adds removeWorld/has and aborts a failed trip cleanly (gate:abort); world registry requires description, module, config, assetNs, storyNs.
+- Test page shows the world and gate buttons.
+
 ## Phase 1.1 — Core Hardening (2026-11-11)
 - State: get() returns a deep-frozen object, so nested objects and arrays are protected too. mutate() edits a copy and freezes it as the new value (copy-on-write). Reads cost nothing; a write clones only that slice. Added state.check() for snapshot structure.
 - Save: one parse() checks JSON, fields, checksum, schema version (rejects newer), body/header match, slice types. Used by load, read, list and import. Import checks everything before writing anything, and backs up an existing slot to `.preimport`. Slot names are validated, and writes outside `mvh1:` are blocked.

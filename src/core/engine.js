@@ -10,7 +10,7 @@ class Engine{
   this.state.register('meta','engine',()=>({seed:null,rng:0,created:0,name:''}));
   this.save=new C.SaveSystem(this.state,{storage:opts.storage||globalThis.localStorage,migrations:opts.migrations||{}});
   this.assets=new C.AssetRegistry(opts.assets||{});
-  this.registries={world:new C.Registry('world',['id','name','timeRate','entry']),story:new C.Registry('story',['id','world','chapters']),character:new C.Registry('character',['id','world','name'])};
+  this.registries={world:new C.Registry('world',['id','name','description','timeRate','entry','module','config','assetNs','storyNs']),story:new C.Registry('story',['id','world','chapters']),character:new C.Registry('character',['id','world','name'])};
   this.modules=new Map();this.rng=new C.Rng(1)}
  use(mod){if(this.modules.has(mod.id))throw new Error('โมดูลซ้ำ: '+mod.id);for(const d of mod.deps||[])if(!this.modules.has(d))throw new Error(`โมดูล ${mod.id} ต้องการ ${d} ก่อน`);mod.install(this);this.modules.set(mod.id,mod);this.debug.log('ติดตั้งโมดูล '+mod.id);return this}
  newGame({seed,name=''}={}){this.state.reset();const s=seed??String(Date.now());this.rng=new C.Rng(s);
