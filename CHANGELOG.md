@@ -1,5 +1,12 @@
 # Changelog
 
+## Phase 4 — Character & Life System (2026-11-11)
+- New systems: NPC (data + seeded generation, schedules, LOD simulation), Relationships (directed, 9 types, NPC↔NPC), Family (parents, marriage, children, lineage groundwork), Health (illness, treatment, old age, death, life records), Life (housing, jobs, salary, costs, arrears, social status), Gates (discover/open/travel with cost; Debug travel kept separate).
+- Player v2: karma, traits, alive/death; relationships migrate from Player v1.
+- Rules/Events: `who` binding (`'$who'`), passive one-liners, once-per-person events, trait bonus on checks, many new conditions/effects.
+- Content: events2.js audited (62 + 3), 34 events + 22 one-liners + 3 chains moved; family/romance/life/gate events; karma/traits restored in Phase 3 events.
+- No changes to src/core.
+
 ## Phase 3 — Hunter World Vertical Slice (2026-11-11)
 - Player System (shared across worlds), Rules, Rank System, Combat Resolver (auto), Event System (Ask/Answer, data only), Mission System.
 - Hunter World content in data/worlds/hunter: 8 school events and 9 hunter events moved from the old source, plus new main story, 18 actions, 10 missions, ranks E–C with clear promotion rules and exams.

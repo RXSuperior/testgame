@@ -16,9 +16,9 @@ H.events=(H.events||[]).concat([
 {id:'midterm',title:'สอบกลางภาค',trigger:'month',at:'school',when:school,cooldown:6,weight:3,src:'logic4.js:183',
  text:'ข้อสอบคณิตศาสตร์ยากกว่าที่คิด เพื่อนข้าง ๆ เลื่อนกระดาษคำตอบมาให้ดูครึ่งแผ่น ครูกำลังหันหลังเขียนกระดาน',
  choices:[
-  {text:'ตั้งใจทำเอง',check:{stat:'int',dc:'mid'},ok:{text:'ทำได้เกือบเต็ม ครูชมหน้าห้อง',effects:[{stat:{int:2}},{reputation:1}]},fail:{text:'คะแนนกลาง ๆ แต่ภูมิใจที่ทำเอง',effects:[{stat:{int:1}}]}},
-  {text:'แอบลอกคำตอบ',check:{stat:'agi',dc:'mid'},ok:{text:'ได้คะแนนสูงโดยไม่มีใครรู้',effects:[]},fail:{text:'ครูจับได้ ถูกเรียกพบผู้ปกครอง',effects:[{stat:{cha:-1}}]}},
-  {text:'ส่งกระดาษเปล่าแล้วนอน',ok:{text:'ตื่นมาอีกทีห้องว่างแล้ว',effects:[{stat:{vit:1}}]}}]},
+  {text:'ตั้งใจทำเอง',check:{stat:'int',dc:'mid'},ok:{text:'ทำได้เกือบเต็ม ครูชมหน้าห้อง',effects:[{stat:{int:2}},{reputation:1},{trait:{dili:5}}]},fail:{text:'คะแนนกลาง ๆ แต่ภูมิใจที่ทำเอง',effects:[{stat:{int:1}},{trait:{dili:3}}]}},
+  {text:'แอบลอกคำตอบ',check:{stat:'agi',dc:'mid'},ok:{text:'ได้คะแนนสูงโดยไม่มีใครรู้',effects:[{trait:{loyal:-5}}]},fail:{text:'ครูจับได้ ถูกเรียกพบผู้ปกครอง',effects:[{stat:{cha:-1}},{trait:{loyal:-5}}]}},
+  {text:'ส่งกระดาษเปล่าแล้วนอน',ok:{text:'ตื่นมาอีกทีห้องว่างแล้ว',effects:[{stat:{vit:1}},{trait:{dili:-8}}]}}]},
 {id:'club',title:'ชมรมเปิดรับสมัคร',trigger:'month',at:'school',when:school,once:true,weight:2,src:'logic4.js:187',
  text:'ต้นเทอมแต่ละชมรมตั้งโต๊ะเรียกสมาชิกเต็มโถงอาคาร ชมรมไหนก็ได้เลือกแค่ชมรมเดียว',
  choices:[
@@ -29,27 +29,27 @@ H.events=(H.events||[]).concat([
 {id:'locker_letter',title:'จดหมายในล็อกเกอร์',trigger:'month',at:'school',when:school,once:true,weight:2,src:'logic4.js:197',
  text:'มีซองสีฟ้าเสียบอยู่ในล็อกเกอร์ ข้างในเขียนว่า "หลังเลิกเรียน ดาดฟ้า" ไม่ได้ลงชื่อ',
  choices:[
-  {text:'ขึ้นไปตามนัด',ok:{text:'คนที่รออยู่เป็นรุ่นเดียวกันห้องข้าง ๆ หน้าแดงจนพูดไม่ออก',effects:[{stat:{cha:2}}]}},
+  {text:'ขึ้นไปตามนัด',ok:{text:'คนที่รออยู่คือ{who} รุ่นเดียวกันห้องข้าง ๆ หน้าแดงจนพูดไม่ออก',effects:[{meet:{role:'คนที่แอบชอบ',tags:['crush'],gender:'opposite',aff:60}},{relx:{npc:'$who',romance:0.5}},{stat:{cha:2}}]}},
   {text:'พาเพื่อนสนิทไปด้วย',ok:{text:'ฮาจุนแซวท่านทั้งทางจนลืมไปว่ามานัดใคร คนที่รอหนีไปก่อน',effects:[{rel:{npc:'best_friend',n:5}}]}},
-  {text:'ไม่ไป',ok:{text:'วันต่อมาซองฟ้าหายไปจากล็อกเกอร์',effects:[]}}]},
+  {text:'ไม่ไป',ok:{text:'วันต่อมาซองฟ้าหายไปจากล็อกเกอร์',effects:[{trait:{brave:-2}}]}}]},
 {id:'store_robber',title:'โจรในร้านสะดวกซื้อ',trigger:'month',when:{all:[school,{flag:'path_work'}]},cooldown:12,weight:3,src:'logic4.js:201',
  text:'กะดึกที่ร้านสะดวกซื้อ ชายสวมหมวกไหมพรมยื่นมีดข้ามเคาน์เตอร์ สั่งให้เปิดลิ้นชักเงิน',
  choices:[
-  {text:'แย่งมีด',check:{stat:'agi',dc:'hard'},ok:{text:'ท่านบิดข้อมือเขาจนมีดหล่น ตำรวจมาถึงพอดี เจ้าของร้านให้โบนัส',effects:[{money:120},{reputation:3}]},fail:{text:'มีดเฉี่ยวแขนเป็นแผลยาว',effects:[{hp:-25}]}},
+  {text:'แย่งมีด',check:{stat:'agi',dc:'hard'},ok:{text:'ท่านบิดข้อมือเขาจนมีดหล่น ตำรวจมาถึงพอดี เจ้าของร้านให้โบนัส',effects:[{money:120},{reputation:3},{trait:{brave:10}}]},fail:{text:'มีดเฉี่ยวแขนเป็นแผลยาว',effects:[{hp:-25},{trait:{brave:6}}]}},
   {text:'ส่งเงินให้แล้วกดปุ่มฉุกเฉิน',check:{stat:'int',dc:'easy'},ok:{text:'ตำรวจจับเขาได้ที่ปากซอย',effects:[{stat:{int:1}}]},fail:{text:'ปุ่มเสีย เขาหนีไปได้ เจ้าของร้านหักเงินเดือน',effects:[{money:-60}]}},
-  {text:'ชวนคุย ถามว่าเดือดร้อนเรื่องอะไร',check:{stat:'cha',dc:'mid'},ok:{text:'เขาร้องไห้ บอกว่าลูกป่วยหนัก แล้ววางมีดเดินออกไปเอง',effects:[{stat:{cha:2}}]},fail:{text:'เขาตะคอกให้หุบปากแล้วกวาดเงินไป',effects:[{money:-40}]}}]},
+  {text:'ชวนคุย ถามว่าเดือดร้อนเรื่องอะไร',check:{stat:'cha',dc:'mid'},ok:{text:'เขาร้องไห้ บอกว่าลูกป่วยหนัก แล้ววางมีดเดินออกไปเอง',effects:[{stat:{cha:2}},{karma:4},{trait:{kind:8}}]},fail:{text:'เขาตะคอกให้หุบปากแล้วกวาดเงินไป',effects:[{money:-40}]}}]},
 {id:'friend_gate_clip',title:'เพื่อนชวนแอบเข้าเขตเกต',trigger:'month',when:school,cooldown:18,weight:2,src:'logic4.js:217',
  text:'ฮาจุนกระซิบว่ารั้วกั้นเกตแรงก์ E หลังตลาดมีช่องโหว่ อยากเข้าไปถ่ายคลิปลงโซเชียล',
  choices:[
-  {text:'ไปด้วย',check:{stat:'luk',dc:'mid'},ok:{text:'ทั้งคู่ได้คลิปหน้าเกตเรืองแสง ยอดวิวทะลุแสน',effects:[{reputation:4},{rel:{npc:'best_friend',n:6}}]},fail:{text:'สไลม์ตัวหนึ่งพุ่งออกมา ท่านลากเพื่อนหนีจนแขนถลอก',effects:[{hp:-30},{rel:{npc:'best_friend',n:10}}]}},
-  {text:'ห้ามเพื่อน',check:{stat:'cha',dc:'mid'},ok:{text:'เพื่อนยอมกลับบ้าน',effects:[{rel:{npc:'best_friend',n:2}}]},fail:{text:'เพื่อนไปคนเดียว กลับมาพร้อมแผลที่ขา',effects:[{rel:{npc:'best_friend',n:-5}}]}},
-  {text:'แจ้งยามสมาคม',ok:{text:'ยามปิดช่องโหว่ เพื่อนโกรธท่านไปหนึ่งสัปดาห์',effects:[{rel:{npc:'best_friend',n:-6}}]}}]},
+  {text:'ไปด้วย',check:{stat:'luk',dc:'mid'},ok:{text:'ทั้งคู่ได้คลิปหน้าเกตเรืองแสง ยอดวิวทะลุแสน',effects:[{reputation:4},{rel:{npc:'best_friend',n:6}},{trait:{brave:6}}]},fail:{text:'สไลม์ตัวหนึ่งพุ่งออกมา ท่านลากเพื่อนหนีจนแขนถลอก',effects:[{hp:-30},{rel:{npc:'best_friend',n:10}},{trait:{brave:6}}]}},
+  {text:'ห้ามเพื่อน',check:{stat:'cha',dc:'mid'},ok:{text:'เพื่อนยอมกลับบ้าน',effects:[{rel:{npc:'best_friend',n:2}},{trait:{loyal:3}}]},fail:{text:'เพื่อนไปคนเดียว กลับมาพร้อมแผลที่ขา',effects:[{rel:{npc:'best_friend',n:-5}}]}},
+  {text:'แจ้งยามสมาคม',ok:{text:'ยามปิดช่องโหว่ เพื่อนโกรธท่านไปหนึ่งสัปดาห์',effects:[{karma:2},{rel:{npc:'best_friend',n:-6}}]}}]},
 {id:'track_meet',title:'แข่งกรีฑาระดับเขต',trigger:'month',when:{all:[school,{flag:'path_sport'}]},cooldown:12,weight:3,src:'logic4.js:221',
  text:'ท่านถูกส่งลงแข่งวิ่ง 400 เมตรแทนเพื่อนที่ขาพลิก แมวมองจากสมาคมนั่งอยู่บนอัฒจันทร์',
  choices:[
-  {text:'ออกตัวแรงตั้งแต่ต้น',check:{stat:'agi',dc:'mid'},ok:{text:'เข้าเส้นชัยเป็นอันดับหนึ่ง แมวมองจดชื่อท่านไว้',effects:[{stat:{agi:2}},{reputation:3}]},fail:{text:'หมดแรงช่วงโค้งสุดท้าย ได้ที่ห้า',effects:[{stat:{vit:1}}]}},
+  {text:'ออกตัวแรงตั้งแต่ต้น',check:{stat:'agi',dc:'mid'},ok:{text:'เข้าเส้นชัยเป็นอันดับหนึ่ง แมวมองจดชื่อท่านไว้',effects:[{stat:{agi:2}},{reputation:3},{trait:{brave:4}}]},fail:{text:'หมดแรงช่วงโค้งสุดท้าย ได้ที่ห้า',effects:[{stat:{vit:1}}]}},
   {text:'เก็บแรงไว้ช่วงท้าย',check:{stat:'vit',dc:'mid'},ok:{text:'แซงสามคนในร้อยเมตรสุดท้าย ได้ที่สอง',effects:[{stat:{vit:2}},{reputation:2}]},fail:{text:'แซงไม่ทัน ได้ที่สี่',effects:[{stat:{vit:1}}]}},
-  {text:'วิ่งเป็นเพื่อนคนที่ล้ม',ok:{text:'ไม่ได้เหรียญแต่ภาพนั้นถูกแชร์ทั่วเมือง',effects:[{stat:{cha:2}}]}}]},
+  {text:'วิ่งเป็นเพื่อนคนที่ล้ม',ok:{text:'ไม่ได้เหรียญแต่ภาพนั้นถูกแชร์ทั่วเมือง',effects:[{stat:{cha:2}},{karma:3},{trait:{kind:6}}]}}]},
 {id:'library_night',title:'ห้องสมุดตอนดึก',trigger:'month',at:'school',when:{all:[school,{flag:'path_study'}]},once:true,weight:2,src:'logic4.js:225',
  text:'ท่านเจอหนังสือเล่มบาง ๆ ไม่มีชื่อผู้แต่ง ชื่อเรื่องว่า "บันทึกก่อนเกตแรกเปิด" ซ่อนอยู่หลังชั้นวาง',
  choices:[
@@ -59,9 +59,9 @@ H.events=(H.events||[]).concat([
 {id:'scout_rumor',title:'ข่าวลือเรื่องแมวมอง',trigger:'month',when:{all:[school,{age:{min:17}}]},once:true,weight:2,src:'logic4.js:229',
  text:'มีข่าวว่ากิลด์ใหญ่ส่งคนมาดูตัวนักเรียน ม.6 ที่มีแววจะตื่นพลังแรงก์สูง หลายคนเริ่มไปฟิตเนส',
  choices:[
-  {text:'ฝึกหนักทุกเช้า',ok:{text:'กล้ามเนื้อเริ่มแน่น',effects:[{stat:{str:2,vit:1}}]}},
+  {text:'ฝึกหนักทุกเช้า',ok:{text:'กล้ามเนื้อเริ่มแน่น',effects:[{stat:{str:2,vit:1}},{trait:{dili:6}}]}},
   {text:'อ่านเรื่องฮันเตอร์ให้มากที่สุด',ok:{text:'ท่านรู้ชื่อมอนสเตอร์ทุกตัวในฐานข้อมูลสมาคม',effects:[{stat:{int:2}},{mana:2}]}},
-  {text:'ไม่สน ตื่นได้ก็ตื่น',ok:{text:'ชีวิตยังเหมือนเดิม',effects:[{stat:{luk:1}}]}}]},
+  {text:'ไม่สน ตื่นได้ก็ตื่น',ok:{text:'ชีวิตยังเหมือนเดิม',effects:[{stat:{luk:1}},{trait:{dili:-3}}]}}]},
 // ---------- เรื่องหลัก ----------
 {id:'awakening',title:'วันตื่นพลัง',trigger:'auto',once:true,priority:90,src:'prog6.js:86-98 (ข้อความลูกแก้วย้ายไปเหตุการณ์ประเมินแรงก์)',
  when:{all:[{awakened:false},{age:{min:17.5}},{any:[{chance:0.25},{age:{min:18.5}}]}]},

@@ -45,11 +45,13 @@ H.enemies=[
  {id:'exam_d',name:'หุ่นประเมินของสมาคม (เกณฑ์ D)',power:115,asset:'mon.golem',src:'new'},
  {id:'skel_a',name:'โครงกระดูกนักธนู',power:210,src:'logic4.js:40'},
  {id:'wolf_b',name:'มนุษย์หมาป่าดำ',power:230,asset:'mon.dire_wolf',src:'logic4.js:40'},
- {id:'exam_c',name:'หุ่นประเมินของสมาคม (เกณฑ์ C)',power:225,asset:'mon.golem',src:'new'}];
-H.npcs=[
- {id:'best_friend',name:'ฮาจุน',role:'เพื่อนสนิทตั้งแต่ ม.1',src:'new (แทนเพื่อนสนิทที่เกมเดิมสุ่มสร้าง logic4.js:89)'},
- {id:'clerk_yoon',name:'ยุนแชอา',role:'เจ้าหน้าที่สมาคม',at:'association',src:'new'},
- {id:'master_kang',name:'ครูฝึกคัง',role:'ครูฝึกที่ศูนย์ฝึก',at:'gym',src:'new'}];
+ {id:'exam_c',name:'หุ่นประเมินของสมาคม (เกณฑ์ C)',power:225,asset:'mon.golem',src:'new'},
+ // อิงแรงก์ผู้เล่น (แทน GATE_DIFF[P.rank] ในเหตุการณ์เดิม) _ = ยังไม่มีแรงก์
+ {id:'gate_threat',name:'สัตว์อสูรในเกต',power:60,powerByRank:{_:40,E:60,D:120,C:220,B:400,A:680,S:1100},asset:'mon.goblin',src:'logic4.js:3 (GATE_DIFF)'},
+ {id:'gate_boss',name:'บอสของเกต',power:80,powerByRank:{_:60,E:80,D:160,C:290,B:520,A:880,S:1400},asset:'mon.gate_boss',src:'logic4.js:3,387'},
+ {id:'street_thugs',name:'อันธพาลนอกกฎหมาย',power:50,powerByRank:{_:30,E:50,D:100,C:180,B:330,A:560,S:900},src:'logic4.js:262 (foe thug)'},
+ {id:'sparring_rival',name:'คู่ซ้อมฝีมือดี',power:70,powerByRank:{_:40,E:70,D:140,C:260,B:470,A:800,S:1300},src:'events2.js:135 (foe rival)'}];
+// NPC ย้ายไป people.js (Phase 4)
 // เกณฑ์แรงก์ (ใหม่): ไม่มีทางเลื่อนด้วยเวลาอย่างเดียว ต้องมีเลเวล ค่าสถานะ จำนวนภารกิจ และผ่านภารกิจสอบ
 H.rankSystem={id:'hunter',name:'แรงก์ฮันเตอร์',order:['E','D','C','B','A','S'],
  initial:[{rank:'D',when:{all:[{statTotal:{min:150}},{mana:{min:25}}]}},{rank:'E'}],

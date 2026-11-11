@@ -17,7 +17,7 @@ H.events=(H.events||[]).concat([
  act('train_agi','gym','ฝึกความเร็ว (20)','ท่านวิ่งหลบลูกบอลจนขาสั่น',[{money:-20},{stat:{agi:1}}],{src:'new',when:{money:{min:20}}}),
  act('train_vit','gym','ฝึกความอึด (20)','ท่านแช่น้ำแข็งตามตำราครูฝึก',[{money:-20},{stat:{vit:1}}],{src:'new',when:{money:{min:20}}}),
  act('meditate','gym','ฝึกควบคุมมานา (30)','ท่านนั่งสมาธิในห้องกันเสียงจนมานาไหลเรียบ',[{money:-30},{mana:2},{stat:{int:1}}],{src:'new',when:{all:[{awakened:true},{money:{min:30}}]}}),
- act('treat','hospital','รักษาตัว (100)','หมอฮันเตอร์ใช้มานารักษาแผลจนหายสนิท',[{money:-100},{cure:true},{hp:999}],{src:'logic4.js:25 (โรงพยาบาลฮันเตอร์)',when:{money:{min:100}}}),
+ act('treat','hospital','รักษาตัว (100)','หมอฮันเตอร์ใช้มานารักษาแผลและอาการป่วย',[{money:-100},{cure:true},{treat:true},{hp:999}],{src:'logic4.js:25 (โรงพยาบาลฮันเตอร์)',when:{money:{min:100}}}),
  buy('iron_dagger','มีดสั้นเหล็ก',150),
  buy('leather_vest','เสื้อหนังกันมีด',120),
  buy('mana_blade_d','อาวุธมานาเกรด D',600,{rank:{min:'D'}}),

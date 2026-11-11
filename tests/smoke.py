@@ -5,6 +5,7 @@ R=os.path.dirname(os.path.dirname(os.path.abspath(__file__)));URL='file://'+R+'/
 OLD='/home/claude/game4/index.html';h0=hashlib.sha256(open(OLD,'rb').read()).hexdigest()
 res=[]
 FIXTURE=open(os.path.join(R,'tests/fixtures/phase2_save.json')).read()
+FIX3=open(os.path.join(R,'tests/fixtures/phase3_save.json')).read()
 def check(n,c):res.append(('PASS ' if c else 'FAIL ')+n)
 async def main():
     async with async_playwright() as p:
@@ -64,7 +65,35 @@ async def main():
         check('เซฟ/รีโหลด/โหลด ได้ผู้เล่นและทุกระบบคืนตรง',await pg.evaluate("JSON.stringify(AW.engine.state.snapshot())")==snap)
         await pg.evaluate("s=>localStorage.setItem('mvh1:slot2',s)",FIXTURE);await pg.click('[data-load="2"]');await pg.wait_for_timeout(100)
         check('โหลดเซฟจริงจาก Phase 2 ในเบราว์เซอร์ได้',await pg.evaluate("(()=>{const E=AW.engine,p=E.player.get();return p.created&&p.flags.fromOldSave&&p.location.loc==='home'&&E.worlds.ctx('hunter').get()._v===2&&E.debug.errors.length===0})()"))
-        await pg.wait_for_timeout(300);await pg.screenshot(path='docs/phase3/phase3_smoke.png',full_page=True)
+        await pg.wait_for_timeout(300)
+        # ---- Phase 4 ----
+        await pg.click('#new');await pg.wait_for_timeout(100);await pg.click('#pcreate');await pg.wait_for_timeout(100)
+        await pg.evaluate("(()=>{const E=AW.engine;while(E.events.pending())E.events.answer(E.events.choices().find(c=>c.ok).i)})()");await pg.click('[data-ok]') if await pg.is_visible('[data-ok]') else None
+        check('มีครอบครัวเป็น NPC แสดงในหน้าเล่น',await pg.evaluate("AW.engine.family.get().members.length>=2&&document.querySelector('#famp').textContent.includes('แม่')"))
+        await pg.evaluate("(()=>{const E=AW.engine;E.loop.tick(true);while(E.events.pending())E.events.answer(E.events.choices().find(c=>c.ok).i)})()");await pg.click('#step');await pg.wait_for_timeout(50)
+        await pg.evaluate("(()=>{const E=AW.engine;while(E.events.pending())E.events.answer(E.events.choices().find(c=>c.ok).i)})()")
+        await pg.click('[data-ok]') if await pg.is_visible('[data-ok]') else None
+        await pg.click('[data-loc="school"]');await pg.wait_for_timeout(100)
+        await pg.evaluate("(()=>{const E=AW.engine;while(E.events.pending())E.events.answer(E.events.choices().find(c=>c.ok).i)})()");await pg.wait_for_timeout(50)
+        await pg.click('[data-ok]') if await pg.is_visible('[data-ok]') else None
+        check('เห็นฮาจุนที่โรงเรียนตามตาราง (วันเรียน ช่วงเช้า)',await pg.evaluate("document.querySelector('#people').textContent.includes('ฮาจุน')"))
+        await pg.click('[data-npc="hunter.best_friend"][data-ia="talk"]');await pg.wait_for_timeout(100)
+        check('คุยกับ NPC แล้วความสัมพันธ์และความจำเปลี่ยน',await pg.evaluate("(()=>{const E=AW.engine;return E.rels.edge('hunter.best_friend','player').last===E.loop.month&&E.npcs.get('hunter.best_friend').memory.length>0})()"))
+        await pg.click('[data-ok]');await pg.click('[data-loc="city"]');await pg.wait_for_timeout(100)
+        await pg.evaluate("(()=>{const E=AW.engine;while(E.events.pending())E.events.answer(E.events.choices().find(c=>c.ok).i)})()");await pg.wait_for_timeout(50)
+        await pg.click('[data-ok]') if await pg.is_visible('[data-ok]') else None
+        await pg.click('[data-job="conv_store"]');await pg.wait_for_timeout(100)
+        check('สมัครงานได้จากหน้าเล่น',await pg.evaluate("AW.engine.life.get().job&&AW.engine.life.get().job.id==='conv_store'&&document.querySelector('#player').textContent.includes('พนักงานร้านสะดวกซื้อ')"))
+        check('Gate ฝั่งเกมเพลย์ยังไม่แสดงก่อนค้นพบ ส่วน Debug ยังมี',await pg.evaluate("document.querySelector('#pgates').textContent==='' && !!document.querySelector('[data-gate=rift_fantasy]')"))
+        await pg.evaluate("AW.engine.health.die('ทดสอบในเบราว์เซอร์')");await pg.click('#step');await pg.wait_for_timeout(100)
+        check('ตายแล้วแสดงประวัติชีวิต เวลาหยุด',await pg.evaluate("document.querySelector('#modal').textContent.includes('สิ้นสุดชีวิต')&&AW.engine.loop.reasons.has('dead')&&AW.engine.health.get().lives.length===1"))
+        await pg.click('[data-save="0"]');await pg.reload();await pg.wait_for_timeout(300);await pg.click('[data-load="0"]');await pg.wait_for_timeout(100)
+        check('โหลดเซฟหลังตายได้ ยังแสดงประวัติชีวิต',await pg.evaluate("!AW.engine.player.get().alive&&document.querySelector('#modal').textContent.includes('สิ้นสุดชีวิต')"))
+        await pg.click('#new2');await pg.wait_for_timeout(100)
+        check('เริ่มชีวิตใหม่ได้',await pg.evaluate("!AW.engine.player.get().created&&!AW.engine.loop.reasons.has('dead')&&!!document.querySelector('#pcreate')"))
+        await pg.evaluate("s=>localStorage.setItem('mvh1:slot2',s)",FIX3);await pg.click('[data-load="2"]');await pg.wait_for_timeout(100)
+        check('โหลดเซฟจริงจาก Phase 3 ในเบราว์เซอร์ได้',await pg.evaluate("(()=>{const E=AW.engine,p=E.player.get();return p.created&&p._v===2&&E.rels.type('hunter.best_friend','player')==='close_friend'&&E.family.get().members.length>=2&&E.debug.errors.length===0})()"))
+        await pg.wait_for_timeout(300);await pg.screenshot(path='docs/phase4/phase4_smoke.png',full_page=True)
         check('เซฟเกมเดิมไม่ถูกแตะ',await pg.evaluate("localStorage.getItem('hunter-path-v5-s0')==='OLD_SAVE'&&localStorage.getItem('hunter-path-v5-meta')==='OLD_META'"))
         check('คีย์เซฟใหม่ขึ้นต้น mvh1:',await pg.evaluate("Object.keys(localStorage).filter(k=>!k.startsWith('hunter-path-')).every(k=>k.startsWith('mvh1:'))"))
         await pg.evaluate('AW.engine.loop.setSpeed(0)');await pg.click('#dbg summary');await pg.wait_for_timeout(200);check('Debug panel เปิดได้ และไม่มี error ภายใน',await pg.evaluate("document.querySelector('#dbg').open&&AW.engine.debug.errors.length===0"))

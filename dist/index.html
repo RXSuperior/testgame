@@ -351,6 +351,9 @@ AW.systems.WorldsModule={id:'worlds',deps:[],install(e){e.worlds=new WorldSystem
 (function(AW){
 'use strict';
 const qid=(id,world)=>typeof id==='string'&&id.includes('.')?id:world+'.'+id;
+// อ้าง NPC: '$who' คือ NPC ที่เหตุการณ์เลือกไว้ (event.who) นอกนั้นเหมือน qid
+const npcRef=(id,v)=>id==='$who'?v.who:qid(id,v.worldId);
+const TRAIT_KEYS=['brave','kind','dili','loyal'];
 const isObj=v=>v&&typeof v==='object'&&!Array.isArray(v);
 const inRange=(v,r)=>(r.min===undefined||v>=r.min)&&(r.max===undefined||v<=r.max);
 const rangeOk=r=>isObj(r)&&Object.keys(r).every(k=>(k==='min'||k==='max')&&typeof r[k]==='number');
@@ -378,7 +381,7 @@ const COND={
  item:{ok:(c,v)=>(v.player.inventory[qid(c.id,v.worldId)]||0)>=(c.min??1),val:c=>isObj(c)&&typeof c.id==='string'?[]:['item ต้องเป็น {id,min}']},
  location:{ok:(c,v)=>v.player.location.world===v.worldId&&list(c).includes(v.player.location.loc),val:c=>list(c).every(x=>typeof x==='string')?[]:['location ต้องเป็นข้อความ']},
  world:{ok:(c,v)=>v.player.location.world===c,val:c=>typeof c==='string'?[]:['world ต้องเป็นข้อความ']},
- rel:{ok:(c,v)=>inRange(v.player.relations[qid(c.npc,v.worldId)]||0,c),val:c=>isObj(c)&&typeof c.npc==='string'&&['min','max'].every(k=>c[k]===undefined||typeof c[k]==='number')?[]:['rel ต้องเป็น {npc,min,max}']},
+ rel:{ok:(c,v)=>{const e=v.E.rels&&v.E.rels.edge(npcRef(c.npc,v),'player');return inRange(e?e.aff:0,c)},val:c=>isObj(c)&&typeof c.npc==='string'&&['min','max'].every(k=>c[k]===undefined||typeof c[k]==='number')?[]:['rel ต้องเป็น {npc,min,max}']},
  flag:{ok:(c,v)=>list(c).every(f=>v.player.flags[f]),val:c=>list(c).every(x=>typeof x==='string')?[]:['flag ต้องเป็นข้อความ']},
  notFlag:{ok:(c,v)=>list(c).every(f=>!v.player.flags[f]),val:c=>list(c).every(x=>typeof x==='string')?[]:['notFlag ต้องเป็นข้อความ']},
  worldFlag:{ok:(c,v)=>list(c).every(f=>v.world&&(v.world.get().flags||{})[f]),val:c=>list(c).every(x=>typeof x==='string')?[]:['worldFlag ต้องเป็นข้อความ']},
@@ -388,6 +391,21 @@ const COND={
  missions:{ok:(c,v)=>inRange(v.missions.byTag[c.tag]||0,c),val:c=>isObj(c)&&typeof c.tag==='string'?[]:['missions ต้องเป็น {tag,min}']},
  canPromote:{ok:(c,v)=>!!v.ranks.canPromote(c===true?v.rankSys:c,v),val:c=>typeof c==='string'||c===true?[]:['canPromote ต้องเป็นชื่อระบบแรงก์']},
  injured:{ok:(c,v)=>(v.player.injury>0)===c,val:c=>typeof c==='boolean'?[]:['injured ต้องเป็น true/false']},
+ karma:{ok:(c,v)=>inRange(v.player.karma,c),val:c=>rangeOk(c)?[]:['karma ต้องเป็น {min,max}']},
+ trait:{ok:(c,v)=>Object.keys(c).every(k=>inRange(v.player.traits[k],c[k])),val:c=>isObj(c)&&Object.keys(c).every(k=>TRAIT_KEYS.includes(k)&&rangeOk(c[k]))?[]:['trait ต้องเป็น {brave:{min}}']},
+ relType:{ok:(c,v)=>{const t=v.E.rels&&v.E.rels.type(npcRef(c.npc,v),'player');return list(c.type).includes(t)},val:c=>isObj(c)&&typeof c.npc==='string'&&list(c.type).every(t=>AW.systems.REL_TYPES.includes(t))?[]:['relType ต้องเป็น {npc,type}']},
+ npcAlive:{ok:(c,v)=>{const n=v.E.npcs&&v.E.npcs.get(npcRef(c,v));return!!(n&&n.alive)},val:c=>typeof c==='string'?[]:['npcAlive ต้องเป็นข้อความ']},
+ npcFlag:{ok:(c,v)=>{const n=v.E.npcs&&v.E.npcs.get(npcRef(c.npc,v));return!!(n&&n.flags[c.flag])===(c.is!==false)},val:c=>isObj(c)&&typeof c.npc==='string'&&typeof c.flag==='string'?[]:['npcFlag ต้องเป็น {npc,flag}']},
+ familyBg:{ok:(c,v)=>list(c).includes(v.E.family&&v.E.family.get().background),val:c=>list(c).every(x=>typeof x==='string')?[]:['familyBg ต้องเป็นข้อความ']},
+ familyRole:{ok:(c,v)=>!!(v.E.family&&v.E.family.members(c.role).some(m=>{const n=v.E.npcs.get(m.npc);return n&&(c.alive===undefined||n.alive===c.alive)})),val:c=>isObj(c)&&typeof c.role==='string'?[]:['familyRole ต้องเป็น {role,alive}']},
+ married:{ok:(c,v)=>!!(v.E.family&&v.E.family.married())===c,val:c=>typeof c==='boolean'?[]:['married ต้องเป็น true/false']},
+ children:{ok:(c,v)=>inRange(v.E.family?v.E.family.children().length:0,c),val:c=>rangeOk(c)?[]:['children ต้องเป็น {min,max}']},
+ canHaveChild:{ok:(c,v)=>!!(v.E.family&&!v.E.family.canHaveChild())===c,val:c=>typeof c==='boolean'?[]:['canHaveChild ต้องเป็น true/false']},
+ job:{ok:(c,v)=>{const j=v.E.life&&v.E.life.get().job;return c===true?!!j:c===false?!j:!!(j&&qid(c,v.worldId)===j.world+'.'+j.id)},val:c=>typeof c==='string'||typeof c==='boolean'?[]:['job ต้องเป็น id หรือ true/false']},
+ homeMode:{ok:(c,v)=>{const h=v.E.life&&v.E.life.get().home;return list(c).includes(h&&h.mode)},val:c=>list(c).every(x=>['family','rent','own','shelter'].includes(x))?[]:['homeMode ต้องเป็น family|rent|own|shelter']},
+ ill:{ok:(c,v)=>!!(v.E.health&&v.E.health.get().ill)===c,val:c=>typeof c==='boolean'?[]:['ill ต้องเป็น true/false']},
+ gate:{ok:(c,v)=>v.E.gates&&v.E.gates.status(qid(c.id,v.worldId))===c.is,val:c=>isObj(c)&&typeof c.id==='string'&&['hidden','known','open'].includes(c.is)?[]:['gate ต้องเป็น {id,is}']},
+ reputation:{ok:(c,v)=>inRange(v.player.reputation,c),val:c=>rangeOk(c)?[]:['reputation ต้องเป็น {min,max}']},
  chance:{ok:(c,v)=>v.rng.next()<c,val:c=>typeof c==='number'&&c>=0&&c<=1?[]:['chance ต้องเป็น 0..1']},
 };
 function validateCond(c){if(c===undefined||c===null)return[];if(!isObj(c))return['เงื่อนไขต้องเป็น object'];const e=[];
@@ -410,7 +428,27 @@ const EFF={
  flag:{run:(x,v)=>{P(v).setFlag(x,true);return null},val:x=>typeof x==='string'?[]:['flag ต้องเป็นข้อความ']},
  unflag:{run:(x,v)=>{P(v).setFlag(x,false);return null},val:x=>typeof x==='string'?[]:['unflag ต้องเป็นข้อความ']},
  worldFlag:{run:(x,v)=>{v.world.mutate(s=>{s.flags=s.flags||{};s.flags[x]=true});return null},val:x=>typeof x==='string'?[]:['worldFlag ต้องเป็นข้อความ']},
- rel:{run:(x,v)=>{const id=qid(x.npc,v.worldId);P(v).addRel(id,x.n);return`ความสัมพันธ์กับ${P(v).npcName(id)} ${x.n>0?'+':''}${x.n}`},val:x=>isObj(x)&&typeof x.npc==='string'&&typeof x.n==='number'?[]:['rel ต้องเป็น {npc,n}']},
+ rel:{run:(x,v)=>{const id=npcRef(x.npc,v);v.E.rels.meet(id);v.E.rels.change(id,'player',{aff:x.n,fam:2},x.note);return`ความสัมพันธ์กับ${P(v).npcName(id)} ${x.n>0?'+':''}${x.n}`},val:x=>isObj(x)&&typeof x.npc==='string'&&typeof x.n==='number'?[]:['rel ต้องเป็น {npc,n}']},
+ relx:{run:(x,v)=>{const id=npcRef(x.npc,v);v.E.rels.meet(id);v.E.rels.change(id,'player',{aff:x.aff||0,trust:x.trust||0,resp:x.resp||0,fam:x.fam||0,romance:x.romance||0},x.note);return`${P(v).npcName(id)}: `+['aff','trust','resp','romance'].filter(k=>x[k]).map(k=>({aff:'ชอบ',trust:'ไว้ใจ',resp:'นับถือ',romance:'ใจ'})[k]+(x[k]>0?' +':' ')+x[k]).join(' ')},val:x=>isObj(x)&&typeof x.npc==='string'&&['aff','trust','resp','fam','romance'].every(k=>x[k]===undefined||typeof x[k]==='number')?[]:['relx ต้องเป็น {npc,aff,trust,resp,fam,romance}']},
+ karma:{run:(x,v)=>{P(v).addKarma(x);return null},val:x=>typeof x==='number'?[]:['karma ต้องเป็นตัวเลข']},
+ trait:{run:(x,v)=>{P(v).addTraits(x);return null},val:x=>isObj(x)&&Object.keys(x).every(k=>TRAIT_KEYS.includes(k)&&typeof x[k]==='number')?[]:['trait ต้องเป็น {brave:5}']},
+ meet:{run:(x,v)=>{const n=v.E.npcs.generate(v.worldId,{role:x.role,tags:x.tags,gender:x.gender==='opposite'?(v.player.gender==='f'?'m':'f'):x.gender,age:x.age!==undefined?x.age:Math.max(16,Math.floor(v.player.age/12)+(x.ageOffset||0)),occupation:x.occupation,home:x.home});
+   v.E.rels.meet(n.id,x.aff!==undefined?{aff:x.aff}:{});v.who=v.who||n.id;return`ได้รู้จัก${n.name}`},val:x=>isObj(x)&&typeof x.role==='string'?[]:['meet ต้องเป็น {role,...}']},
+ npcFlag:{run:(x,v)=>{v.E.npcs.setFlag(npcRef(x.npc,v),x.flag,x.on!==false);return null},val:x=>isObj(x)&&typeof x.npc==='string'&&typeof x.flag==='string'?[]:['npcFlag ต้องเป็น {npc,flag}']},
+ npcMove:{run:(x,v)=>{v.E.npcs.setOverride(npcRef(x.npc,v),x.loc,x.months||1,x.reason||'');return null},val:x=>isObj(x)&&typeof x.npc==='string'&&typeof x.loc==='string'?[]:['npcMove ต้องเป็น {npc,loc,months}']},
+ npcJob:{run:(x,v)=>{v.E.npcs.setJob(npcRef(x.npc,v),x.job);return null},val:x=>isObj(x)&&typeof x.npc==='string'?[]:['npcJob ต้องเป็น {npc,job}']},
+ remember:{run:(x,v)=>{v.E.npcs.remember(npcRef(x.npc,v),x.t,x.tag||'');return null},val:x=>isObj(x)&&typeof x.npc==='string'&&typeof x.t==='string'?[]:['remember ต้องเป็น {npc,t}']},
+ marry:{run:(x,v)=>{v.E.family.marry(npcRef(x,v));return'แต่งงานแล้ว'},val:x=>typeof x==='string'?[]:['marry ต้องเป็นข้อความ']},
+ haveChild:{run:(x,v)=>{const n=v.E.family.haveChild();return`${n.name} ลืมตาดูโลก`},val:x=>x===true?[]:['haveChild ต้องเป็น true']},
+ takeJob:{run:(x,v)=>{v.E.life.takeJob(x,{force:true});return null},val:x=>typeof x==='string'?[]:['takeJob ต้องเป็นข้อความ']},
+ quitJob:{run:(x,v)=>{v.E.life.quitJob();return null},val:x=>x===true?[]:['quitJob ต้องเป็น true']},
+ treat:{run:(x,v)=>{return v.E.health.treat()?'ได้รับการรักษา':null},val:x=>x===true?[]:['treat ต้องเป็น true']},
+ lifespan:{run:(x,v)=>{v.E.health.addLifeMod(x);return null},val:x=>typeof x==='number'?[]:['lifespan ต้องเป็นตัวเลข']},
+ hpPct:{run:(x,v)=>{const n=Math.round(P(v).maxHp()*x);P(v).addHp(n);return`พลังชีวิต ${n>0?'+':''}${n}`},val:x=>typeof x==='number'&&x>=-1&&x<=1?[]:['hpPct ต้องเป็น -1..1']},
+ classStat:{run:(x,v)=>{const c=P(v).cls(v.player.class);if(!c)return null;P(v).addStats({[c.main]:x});return`${AW.systems.STAT_NAME[c.main]} +${x}`},val:x=>typeof x==='number'?[]:['classStat ต้องเป็นตัวเลข']},
+ worldUnflag:{run:(x,v)=>{v.world.mutate(s=>{if(s.flags)delete s.flags[x]});return null},val:x=>typeof x==='string'?[]:['worldUnflag ต้องเป็นข้อความ']},
+ gateDiscover:{run:(x,v)=>{v.E.gates.discover(qid(x,v.worldId));return null},val:x=>typeof x==='string'?[]:['gateDiscover ต้องเป็นข้อความ']},
+ gateOpen:{run:(x,v)=>{v.E.gates.open(qid(x,v.worldId));return`${v.E.gates.def(qid(x,v.worldId)).name} เปิดแล้ว`},val:x=>typeof x==='string'?[]:['gateOpen ต้องเป็นข้อความ']},
  reputation:{run:(x,v)=>{P(v).addRep(x);return`ชื่อเสียง ${x>0?'+':''}${x}`},val:x=>typeof x==='number'?[]:['reputation ต้องเป็นตัวเลข']},
  class:{run:(x,v)=>{const id=qid(x,v.worldId);P(v).setClass(id);return`ได้รับอาชีพ ${P(v).className(id)}`},val:x=>typeof x==='string'?[]:['class ต้องเป็นข้อความ']},
  skill:{run:(x,v)=>{const id=qid(x,v.worldId);P(v).addSkill(id);return`ได้สกิล ${P(v).skillName(id)}`},val:x=>typeof x==='string'?[]:['skill ต้องเป็นข้อความ']},
@@ -426,7 +464,7 @@ function apply(list,v){const out=[];for(const x of list||[]){const k=Object.keys
 // ตรวจว่าผลที่ทำให้เสียของ (เงิน/ไอเทม) จ่ายไหวไหมก่อนใช้
 function affordable(list,v){let m=0;const need={};for(const x of list||[]){if(x.money<0)m-=x.money;if(x.item&&(x.item.n??1)<0){const id=qid(x.item.id,v.worldId);need[id]=(need[id]||0)-x.item.n}}
  if(v.player.money<m)return false;return Object.keys(need).every(id=>(v.player.inventory[id]||0)>=need[id])}
-AW.systems.Rules={check,validateCond,apply,validateEffects,affordable,qid,COND,EFF,STATS};
+AW.systems.Rules={check,validateCond,apply,validateEffects,affordable,qid,npcRef,COND,EFF,STATS};
 AW.systems.STAT_NAME={str:'กาย',agi:'ความเร็ว',int:'ปัญญา',vit:'ความอึด',cha:'เสน่ห์',luk:'โชค'};
 })(globalThis.AW);
 
@@ -438,12 +476,13 @@ AW.systems.STAT_NAME={str:'กาย',agi:'ความเร็ว',int:'ปั
 // ดู docs/phase3/PLAYER_SYSTEM_DESIGN.md
 (function(AW){
 'use strict';
-const OWNER='player',VERSION=1,STATS=['str','agi','int','vit','cha','luk'],AP_PER_MONTH=2;
+const OWNER='player',VERSION=2,TRAITS=['brave','kind','dili','loyal'],STATS=['str','agi','int','vit','cha','luk'],AP_PER_MONTH=2;
 const blank=()=>({_v:VERSION,created:false,id:'p1',name:'',species:'human',gender:null,bornAt:0,age:0,level:1,exp:0,ranks:{},class:null,
  stats:{str:0,agi:0,int:0,vit:0,cha:0,luk:0},mana:0,hp:0,injury:0,skills:[],inventory:{},equipment:{weapon:null,armor:null},
- money:0,reputation:0,location:{world:null,loc:null},relations:{},flags:{},ap:0});
-// migrations[v]: แปลง player state จาก v ไป v+1 (ยังไม่มี เพราะเพิ่งเวอร์ชัน 1)
-const MIGRATIONS={};
+ money:0,reputation:0,location:{world:null,loc:null},flags:{},ap:0,karma:0,traits:{brave:0,kind:0,dili:0,loyal:0},alive:true,death:null});
+// migrations[v]: แปลง player state จาก v ไป v+1
+// v1->v2 (Phase 4): เพิ่ม karma, traits, alive/death · relations ย้ายไป Relationship System (เก็บไว้ที่ legacyRelations ให้ระบบนั้นรับต่อ)
+const MIGRATIONS={1:(s,sys)=>{sys.legacyRelations=s.relations||{};delete s.relations;s.karma=0;s.traits={brave:0,kind:0,dili:0,loyal:0};s.alive=true;s.death=null}};
 class PlayerSystem{
  constructor(E){this.E=E;E.state.register('player',OWNER,blank);
   E.bus.on('month',()=>this._month(),{prio:40,owner:OWNER});
@@ -454,7 +493,7 @@ class PlayerSystem{
  // ---- นิยามจากโลก ----
  _def(kind,q){if(typeof q!=='string'||!q.includes('.'))return null;const[w,id]=q.split('.');const c=this.E.worlds.ctx(w);return c?c.list(kind).get(id)||null:null}
  item(q){return this._def('items',q)} cls(q){return this._def('classes',q)} skill(q){return this._def('skills',q)} npc(q){return this._def('npcs',q)}
- itemName(q){const d=this.item(q);return d?d.name:q} className(q){const d=this.cls(q);return d?d.name:q} skillName(q){const d=this.skill(q);return d?d.name:q} npcName(q){const d=this.npc(q);return d?d.name:q}
+ itemName(q){const d=this.item(q);return d?d.name:q} className(q){const d=this.cls(q);return d?d.name:q} skillName(q){const d=this.skill(q);return d?d.name:q} npcName(q){const n=this.E.npcs&&this.E.npcs.get(q);if(n)return n.name;const d=this.npc(q);return d?d.name:q}
  // ---- สร้าง ----
  create({name='ผู้เล่น',gender=null,startAge=15,stats={},money=0,species='human'}={}){const E=this.E,w=E.worlds.current,c=w&&E.worlds.ctx(w);
   if(!c)throw new Error('ต้องเข้าโลกก่อนสร้างผู้เล่น');const p=blank();
@@ -486,7 +525,10 @@ class PlayerSystem{
   this._m(p=>{p.class=q;for(const k of Object.keys(c.bonus||{}))p.stats[k]+=c.bonus[k];if(c.skill&&!p.skills.includes(c.skill))p.skills.push(c.skill)});const p=this.get();this._m(s=>{s.hp=this.maxHp(p)})}
  addSkill(q){if(!this.skill(q))throw new Error('ไม่มีสกิล '+q);this._m(p=>{if(!p.skills.includes(q))p.skills.push(q)})}
  setRank(sys,r){this._m(p=>{p.ranks[sys]=r})}
- addRel(q,n){this._m(p=>{p.relations[q]=Math.max(-100,Math.min(100,(p.relations[q]||0)+n))})}
+ addKarma(n){this._m(p=>{p.karma=Math.max(-100,Math.min(100,p.karma+n))})}
+ addTraits(d){for(const k of Object.keys(d))if(!TRAITS.includes(k))throw new Error('ไม่มีนิสัย '+k);this._m(p=>{for(const k of Object.keys(d))p.traits[k]=Math.max(-100,Math.min(100,p.traits[k]+d[k]))})}
+ // ตาย: หยุดชีวิต (ไม่ลบข้อมูล) Health System เป็นผู้เรียกและบันทึกประวัติชีวิต
+ die(cause){this._m(p=>{p.alive=false;p.ap=0;p.death={cause,month:this.E.loop.month,age:p.age}})}
  setFlag(f,on){this._m(p=>{if(on)p.flags[f]=true;else delete p.flags[f]})}
  spendAp(n=1){if(this.get().ap<n)throw new Error('แรงไม่พอเดือนนี้ (AP)');this._m(p=>{p.ap-=n})}
  // ---- ตำแหน่ง ----
@@ -494,14 +536,14 @@ class PlayerSystem{
  setLocation(world,loc){if(!this.validLocation(world,loc))throw new Error(`ไม่มีสถานที่ ${world}/${loc}`);this._m(p=>{p.location={world,loc}});this.E.bus.emit('player:moved',{world,loc})}
  // ย้ายในโลกปัจจุบัน ตรวจเงื่อนไขของสถานที่ (when) ด้วย Rules
  canEnter(loc){const p=this.get(),c=this.E.worlds.ctx(p.location.world),l=c&&c.locations.get(loc);if(!l)return false;return AW.systems.Rules.check(l.when,this.E.view(c.id))}
- moveTo(loc,{force=false}={}){const p=this.get();if(this.E.time.state.get('worlds_time').traveling)throw new Error('กำลังเดินทาง');
+ moveTo(loc,{force=false}={}){const p=this.get();if(!p.alive)throw new Error('เสียชีวิตแล้ว');if(this.E.time.state.get('worlds_time').traveling)throw new Error('กำลังเดินทาง');
   if(!this.validLocation(p.location.world,loc))throw new Error('ไม่มีสถานที่ '+loc);if(!force&&!this.canEnter(loc))throw new Error('ยังเข้าไม่ได้: '+loc);this.setLocation(p.location.world,loc)}
  // ---- รายเดือน ----
- _month(){const p=this.get();if(!p.created)return;const mx=this.maxHp(p);
+ _month(){const p=this.get();if(!p.created||!p.alive)return;const mx=this.maxHp(p);
   this._m(s=>{s.age=this.E.loop.month-s.bornAt;s.ap=AP_PER_MONTH;if(s.injury>0)s.injury--;s.hp=Math.min(mx,s.hp+Math.ceil(mx*(s.injury?0.1:0.35)))})}
  // ---- หลังโหลด: migrate, ซ่อมข้อมูลที่ขาด, ตรวจตำแหน่ง ----
  _afterLoad(){const E=this.E;let p=this.get();
-  if((p._v||1)<VERSION)this._m(s=>{let v=s._v||1;while(v<VERSION){MIGRATIONS[v](s);v++}s._v=VERSION});
+  this.legacyRelations=null;if((p._v||1)<VERSION)this._m(s=>{let v=s._v||1;while(v<VERSION){MIGRATIONS[v](s,this);v++}s._v=VERSION});
   const cur=E.worlds.current;
   // เซฟเก่า (Phase 2) ไม่มีผู้เล่น: สร้างผู้เล่นที่อายุ 15 ตอนเดือน 0 (ค่าสถานะ 10 ทุกด้าน) อยู่ที่จุดเริ่มของโลกปัจจุบัน
   if(!p.created&&cur&&E.worlds.has(cur)){this._m(s=>{s.created=true;s.name='ผู้เล่น';s.bornAt=-180;s.ap=AP_PER_MONTH;for(const k of STATS)s.stats[k]=10;s.flags.fromOldSave=true});this._m(s=>{s.hp=this.maxHp(s)})}
@@ -509,7 +551,7 @@ class PlayerSystem{
   const w=p.location.world||cur;
   if(p.created&&w&&E.worlds.has(w)&&!this.validLocation(w,p.location.loc)){const c=E.worlds.ctx(w);E.debug&&E.debug.log(`ตำแหน่ง ${w}/${p.location.loc} ไม่มีอยู่ ย้ายไปจุดเริ่ม ${c.def.entry}`);this._m(s=>{s.location={world:w,loc:c.def.entry}})}}
 }
-AW.systems.PlayerSystem=PlayerSystem;
+AW.systems.PlayerSystem=PlayerSystem;AW.systems.TRAITS=TRAITS;
 AW.systems.PlayerModule={id:'player',deps:['worlds'],install(e){e.player=new PlayerSystem(e)}};
 })(globalThis.AW);
 
@@ -574,11 +616,14 @@ class CombatSystem{
   if(!p.class)power=(p.stats.str+p.stats.agi+p.stats.vit)*0.6;
   else{const cls=P.cls(p.class),w=p.equipment.weapon&&P.item(p.equipment.weapon),r=rs&&p.ranks[rs.id]?rs.order.indexOf(p.ranks[rs.id]):0;
    power=p.stats[cls.main]*1.5+STATS.reduce((a,k)=>a+p.stats[k],0)*0.4+p.level*3+r*40+p.mana*0.8+(w?w.power||0:0)+p.skills.reduce((a,q)=>a+((P.skill(q)||{}).power||0),0)}
-  power=Math.round(power*(1-0.15*Math.min(p.injury,3)));
+  power=Math.round(power*(1-0.15*Math.min(p.injury,3))*(this.E.health?this.E.health.powerFactor():1));
   return{name:p.name,power,maxHp:P.maxHp(),hp:p.hp,luk:p.stats.luk,skills:p.skills.map(q=>P.skillName(q))}}
- enemy(worldId,id){const c=this.E.worlds.ctx(worldId),e=c&&c.list('enemies').get(id);if(!e)throw new Error('ไม่มีศัตรู '+worldId+'.'+id);return e}
- resolve({worldId,enemy,mode='auto'}){const fn=this.modes.get(mode);if(!fn)throw new Error('ไม่มีโหมดต่อสู้ '+mode);
-  return fn({profile:this.profile(worldId),enemy:this.enemy(worldId,enemy),worldId},this.E.rng)}
+ // ศัตรูแบบอิงแรงก์ (powerByRank) ใช้แทนสูตรเดิม GATE_DIFF[P.rank]*mult: พลัง = ตารางตามแรงก์ปัจจุบันของผู้เล่น x mult
+ enemy(worldId,id,mult=1){const c=this.E.worlds.ctx(worldId),e=c&&c.list('enemies').get(id);if(!e)throw new Error('ไม่มีศัตรู '+worldId+'.'+id);
+  if(!e.powerByRank)return mult===1?e:Object.assign({},e,{power:Math.round(e.power*mult)});const rs=c.config.rankSystem,r=this.E.player.get().ranks[rs&&rs.id];
+  return Object.assign({},e,{power:Math.round((e.powerByRank[r]||e.powerByRank._||e.power)*mult)})}
+ resolve({worldId,enemy,mode='auto',mult=1}){const fn=this.modes.get(mode);if(!fn)throw new Error('ไม่มีโหมดต่อสู้ '+mode);
+  return fn({profile:this.profile(worldId),enemy:this.enemy(worldId,enemy,mult),worldId},this.E.rng)}
  apply(rep){const P=this.E.player;P.addHp(rep.hpAfter-P.get().hp);if(rep.injury)P.injure(rep.injury);this.E.bus.emit('combat:done',rep);return rep}
  fight(o){return this.apply(this.resolve(o))}
 }
@@ -594,10 +639,10 @@ AW.systems.CombatModule={id:'combat',deps:['player'],install(e){e.combat=new Com
 // slice 'events' เจ้าของ 'events' เก็บ pending, done, last, unlocked, log · ดู docs/phase3/STORY_EVENT_SYSTEM.md
 (function(AW){
 'use strict';
-const OWNER='events',R=()=>AW.systems.Rules,TRIGGERS=['auto','month','enter','action'],DC={easy:10,mid:22,hard:36,ext:55},STATS=['str','agi','int','vit','cha','luk'];
+const OWNER='events',R=()=>AW.systems.Rules,TRIGGERS=['auto','month','enter','action','passive'],WHO_KEYS=['npc','rel','role','tag','alive','here','died','minAff','maxAff','minAge'],DC={easy:10,mid:22,hard:36,ext:55},STATS=['str','agi','int','vit','cha','luk'];
 const isObj=v=>v&&typeof v==='object'&&!Array.isArray(v);
 // ตรวจข้อมูลเหตุการณ์ทั้งโลก (เรียกโดย WorldSystem ก่อนลงทะเบียน)
-function validateEvents(def){const d=def.data||{},ev=d.events||[],ids=new Set(ev.map(e=>e.id)),locs=new Set((d.locations||[]).map(l=>l.id)),en=new Set((d.enemies||[]).map(x=>x.id)),e=[];
+function validateEvents(def){const d=def.data||{},ev=d.events||[],npcs=new Set((d.npcs||[]).map(n=>n.id)),ids=new Set(ev.map(e=>e.id)),locs=new Set((d.locations||[]).map(l=>l.id)),en=new Set((d.enemies||[]).map(x=>x.id)),e=[];
  const ref=(id)=>typeof id==='string'&&(id.includes('.')||ids.has(id));
  for(const x of ev){const p='event '+x.id+': ';
   if(typeof x.title!=='string'||typeof x.text!=='string')e.push(p+'ต้องมี title และ text');
@@ -607,11 +652,14 @@ function validateEvents(def){const d=def.data||{},ev=d.events||[],ids=new Set(ev
   for(const k of['weight','priority','cooldown'])if(x[k]!==undefined&&(typeof x[k]!=='number'||x[k]<0))e.push(p+k+' ต้องเป็นตัวเลข >= 0');
   if(x.cost&&!(isObj(x.cost)&&Object.keys(x.cost).every(k=>k==='ap'&&Number.isInteger(x.cost[k])&&x.cost[k]>=0)))e.push(p+'cost ต้องเป็น {ap}');
   e.push(...R().validateCond(x.when).map(m=>p+m));
+  if(x.who!==undefined){if(!isObj(x.who)||!Object.keys(x.who).every(k=>WHO_KEYS.includes(k)))e.push(p+'who ใช้ได้เฉพาะ '+WHO_KEYS.join(','));if(x.who&&x.who.npc&&!npcs.has(x.who.npc))e.push(p+'who อ้าง NPC ที่ไม่มี '+x.who.npc)}
+  const walk=o=>{if(Array.isArray(o))return o.forEach(walk);if(!isObj(o))return;if(typeof o.npc==='string'){if(o.npc==='$who'){if(!x.who&&!JSON.stringify(x).includes('"meet"'))e.push(p+"ใช้ '$who' ต้องมี who")}else if(!o.npc.includes('.')&&!npcs.has(o.npc))e.push(p+'อ้าง NPC ที่ไม่มี '+o.npc)}
+   for(const k of Object.keys(o))if(k!=='text')walk(o[k])};walk([x.when,x.choices]);
   if(!Array.isArray(x.choices)||!x.choices.length){e.push(p+'ต้องมี choices อย่างน้อย 1');continue}
   x.choices.forEach((c,i)=>{const q=p+'choice '+i+': ';if(typeof c.text!=='string')e.push(q+'ต้องมี text');
    e.push(...R().validateCond(c.when).map(m=>q+m));
    if(c.check&&c.fight)e.push(q+'ใช้ check กับ fight พร้อมกันไม่ได้');
-   if(c.check&&!(STATS.includes(c.check.stat)&&DC[c.check.dc]!==undefined))e.push(q+'check ต้องเป็น {stat,dc:easy|mid|hard|ext}');
+   if(c.check&&!(STATS.includes(c.check.stat)&&DC[c.check.dc]!==undefined&&(c.check.trait===undefined||AW.systems.TRAITS.includes(c.check.trait))))e.push(q+'check ต้องเป็น {stat,dc:easy|mid|hard|ext,trait?}');
    if(c.fight&&!en.has(c.fight.enemy))e.push(q+'ไม่มีศัตรู '+(c.fight&&c.fight.enemy));
    if(!isObj(c.ok)||typeof c.ok.text!=='string')e.push(q+'ต้องมี ok.text');else e.push(...R().validateEffects(c.ok.effects).map(m=>q+'ok: '+m));
    if((c.check||c.fight)&&!(isObj(c.fail)&&typeof c.fail.text==='string'))e.push(q+'มี check/fight ต้องมี fail.text');
@@ -634,17 +682,36 @@ class EventSystem{
  view(w){return this.E.view(w)}
  log(t){const m=this.E.loop.month;this._m(s=>{s.log.unshift({m,t});if(s.log.length>80)s.log.length=80})}
  pending(){const p=this.get().pending;return p?Object.assign({},p,{def:this.def(p.id)}):null}
- _active(){const p=this.E.player.get();return p.created&&p.location.world&&this.E.worlds.has(p.location.world)&&!this.E.time.state.get('worlds_time').traveling&&!this.get().pending}
+ _active(){const p=this.E.player.get();return p.created&&p.alive&&p.location.world&&this.E.worlds.has(p.location.world)&&!this.E.time.state.get('worlds_time').traveling&&!this.get().pending}
  // ผ่านเงื่อนไขทุกข้อไหม (ไม่รวมการสุ่ม trigger)
  eligible(q,{v}={}){const x=this.def(q);if(!x)return false;const s=this.get(),w=q.split('.')[0],P=this.E.player.get();
   if(P.location.world!==w)return false;if(x.at&&P.location.loc!==x.at)return false;
   if(x.locked&&!s.unlocked[q])return false;if(x.once&&s.done[q])return false;
   if(x.cooldown&&s.last[q]!==undefined&&this.E.loop.month-s.last[q]<x.cooldown)return false;
-  return R().check(x.when,v||this.view(w))}
+  if(x.who&&!this.pickWho(q))return false;
+  return R().check(x.when,this._v(w,x.who?this.pickWho(q):null))}
+ _v(w,who){const v=this.view(w);v.who=who||null;return v}
+ // เลือก NPC ของเหตุการณ์ (who): เรียงจากคนที่ชอบผู้เล่นมากที่สุด เพื่อให้ได้ผลเดิมทุกครั้ง
+ pickWho(q){const x=this.def(q),wh=x&&x.who;if(!wh)return null;const w=q.split('.')[0],N=this.E.npcs,Rl=this.E.rels,P=this.E.player.get(),F=this.E.family;if(!N)return null;
+  const alive=wh.alive??(wh.died?false:true),m=this.E.loop.month;
+  let c=wh.npc?[N.get(w+'.'+wh.npc)].filter(Boolean):N.all(w);
+  c=c.filter(n=>n.alive===alive);
+  if(wh.died)c=c.filter(n=>n.death&&m-n.death.global<=wh.died.within);
+  if(wh.tag)c=c.filter(n=>n.tags.includes(wh.tag));
+  if(wh.role)c=c.filter(n=>F&&(wh.role==='family'?!!F.roleOf(n.id):wh.role==='sibling'?/sibling/.test(F.roleOf(n.id)||''):F.roleOf(n.id)===wh.role));
+  if(wh.rel)c=c.filter(n=>[].concat(wh.rel).includes(Rl.type(n.id,'player')));
+  const aff=n=>{const e=Rl.edge(n.id,'player');return e?e.aff:0};
+  if(wh.minAff!==undefined)c=c.filter(n=>aff(n)>=wh.minAff);if(wh.maxAff!==undefined)c=c.filter(n=>aff(n)<=wh.maxAff);
+  if(wh.here)c=c.filter(n=>N.where(n)===P.location.loc);if(wh.minAge!==undefined)c=c.filter(n=>N.ageY(n.id)>=wh.minAge);
+  // oncePerWho: เหตุการณ์เกิดได้ครั้งเดียวต่อคน (เช่น งานศพของแต่ละคน)
+  if(x.oncePerWho){const d=this.get().done;c=c.filter(n=>!d[q+'@'+n.id])}
+  c.sort((a,b)=>aff(b)-aff(a)||(a.id<b.id?-1:1));return c.length?c[0].id:null}
  _list(trigger,w){const c=this.E.worlds.ctx(w);return c?[...c.events.values()].filter(x=>x.trigger===trigger).map(x=>w+'.'+x.id):[]}
  _month({autoOnly=false}={}){if(!this._active())return;const w=this.E.player.get().location.world,c=this.E.worlds.ctx(w);
   const auto=this._list('auto',w).filter(q=>this.eligible(q)).sort((a,b)=>(this.def(b).priority||0)-(this.def(a).priority||0));
   if(auto.length)return this.present(auto[0]);if(autoOnly)return;
+  // เรื่องสั้นผ่าน ๆ (passive): ใช้ผลทันที ลงบันทึก ไม่หยุดเวลา
+  if(this.E.rng.next()<(c.config.passiveChance??0)){const ps=this._list('passive',w).filter(q=>this.eligible(q));if(ps.length)this._passive(ps[this.E.rng.int(0,ps.length-1)])}
   const ch=c.config.eventChance??0.4;if(this.E.rng.next()>=ch)return;
   const pool=this._list('month',w).filter(q=>this.eligible(q));if(!pool.length)return;
   const tot=pool.reduce((a,q)=>a+(this.def(q).weight??1),0);let r=this.E.rng.next()*tot;
@@ -652,24 +719,27 @@ class EventSystem{
  _enter(w,loc){if(!this._active())return;const list=this._list('enter',w).filter(q=>this.def(q).at===loc&&!this._seen.has(q)&&this.eligible(q)).sort((a,b)=>(this.def(b).priority||0)-(this.def(a).priority||0));
   if(list.length){this._seen.add(list[0]);this.present(list[0])}}
  // แสดงเหตุการณ์: เก็บเป็น pending และหยุดเวลา
- present(q){if(!this.def(q))throw new Error('ไม่มีเหตุการณ์ '+q);if(this.get().pending)throw new Error('มีเหตุการณ์ค้างอยู่');
-  this._m(s=>{s.pending={id:q,at:this.E.loop.month}});this.E.loop.pause('event');this.E.bus.emit('event:show',{id:q});return this.pending()}
+ present(q,who){if(!this.def(q))throw new Error('ไม่มีเหตุการณ์ '+q);if(this.get().pending)throw new Error('มีเหตุการณ์ค้างอยู่');
+  const wh=who||this.pickWho(q);if(this.def(q).who&&!wh)throw new Error('ไม่มีตัวละครสำหรับเหตุการณ์ '+q);
+  this._m(s=>{s.pending={id:q,at:this.E.loop.month,who:wh||null}});this.E.loop.pause('event');this.E.bus.emit('event:show',{id:q});return this.pending()}
  // ตัวเลือกที่แสดง: ทุกข้อ พร้อมสถานะเลือกได้/ไม่ได้ และโอกาสสำเร็จ
- choices(){const p=this.pending();if(!p)return[];const w=p.id.split('.')[0],v=this.view(w);
+ choices(){const p=this.pending();if(!p)return[];const w=p.id.split('.')[0],v=this._v(w,p.who);
   return p.def.choices.map((c,i)=>({i,text:c.text,ok:R().check(c.when,v)&&R().affordable(c.ok&&c.ok.effects,v),lockText:c.lockText||'',chance:this.chance(c,w)}))}
- chance(c,w){if(c.fight){const pr=this.E.combat.profile(w),en=this.E.combat.enemy(w,c.fight.enemy),ratio=pr.power/Math.max(1,en.power);return Math.round(Math.max(0.02,Math.min(0.98,1/(1+Math.pow(1/ratio,3))+pr.luk*0.002))*100)/100}
+ chance(c,w){if(c.fight){const pr=this.E.combat.profile(w),en=this.E.combat.enemy(w,c.fight.enemy,c.fight.mult||1),ratio=pr.power/Math.max(1,en.power);return Math.round(Math.max(0.02,Math.min(0.98,1/(1+Math.pow(1/ratio,3))+pr.luk*0.002))*100)/100}
   if(!c.check)return 1;const p=this.E.player.get(),rs=this.E.worlds.ctx(w).config.rankSystem,r=rs&&p.ranks[rs.id];
   // สูตรเดิม logic4.js:144: หลังตื่นพลังเกณฑ์ยากขึ้นตามแรงก์ เพราะค่าสถานะโตเร็ว
-  const off=p.class?18+(r?rs.order.indexOf(r):0)*12:0;return Math.round(Math.max(0.05,Math.min(0.97,0.5+(p.stats[c.check.stat]-DC[c.check.dc]-off)/30))*100)/100}
+  // นิสัยช่วยหรือขัด: check.trait บวกโอกาส trait/200 (นิสัยติดลบก็ลดโอกาส)
+  const off=p.class?18+(r?rs.order.indexOf(r):0)*12:0,tb=c.check.trait?p.traits[c.check.trait]/200:0;return Math.round(Math.max(0.05,Math.min(0.97,0.5+(p.stats[c.check.stat]-DC[c.check.dc]-off)/30+tb))*100)/100}
  // ตอบ: ตรวจว่าเลือกได้ -> ทอย check/fight -> ใช้ผล -> บันทึก -> ต่อ next หรือปล่อยเวลาเดิน
  answer(i){const p=this.pending();if(!p)throw new Error('ไม่มีเหตุการณ์ค้าง');const c=p.def.choices[i];if(!c)throw new Error('ไม่มีตัวเลือก '+i);
-  const w=p.id.split('.')[0],v=this.view(w);if(!R().check(c.when,v))throw new Error('ยังเลือกข้อนี้ไม่ได้');if(!R().affordable(c.ok&&c.ok.effects,v))throw new Error('เงินหรือของไม่พอ');
+  const w=p.id.split('.')[0],v=this._v(w,p.who);if(!R().check(c.when,v))throw new Error('ยังเลือกข้อนี้ไม่ได้');if(!R().affordable(c.ok&&c.ok.effects,v))throw new Error('เงินหรือของไม่พอ');
   let success=true,fight=null;
   if(c.check)success=this.E.rng.next()<this.chance(c,w);
-  if(c.fight){fight=this.E.combat.fight({worldId:w,enemy:c.fight.enemy,mode:c.fight.mode||'auto'});success=fight.win}
+  if(c.fight){fight=this.E.combat.fight({worldId:w,enemy:c.fight.enemy,mode:c.fight.mode||'auto',mult:c.fight.mult||1});success=fight.win}
   const out=success?c.ok:c.fail,lines=R().apply(out.effects,v);
-  const text=this.fmt(out.text),res={id:p.id,title:p.def.title,choice:c.text,success,text,effects:lines,fight};
-  this._m(s=>{s.pending=null;s.done[p.id]=(s.done[p.id]||0)+1;s.last[p.id]=this.E.loop.month});
+  if(p.who&&this.E.npcs.get(p.who))this.E.npcs.remember(p.who,`${p.def.title}: ${c.text}`,p.id);
+  const text=this.fmt(out.text,v.who),res={id:p.id,title:this.fmt(p.def.title,v.who),choice:c.text,success,text,effects:lines,fight};
+  this._m(s=>{s.pending=null;s.done[p.id]=(s.done[p.id]||0)+1;s.last[p.id]=this.E.loop.month;if(p.who)s.done[p.id+'@'+p.who]=1});
   this.log(`${p.def.title}: ${text}`+(lines.length?` (${lines.join(', ')})`:''));
   this.E.bus.emit('event:answered',res);
   const nx=c.next&&(c.next.includes('.')?c.next:w+'.'+c.next);
@@ -684,8 +754,11 @@ class EventSystem{
  doAction(q){const x=this.def(q);if(!x||x.trigger!=='action')throw new Error('ไม่มีกิจกรรม '+q);if(this.get().pending)throw new Error('มีเหตุการณ์ค้างอยู่');
   if(!this.eligible(q))throw new Error('ทำกิจกรรมนี้ไม่ได้ตอนนี้');const ap=(x.cost&&x.cost.ap)??1;if(ap)this.E.player.spendAp(ap);
   this.present(q);if(x.choices.length===1)return this.answer(0);return this.pending()}
+ _passive(q){const x=this.def(q),w=q.split('.')[0],wh=this.pickWho(q),v=this._v(w,wh),o=x.choices[0].ok,lines=R().apply(o.effects,v);
+  this._m(s=>{s.done[q]=(s.done[q]||0)+1;s.last[q]=this.E.loop.month});this.log(this.fmt(o.text||x.text,wh)+(lines.length?` (${lines.join(', ')})`:''));this.E.bus.emit('event:passive',{id:q})}
  unlock(q){this._m(s=>{s.unlocked[q]=true})}
- fmt(t){const p=this.E.player.get();return String(t).replace(/\{name\}/g,p.name).replace(/\{age\}/g,String(Math.floor(p.age/12)))}
+ fmt(t,who){const p=this.E.player.get(),pend=this.get().pending,wq=who||(pend&&pend.who),n=wq&&this.E.npcs&&this.E.npcs.get(wq);
+  return String(t).replace(/\{name\}/g,p.name).replace(/\{age\}/g,String(Math.floor(p.age/12))).replace(/\{who\}/g,n?n.name:'คนผู้นั้น')}
 }
 AW.systems.EventSystem=EventSystem;AW.systems.validateEvents=validateEvents;AW.systems.CHECK_DC=DC;
 AW.systems.EventsModule={id:'events',deps:['ranks','combat'],install(e){e.events=new EventSystem(e)}};
@@ -716,7 +789,7 @@ class MissionSystem{
  // ภารกิจที่สถานที่ปัจจุบัน พร้อมเหตุผลถ้ายังรับไม่ได้ (ภารกิจที่เงื่อนไขไม่ผ่านจะไม่แสดง)
  available(){const p=this.E.player.get(),w=p.location.world,c=w&&this.E.worlds.ctx(w);if(!c)return[];const v=this.E.view(w);
   return[...c.list('missions').values()].filter(m=>(!m.at||m.at===p.location.loc)&&R().check(m.when,v)).map(m=>{const q=w+'.'+m.id;
-   const why=this.E.events&&this.E.events.get().pending?'มีเหตุการณ์ค้าง':p.injury>=2?'บาดเจ็บหนัก ต้องพักก่อน':p.ap<1?'แรงไม่พอเดือนนี้ (AP)':'';
+   const why=!p.alive?'เสียชีวิตแล้ว':this.E.events&&this.E.events.get().pending?'มีเหตุการณ์ค้าง':p.injury>=2?'บาดเจ็บหนัก ต้องพักก่อน':this.E.health&&this.E.health.severity()>=2?'ป่วยหนัก ต้องรักษาก่อน':p.ap<1?'แรงไม่พอเดือนนี้ (AP)':'';
    const pr=this.E.combat.profile(w),en=this.E.combat.enemy(w,m.enemy),ratio=pr.power/en.power;
    return{id:q,name:m.name,rank:m.rank,enemy:en.name,ok:!why,why,chance:Math.round(Math.max(0.02,Math.min(0.98,1/(1+Math.pow(1/ratio,3))+pr.luk*0.002))*100)/100}})}
  start(q){const m=this.def(q);if(!m)throw new Error('ไม่มีภารกิจ '+q);const a=this.available().find(x=>x.id===q);
@@ -737,7 +810,405 @@ class MissionSystem{
 AW.systems.MissionSystem=MissionSystem;AW.systems.validateMissions=validateMissions;
 AW.systems.MissionsModule={id:'missions',deps:['events'],install(e){e.missions=new MissionSystem(e)}};
 // ติดตั้งระบบเกมเพลย์ทั้งชุดตามลำดับ deps
-AW.systems.installGameplay=e=>{for(const m of['WorldsModule','PlayerModule','RanksModule','CombatModule','EventsModule','MissionsModule'])e.use(AW.systems[m]);return e};
+AW.systems.installGameplay=e=>{for(const m of['WorldsModule','PlayerModule','RanksModule','CombatModule','EventsModule','MissionsModule','NpcsModule','RelationsModule','FamilyModule','HealthModule','LifeModule','GatesModule'])e.use(AW.systems[m]);return e};
+})(globalThis.AW);
+
+// ==== src/systems/npcs.js ====
+// NPC System: NPC กลางของทุกโลก · ข้อมูลแยกตามโลกใน slice 'npcs:<world>' เจ้าของ 'npcs'
+// NPC มาจาก 2 ทาง: นิยามในข้อมูลโลก (data.npcs) และสุ่มสร้าง (generate) ด้วย seed ที่กำหนดได้
+// อายุ NPC ใช้เวลาท้องถิ่นของโลกที่สังกัด (bornAt เป็นเดือนท้องถิ่น) ไม่เกี่ยวกับอายุผู้เล่น
+// ตำแหน่งคำนวณจากตาราง (schedule) ตอนถูกถาม ไม่จำลองทุก tick · การจำลองรายเดือนทำเต็มเฉพาะโลกที่ผู้เล่นอยู่
+// โลกอื่นจำลองแบบรวบทุก 12 เดือนท้องถิ่น (LOD) · ดู docs/phase4/NPC_SYSTEM_DESIGN.md
+(function(AW){
+'use strict';
+const OWNER='npcs',VERSION=1,SLOTS=['morning','day','evening','night'],TRAITS=['brave','kind','dili','loyal'],ID=/^[a-z][a-z0-9_]*$/;
+const sliceOf=w=>'npcs:'+w;
+const R=()=>AW.systems.Rules;
+// hash คงที่ (ไม่กิน rng) ใช้กับเรื่องที่ต้องได้ผลเดิมทุกครั้งที่ถาม เช่น ตารางแบบสุ่มรายเดือน
+const h01=s=>{let h=2166136261;for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619)}return(h>>>0)/4294967296};
+// ตรวจนิยาม NPC และตารางในข้อมูลโลก (ก่อนลงทะเบียนโลก)
+function validateNpcs(def){const d=def.data||{},e=[],locs=new Set((d.locations||[]).map(l=>l.id)),sch=new Set((d.schedules||[]).map(s=>s.id)),ids=new Set((d.npcs||[]).map(n=>n.id)),jobs=new Set((d.jobs||[]).map(j=>j.id));
+ const tempers=new Set(((AW.data.shared||{}).tempers||[]).map(t=>t.id));
+ for(const s of d.schedules||[]){if(!Array.isArray(s.entries)||!s.entries.length)e.push('schedule '+s.id+': ต้องมี entries');
+  for(const x of s.entries||[]){if(!SLOTS.includes(x.slot))e.push('schedule '+s.id+': slot ไม่รู้จัก '+x.slot);if(x.days&&!['work','off','any'].includes(x.days))e.push('schedule '+s.id+': days ต้องเป็น work|off|any');
+   if(!['home','work'].includes(x.at)&&!locs.has(x.at))e.push('schedule '+s.id+': ไม่มีสถานที่ '+x.at);if(x.chance!==undefined&&!(x.chance>0&&x.chance<=1))e.push('schedule '+s.id+': chance ต้องเป็น 0..1')}}
+ for(const n of d.npcs||[]){const p='npc '+n.id+': ';if(typeof n.name!=='string')e.push(p+'ต้องมี name');
+  for(const k of['home','work'])if(n[k]&&!locs.has(n[k]))e.push(p+k+' ไม่มีสถานที่ '+n[k]);
+  if(n.schedule&&!sch.has(n.schedule))e.push(p+'ไม่มีตาราง '+n.schedule);if(n.occupation&&!jobs.has(n.occupation)&&!n.occupationName)e.push(p+'ไม่มีอาชีพ '+n.occupation);
+  if(n.age!==undefined&&!(n.age>=0&&n.age<150))e.push(p+'age ไม่ถูกต้อง');if(n.temper&&tempers.size&&!tempers.has(n.temper))e.push(p+'ไม่รู้จัก temper '+n.temper);
+  for(const k of Object.keys(n.traits||{}))if(!TRAITS.includes(k))e.push(p+'ไม่รู้จักนิสัย '+k);
+  for(const r of n.rels||[])if(!ids.has(r.to))e.push(p+'อ้าง NPC ที่ไม่มี '+r.to)}
+ for(const j of d.jobs||[])if(j.schedule&&!sch.has(j.schedule))e.push('job '+j.id+': ไม่มีตาราง '+j.schedule);
+ return e}
+class NpcSystem{
+ constructor(E){this.E=E;E.worlds.addValidator(validateNpcs);
+  E.bus.on('world:installed',({world})=>this._slice(world),{prio:50,owner:OWNER});
+  E.bus.on('game:new',()=>{for(const w of E.worlds.ids())this.seed(w)},{prio:50,owner:OWNER});
+  E.bus.on('game:loaded',()=>this._afterLoad(),{prio:85,owner:OWNER});
+  E.bus.on('world:month',({world,month})=>this.simulate(world,month),{prio:5,owner:OWNER})}
+ _slice(w){const n=sliceOf(w);if(!this.E.state.slices.has(n))this.E.state.register(n,OWNER,()=>({_v:VERSION,list:{},seq:0}));return n}
+ _st(w){return this.E.state.get(this._slice(w))}
+ _m(w,fn){return this.E.state.mutate(OWNER,this._slice(w),fn)}
+ get(q){if(typeof q!=='string'||!q.includes('.'))return null;const w=q.split('.')[0];if(!this.E.worlds.has(w)&&!this.E.state.slices.has(sliceOf(w)))return null;return this._st(w).list[q]||null}
+ exists(q){return!!this.get(q)}
+ all(w){return Object.values(this._st(w).list)}
+ ageY(q){const n=this.get(q);if(!n)return null;const w=n.world;return Math.floor(((n.death?n.death.month:this.E.time.month(w))-n.bornAt)/12)}
+ // ---- สร้าง ----
+ _make(w,def,origin){const c=this.E.worlds.ctx(w),id=w+'.'+def.id;if(!ID.test(def.id))throw new Error('id NPC ไม่ถูกต้อง: '+def.id);
+  const loc=v=>{if(v&&!c.locations.has(v))throw new Error(`NPC ${id}: ไม่มีสถานที่ ${v}`);return v||null};
+  const tr={brave:0,kind:0,dili:0,loyal:0};for(const k of Object.keys(def.traits||{}))tr[k]=def.traits[k];
+  const flags=Object.assign({},def.flags||{});for(const k of Object.keys(def.flagChance||{}))if(h01(this._seedStr()+'|flag|'+id+'|'+k)<def.flagChance[k])flags[k]=true;
+  return{id,name:def.name,world:w,gender:def.gender||null,species:def.species||'human',role:def.role||'',faction:def.faction||null,
+   home:loc(def.home||c.def.entry),work:loc(def.work||(def.occupation&&(c.list('jobs').get(def.occupation)||{}).at)||null),occupation:def.occupation||null,occupationName:def.occupationName||null,status:def.status||'common',
+   schedule:def.schedule||null,override:null,bornAt:this.E.time.month(w)-Math.round((def.age??20)*12),traits:tr,temper:def.temper||'cheerful',
+   tags:(def.tags||[]).slice(),flags,memory:[],alive:true,death:null,ill:null,origin}}
+ _seedStr(){return String(this.E.state.get('meta').seed)}
+ // ใส่ NPC จากข้อมูลโลกที่ยังไม่มี (ไม่ซ้ำ: ตรวจจาก id) และความสัมพันธ์เริ่มต้นระหว่าง NPC
+ seed(w){const c=this.E.worlds.ctx(w);if(!c)return 0;const add=[];for(const d of c.list('npcs').values())if(!this._st(w).list[w+'.'+d.id])add.push(this._make(w,d,'data'));
+  if(add.length)this._m(w,s=>{for(const n of add)s.list[n.id]=n});
+  // ประชากรสุ่มของโลก (config.population) สร้างครั้งเดียวต่อเกม มี flag กันซ้ำตอนโหลด
+  const pop=c.config.population;if(pop&&!this._st(w).populated){const r=new AW.core.Rng(this._seedStr()+'|pop|'+w);for(let i=0;i<pop.count;i++){const job=pop.jobs[r.int(0,pop.jobs.length-1)];this.generate(w,{occupation:job||undefined,age:job==='student'?r.int(15,18):r.int(19,70)})}this._m(w,s=>{s.populated=true})}
+  if(this.E.rels)for(const d of c.list('npcs').values())for(const r of d.rels||[])if(!this.E.rels.edge(w+'.'+d.id,w+'.'+r.to))this.E.rels.ensure(w+'.'+d.id,w+'.'+r.to,{aff:r.aff||0,trust:r.trust||0,fam:r.fam??30,bond:r.bond||null});
+  return add.length}
+ add(w,def,origin='script'){if(this._st(w).list[w+'.'+def.id])throw new Error('NPC id ซ้ำ: '+w+'.'+def.id);const n=this._make(w,def,origin);this._m(w,s=>{s.list[n.id]=n});this.E.bus.emit('npc:created',{id:n.id});return n}
+ // สุ่มสร้างด้วย seed: seed เดียวกัน + ลำดับเดียวกัน = NPC เดียวกันเสมอ (ไม่ใช้ rng หลักของเกม)
+ generate(w,o={}){const c=this.E.worlds.ctx(w);if(!c)throw new Error('ไม่มีโลก '+w);const pool=c.config.namePool;if(!pool)throw new Error('โลก '+w+' ไม่มี namePool');
+  const seq=this._st(w).seq,r=new AW.core.Rng((o.seed??this._seedStr())+'|gen|'+w+'|'+seq),pick=a=>a[r.int(0,a.length-1)];
+  const gender=o.gender||(r.next()<0.5?'m':'f'),tempers=AW.data.shared.tempers;const traits={};for(const k of TRAITS)traits[k]=r.int(-40,40);
+  const def={id:'gen_'+seq,name:(o.surname||pick(pool.family))+' '+pick(pool[gender]),gender,age:o.age??r.int(16,60),role:o.role||'',temper:o.temper||pick(tempers).id,traits,
+   home:o.home||pick(c.config.homeLocs||[c.def.entry]),work:o.work||null,occupation:o.occupation||null,schedule:o.schedule||(o.occupation&&(c.list('jobs').get(o.occupation)||{}).schedule)||c.config.defaultSchedule||null,tags:o.tags||[],faction:o.faction||null};
+  const n=this._make(w,def,'gen');this._m(w,s=>{s.list[n.id]=n;s.seq=seq+1});this.E.bus.emit('npc:created',{id:n.id});return n}
+ // ---- เวลาและตาราง ----
+ // ช่วงเวลาของโลกที่ผู้เล่นอยู่ = ตาม AP ที่เหลือ (2 เช้า, 1 กลางวัน, 0 เย็น) · โลกอื่นถือเป็นกลางวัน
+ clock(w){const p=this.E.player.get(),m=this.E.time.month(w),cal=(this.E.worlds.ctx(w)||{config:{}}).config.calendar||{};
+  const slot=p.location.world===w?['evening','day','morning'][Math.max(0,Math.min(2,p.ap))]:'day';
+  return{month:m,slot,dayType:(cal.holidayMonths||[]).includes(m%12)?'off':'work'}}
+ schedule(n){const c=this.E.worlds.ctx(n.world);if(!c)return null;const job=n.occupation&&c.list('jobs').get(n.occupation);return c.list('schedules').get(n.schedule||(job&&job.schedule)||c.config.defaultSchedule)||null}
+ // ตำแหน่ง ณ เวลา: ตาย=ไม่มี, ป่วยหนัก=บ้าน, override (เหตุการณ์พิเศษ), แล้วตาราง (แถวแรกที่ตรง slot/วัน/โอกาส)
+ where(q,clk){const n=typeof q==='string'?this.get(q):q;if(!n||!n.alive)return null;const k=clk||this.clock(n.world);
+  if(n.ill&&n.ill.severity>=2)return n.home;if(n.override&&k.month<n.override.until)return n.override.loc;
+  const s=this.schedule(n);if(!s)return n.home;
+  for(const x of s.entries){if(x.slot!==k.slot)continue;if(x.days&&x.days!=='any'&&x.days!==k.dayType)continue;if(x.chance&&h01(n.id+'|'+k.month+'|'+x.slot)>=x.chance)continue;
+   const at=x.at==='home'?n.home:x.at==='work'?n.work:x.at;if(at)return at}return n.home}
+ at(w,loc,clk){const k=clk||this.clock(w);return this.all(w).filter(n=>this.where(n,k)===loc)}
+ // ---- เปลี่ยนสถานะ ----
+ setOverride(q,loc,months,reason=''){const n=this.get(q);if(!n)throw new Error('ไม่มี NPC '+q);if(!this.E.worlds.ctx(n.world).locations.has(loc))throw new Error('ไม่มีสถานที่ '+loc);
+  const until=this.E.time.month(n.world)+months;this._m(n.world,s=>{s.list[q].override={loc,until,reason}})}
+ setJob(q,job,work){const n=this.get(q);if(!n)throw new Error('ไม่มี NPC '+q);const c=this.E.worlds.ctx(n.world),j=job&&c.list('jobs').get(job);if(job&&!j)throw new Error('ไม่มีอาชีพ '+job);
+  this._m(n.world,s=>{const x=s.list[q];x.occupation=job||null;x.work=work||(j?j.at:null);x.schedule=null})}
+ remember(q,t,tag=''){const n=this.get(q);if(!n)throw new Error('ไม่มี NPC '+q);const m=this.E.loop.month;this._m(n.world,s=>{const x=s.list[q];x.memory.unshift({m,t,tag});if(x.memory.length>12)x.memory.length=12})}
+ setFlag(q,f,on=true){const n=this.get(q);if(!n)throw new Error('ไม่มี NPC '+q);this._m(n.world,s=>{if(on)s.list[q].flags[f]=true;else delete s.list[q].flags[f]})}
+ setIll(q,ill){const n=this.get(q);this._m(n.world,s=>{s.list[q].ill=ill})}
+ kill(q,cause){const n=this.get(q);if(!n)throw new Error('ไม่มี NPC '+q);if(!n.alive)return;const m=this.E.time.month(n.world),gm=this.E.loop.month;
+  this._m(n.world,s=>{const x=s.list[q];x.alive=false;x.death={cause,month:m,global:gm,ageY:Math.floor((m-x.bornAt)/12)};x.override=null});
+  this.E.bus.emit('npc:died',{id:q,cause})}
+ // ---- จำลองรายเดือน ----
+ // เต็ม: โลกที่ผู้เล่นอยู่ (ทุกเดือนท้องถิ่น) · รวบ: โลกอื่น ทุก 12 เดือนท้องถิ่น (factor 12)
+ simulate(w,month){if(!this.E.state.slices.has(sliceOf(w)))return;const p=this.E.player.get(),full=p.location.world===w;if(!full&&month%12!==0)return;
+  const f=full?1:12,H=AW.systems.Health,rng=this.E.rng,deaths=[],k=this.clock(w);
+  this._m(w,s=>{for(const n of Object.values(s.list)){if(!n.alive)continue;
+   if(n.override&&month>=n.override.until)n.override=null;
+   const ageY=(month-n.bornAt)/12,r=H.roll({ageY,ill:n.ill,treated:false,condition:100},rng,f);
+   n.ill=r.ill;if(r.die)deaths.push([n.id,r.die])}});
+  for(const[q,c]of deaths)this.kill(q,c);
+  if(this.E.rels&&full)this.E.rels.socialize(w,k)}
+ _afterLoad(){for(const w of this.E.worlds.ids()){this._slice(w);const added=this.seed(w);if(added)this.E.debug&&this.E.debug.log(`เพิ่ม NPC ที่ขาด ${added} คนในโลก ${w}`)}}
+}
+AW.systems.NpcSystem=NpcSystem;AW.systems.validateNpcs=validateNpcs;AW.systems.SLOTS=SLOTS;AW.systems.h01=h01;
+AW.systems.NpcsModule={id:'npcs',deps:['player'],install(e){e.npcs=new NpcSystem(e)}};
+})(globalThis.AW);
+
+// ==== src/systems/relations.js ====
+// Relationship System: ความสัมพันธ์แบบมีทิศทาง ('a>b' คือสิ่งที่ a รู้สึกต่อ b) จึงไม่จำเป็นต้องเท่ากันสองฝ่าย
+// ฝั่งผู้เล่นใช้ id 'player' · ค่า: aff (ชอบ) trust (ไว้ใจ) resp (นับถือ) fam (คุ้นเคย) romance · bond: family|spouse
+// ประเภท (คนรู้จัก เพื่อน ... คู่ครอง) คำนวณจากค่าและ bond ไม่เก็บซ้ำ · ประวัติเก็บล่าสุด 12 รายการต่อคู่
+// แนวคิดจาก rel12.js (นิสัยหลัก, เคมี, ความไว้ใจ/นับถือ, การกระทำเดือนละครั้งต่อคน) เขียนใหม่ทั้งหมด
+// slice 'rels' เจ้าของ 'rels' · ดู docs/phase4/RELATIONSHIP_SYSTEM_DESIGN.md
+(function(AW){
+'use strict';
+const OWNER='rels',VERSION=1,PLAYER='player',TYPES=['acquaintance','friend','close_friend','best_friend','rival','enemy','romantic','family','spouse'];
+const TYPE_NAME={acquaintance:'คนรู้จัก',friend:'เพื่อน',close_friend:'เพื่อนสนิท',best_friend:'เพื่อนรักที่สุด',rival:'คู่แข่ง',enemy:'ศัตรู',romantic:'คนที่มีใจให้',family:'ครอบครัว',spouse:'คู่ครอง'};
+const clamp=v=>Math.max(-100,Math.min(100,Math.round(v)));
+const key=(a,b)=>a+'>'+b;
+const T=id=>(AW.data.shared.tempers||[]).find(t=>t.id===id)||{};
+const pairIn=(list,a,b)=>list.some(([x,y])=>(x===a&&y===b)||(x===b&&y===a));
+class RelationSystem{
+ constructor(E){this.E=E;E.state.register(OWNER,OWNER,()=>({_v:VERSION,e:{}}));
+  E.bus.on('game:loaded',()=>this._afterLoad(),{prio:80,owner:OWNER});
+  E.bus.on('npc:died',({id})=>this._died(id),{prio:0,owner:OWNER})}
+ _m(fn){return this.E.state.mutate(OWNER,OWNER,fn)}
+ _valid(id){return id===PLAYER||this.E.npcs.exists(id)}
+ _need(a,b){for(const x of[a,b])if(!this._valid(x))throw new Error('ไม่มีตัวละคร '+x);if(a===b)throw new Error('ความสัมพันธ์กับตัวเองไม่ได้')}
+ edge(a,b){return this.E.state.get(OWNER).e[key(a,b)]||null}
+ blank(o={}){return Object.assign({aff:0,trust:0,resp:0,fam:0,romance:0,bond:null,hist:[],last:null,flags:{}},o)}
+ ensure(a,b,init){this._need(a,b);if(!this.edge(a,b))this._m(s=>{s.e[key(a,b)]=this.blank(init)});return this.edge(a,b)}
+ // เปลี่ยนค่า (สร้างคู่ถ้ายังไม่มี) · note ลงประวัติ
+ change(a,b,d,note){this.ensure(a,b);const m=this.E.loop.month;this._m(s=>{const x=s.e[key(a,b)];for(const k of['aff','trust','resp','fam'])if(d[k])x[k]=clamp(x[k]+d[k]);
+  if(d.romance)x.romance=Math.max(0,Math.round((x.romance+d.romance)*10)/10);if(note){x.hist.unshift({m,t:note});if(x.hist.length>12)x.hist.length=12}});return this.edge(a,b)}
+ setBond(a,b,bond,{mutual=true}={}){this.ensure(a,b);if(mutual)this.ensure(b,a);this._m(s=>{s.e[key(a,b)].bond=bond;if(mutual)s.e[key(b,a)].bond=bond})}
+ setFlag(a,b,f,on=true){this.ensure(a,b);this._m(s=>{if(on)s.e[key(a,b)].flags[f]=true;else delete s.e[key(a,b)].flags[f]})}
+ // ประเภทจากมุมของ a ต่อ b
+ type(a,b){const x=this.edge(a,b);if(!x)return null;if(x.bond==='spouse')return'spouse';if(x.bond==='family')return'family';
+  if(x.flags.enemy||x.aff<=-60)return'enemy';if(x.romance>=1&&x.aff>=30)return'romantic';if(x.aff<=-25)return'rival';
+  if(x.aff>=80&&x.fam>=60)return'best_friend';if(x.aff>=55)return'close_friend';if(x.aff>=25)return'friend';return'acquaintance'}
+ typeName(t){return TYPE_NAME[t]||t}
+ list(id,{dir='out'}={}){const e=this.E.state.get(OWNER).e,out=[];for(const k of Object.keys(e)){const[a,b]=k.split('>');if(dir==='out'&&a===id)out.push({to:b,...e[k]});if(dir==='in'&&b===id)out.push({from:a,...e[k]})}return out}
+ // เคมี -1..1 จากแกนนิสัย (ใกล้กัน=เข้ากัน) และคู่นิสัยหลัก (ดี +0.4 แย่ -0.4)
+ chemistry(a,b){const t=id=>id===PLAYER?{traits:this.E.player.get().traits,temper:null}:this.E.npcs.get(id);const x=t(a),y=t(b);if(!x||!y)return 0;
+  let d=0;for(const k of AW.systems.TRAITS)d+=Math.abs((x.traits[k]||0)-(y.traits[k]||0));let c=1-d/400;
+  const P=AW.data.shared.temperPairs||{good:[],bad:[]};if(x.temper&&y.temper){if(pairIn(P.good,x.temper,y.temper))c+=0.4;if(pairIn(P.bad,x.temper,y.temper))c-=0.4}return Math.max(-1,Math.min(1,c))}
+ // ความรู้สึกแรกพบของ NPC ต่อผู้เล่น: นิสัยหลัก + เคมี + กรรม (ใจดีชอบกรรมดี โลภ/ใจร้อนกลับกัน) · อาจติดลบได้
+ firstImpression(npc){const n=this.E.npcs.get(npc),p=this.E.player.get(),t=T(n.temper);return clamp((t.first||0)+this.chemistry(npc,PLAYER)*15+(t.karmaLike||0)*p.karma/5+(n.traits.kind||0)/20)}
+ meet(npc,{aff}={}){if(this.edge(npc,PLAYER))return false;const a=aff??this.firstImpression(npc);this.ensure(npc,PLAYER,{aff:a,fam:5});this.ensure(PLAYER,npc,{aff:Math.max(0,a),fam:5});return true}
+ // ---- การกระทำของผู้เล่น (เดือนละครั้งต่อคน) ----
+ actions(npc){const n=this.E.npcs.get(npc),p=this.E.player.get();if(!n||!n.alive||!p.alive)return[];const x=this.edge(npc,PLAYER),me=p.age/12,them=this.E.npcs.ageY(npc);
+  const done=x&&x.last===this.E.loop.month,fam=x&&x.bond,sp=this.E.family&&this.E.family.get().spouse,adult=me>=18&&them>=18;
+  const out=[{id:'talk',name:'คุย'},{id:'gift',name:'ให้ของขวัญ (30)',why:p.money<30?'เงินไม่พอ':''}];
+  if(!fam&&adult&&!sp&&x&&x.aff>=25)out.push({id:'confess',name:'สารภาพความในใจ',why:x.romance>=1?'อีกฝ่ายรู้ใจแล้ว':''});
+  if(!fam&&adult&&!sp&&x&&x.romance>=1)out.push({id:'propose',name:'ขอแต่งงาน',why:x.aff<60?'ยังไม่สนิทพอ (60)':x.trust<30?'ยังไม่ไว้ใจพอ (30)':p.money<500?'เงินไม่พอจัดงาน (500)':''});
+  if(x&&x.aff<-10)out.push({id:'apologize',name:'ขอคืนดี (50)',why:p.money<50?'เงินไม่พอ':''});
+  return out.map(a=>Object.assign({why:''},a,done?{why:'เดือนนี้พบกันแล้ว'}:{}))}
+ interact(npc,act){const a=this.actions(npc).find(x=>x.id===act);if(!a)throw new Error('ทำไม่ได้: '+act);if(a.why)throw new Error(a.why);
+  const n=this.E.npcs.get(npc),t=T(n.temper),P=this.E.player,p=P.get(),rng=this.E.rng,chem=this.chemistry(npc,PLAYER);this.meet(npc);let ok=true,text='';
+  if(act==='talk'){const g=2+rng.int(0,2)+Math.round(p.stats.cha/40)+(t.talk||0);this.change(npc,PLAYER,{aff:g,trust:1,fam:4},'นั่งคุยกัน');this.change(PLAYER,npc,{fam:4});
+   if(this.edge(npc,PLAYER).romance>0&&chem>0)this.change(npc,PLAYER,{romance:0.3*chem});text=`ท่านนั่งคุยกับ${n.name}อยู่นาน`}
+  if(act==='gift'){P.addMoney(-30);const g=Math.round((5+rng.int(0,4))*(t.gift||1));this.change(npc,PLAYER,{aff:g,trust:2},'ได้รับของขวัญ');text=`${n.name}รับของขวัญไว้ด้วยรอยยิ้ม`}
+  if(act==='confess'){const x=this.edge(npc,PLAYER),odds=Math.max(0.05,Math.min(0.95,0.05+x.aff/150+chem*0.3+x.trust/400));ok=rng.next()<odds;
+   if(ok){this.change(npc,PLAYER,{romance:1,aff:5},'ตอบรับคำสารภาพ');this.change(PLAYER,npc,{romance:1});text=`${n.name}หน้าแดง แล้วพยักหน้าเบา ๆ`}
+   else{this.change(npc,PLAYER,{aff:-5},'ปฏิเสธคำสารภาพ');text=`${n.name}ขอโทษ แล้วบอกว่าเห็นท่านเป็นแค่เพื่อน`}}
+  if(act==='propose'){const x=this.edge(npc,PLAYER),odds=Math.max(0.05,Math.min(0.95,0.25+x.aff/150+x.romance*0.1+x.trust/300));ok=rng.next()<odds;
+   if(ok){P.addMoney(-500);this.E.family.marry(npc);text=`${n.name}น้ำตาคลอแล้วตอบตกลง งานแต่งจัดขึ้นในเดือนนั้น`}else{this.change(npc,PLAYER,{aff:-8},'ปฏิเสธคำขอแต่งงาน');text=`${n.name}บอกว่ายังไม่พร้อม`}}
+  if(act==='apologize'){P.addMoney(-50);ok=rng.next()<0.35+p.stats.cha/200+(t.trust>0?0.1:0);this.change(npc,PLAYER,ok?{aff:25}:{aff:-3},ok?'ยอมคืนดี':'ไม่ยอมคืนดี');text=ok?`${n.name}ยอมจับมือคืนดี`:`${n.name}ยังไม่ยอมให้อภัย`}
+  this._m(s=>{s.e[key(npc,PLAYER)].last=this.E.loop.month});this.E.npcs.remember(npc,text,act);
+  this.E.events&&this.E.events.log(text);return{title:a.name+' · '+n.name,choice:a.name,success:ok,text,effects:[]}}
+ // ---- NPC กับ NPC ----
+ // เดือนละครั้งในโลกที่ผู้เล่นอยู่: คนที่อยู่ที่เดียวกันมีโอกาสรู้จักกัน · คู่ที่รู้จักแล้วความชอบเลื่อนตามเคมี · คนที่ไม่ได้พบผู้เล่นนานความคุ้นเคยลดลง
+ socialize(w,clk){const N=this.E.npcs,alive=N.all(w).filter(n=>n.alive),by={};for(const n of alive){const at=N.where(n,clk);if(at)(by[at]=by[at]||[]).push(n.id)}
+  const rng=this.E.rng,adds=[];for(const ids of Object.values(by))if(ids.length>1&&rng.next()<Math.min(0.6,ids.length*0.05)){const a=ids[rng.int(0,ids.length-1)],b=ids[rng.int(0,ids.length-1)];if(a!==b&&!this.edge(a,b))adds.push([a,b])}
+  const wset=new Set(alive.map(n=>n.id)),m=this.E.loop.month;
+  this._m(s=>{for(const[a,b]of adds){const c=this.chemistry(a,b);s.e[key(a,b)]=this.blank({aff:clamp(c*20),fam:5});s.e[key(b,a)]=this.blank({aff:clamp(c*20+rng.int(-10,10)),fam:5})}
+   for(const k of Object.keys(s.e)){const[a,b]=k.split('>'),x=s.e[k];if(!wset.has(a))continue;
+    if(b===PLAYER){if(x.last===null||m-x.last>3)x.fam=Math.max(0,x.fam-1)}
+    else if(wset.has(b)&&!x.bond&&x.fam>0){const c=this.chemistry(a,b);if(Math.abs(c)>0.2)x.aff=clamp(x.aff+Math.sign(c))}}})}
+ _died(id){if(this.edge(id,PLAYER))this._m(s=>{s.e[key(PLAYER,id)]&&s.e[key(PLAYER,id)].hist.unshift({m:this.E.loop.month,t:'จากไปแล้ว'})})}
+ // หลังโหลด: รับความสัมพันธ์เก่าจาก Player v1 และตัดคู่ที่อ้างตัวละครที่ไม่มีอยู่ (orphan)
+ _afterLoad(){const leg=this.E.player.legacyRelations;if(leg){for(const q of Object.keys(leg))if(this.E.npcs.exists(q)){this.ensure(q,PLAYER,{aff:leg[q],fam:Math.min(60,Math.abs(leg[q]))});this.ensure(PLAYER,q,{fam:Math.min(60,Math.abs(leg[q]))})}this.E.player.legacyRelations=null}
+  const e=this.E.state.get(OWNER).e,bad=Object.keys(e).filter(k=>{const[a,b]=k.split('>');const w=x=>x===PLAYER?null:x.split('.')[0];
+   return[a,b].some(x=>x!==PLAYER&&this.E.worlds.has(w(x))&&!this.E.npcs.exists(x))});
+  if(bad.length){this._m(s=>{for(const k of bad)delete s.e[k]});this.E.debug&&this.E.debug.log(`ตัดความสัมพันธ์ที่อ้าง NPC ไม่มีอยู่ ${bad.length} คู่`)}}
+}
+AW.systems.RelationSystem=RelationSystem;AW.systems.REL_TYPES=TYPES;AW.systems.REL_PLAYER=PLAYER;
+AW.systems.RelationsModule={id:'rels',deps:['npcs'],install(e){e.rels=new RelationSystem(e)}};
+})(globalThis.AW);
+
+// ==== src/systems/family.js ====
+// Family System: ครอบครัวของผู้เล่น สมาชิกทุกคนเป็น NPC ปกติในระบบ NPC (ไม่มีโค้ดพิเศษต่อคน)
+// สร้างพ่อแม่ (และพี่น้องตามโอกาส) ตอนสร้างตัวละคร จากภูมิหลังครอบครัวในข้อมูลโลก (config.familyBackgrounds)
+// แต่งงาน: ต้องมีใจให้กันและสนิทพอ ผ่านการขอแต่งงาน (Relations) หรือผลเหตุการณ์ 'marry' · มีลูก: ผ่านเหตุการณ์ที่มีเงื่อนไขเท่านั้น
+// lineage เก็บโครงสำหรับระบบสืบทอดรุ่น (Phase 6) · slice 'family' เจ้าของ 'family'
+(function(AW){
+'use strict';
+const OWNER='family',VERSION=1,ROLE_NAME={mother:'แม่',father:'พ่อ',older_sibling:'พี่',younger_sibling:'น้อง',spouse:'คู่ครอง',child:'ลูก'};
+class FamilySystem{
+ constructor(E){this.E=E;E.state.register(OWNER,OWNER,()=>({_v:VERSION,background:null,members:[],spouse:null,marriedAt:null,history:[],lineage:{id:null,generation:1,ancestors:[],children:[]}}));
+  E.bus.on('player:created',()=>this.create(),{prio:20,owner:OWNER});
+  // เซฟเก่า (ก่อน Phase 4) ไม่มีครอบครัว: สร้างให้ตอนโหลดโดยไม่แตะเงินของผู้เล่น
+  E.bus.on('game:loaded',()=>{const p=E.player.get();if(p.created&&p.alive&&!this.get().members.length)this.create({adjustMoney:false})},{prio:75,owner:OWNER});
+  E.bus.on('npc:died',({id,cause})=>{const m=this.get().members.find(x=>x.npc===id);if(m)this.note(`${ROLE_NAME[m.role]||m.role} ${(E.npcs.get(id)||{}).name} จากไป (${cause})`)},{prio:0,owner:OWNER})}
+ get(){return this.E.state.get(OWNER)}
+ _m(fn){return this.E.state.mutate(OWNER,OWNER,fn)}
+ roleName(r){return ROLE_NAME[r]||r}
+ note(t){const m=this.E.loop.month;this._m(s=>{s.history.unshift({m,t});if(s.history.length>40)s.history.length=40})}
+ roleOf(npc){const m=this.get().members.find(x=>x.npc===npc);return m?m.role:null}
+ members(role){return this.get().members.filter(m=>!role||m.role===role||(role==='sibling'&&/sibling/.test(m.role)))}
+ _add(npc,role){this._m(s=>{s.members.push({npc,role,since:this.E.loop.month})});this.E.rels.setBond(npc,'player',role==='spouse'?'spouse':'family')}
+ // สร้างครอบครัวตอนเริ่มชีวิต (seed เดียวกันได้ครอบครัวเดียวกัน)
+ create({adjustMoney=true}={}){const E=this.E,p=E.player.get(),w=p.location.world,c=E.worlds.ctx(w);if(this.get().members.length||!c||!c.config.namePool)return;
+  const r=new AW.core.Rng(E.state.get('meta').seed+'|family|'+w),bgs=c.config.familyBackgrounds||[{id:'ordinary',name:'ครอบครัวธรรมดา',weight:1}];
+  let tot=bgs.reduce((a,b)=>a+b.weight,0),x=r.next()*tot,bg=bgs[0];for(const b of bgs){x-=b.weight;if(x<0){bg=b;break}}
+  const me=p.age/12,surname=c.config.namePool.family[r.int(0,c.config.namePool.family.length-1)],home=([...c.list('housing').values()].find(h=>h.family)||{loc:c.def.entry}).loc,mk=(role,gender,age,o={})=>{
+   const n=E.npcs.generate(w,Object.assign({gender,age,surname,role:this.roleName(role),home,tags:['family']},o));this._add(n.id,role);
+   E.rels.change(n.id,'player',{aff:r.int(50,85),trust:30,fam:80});E.rels.change('player',n.id,{aff:60,fam:80});return n};
+  const mom=mk('mother','f',me+r.int(24,34),bg.motherJob?{occupation:bg.motherJob}:{}),dad=mk('father','m',me+r.int(26,36),Object.assign(bg.fatherJob?{occupation:bg.fatherJob}:{},bg.id==='retired_hunter'?{tags:['family','retired_hunter']}:{}));
+  E.rels.setBond(mom.id,dad.id,'spouse');E.rels.change(mom.id,dad.id,{aff:60,fam:90});E.rels.change(dad.id,mom.id,{aff:60,fam:90});
+  if(r.next()<0.6){const older=r.next()<0.5;mk(older?'older_sibling':'younger_sibling',r.next()<0.5?'m':'f',Math.max(1,me+(older?r.int(1,4):-r.int(1,4))))}
+  this._m(s=>{s.background=bg.id;s.lineage.id='lin_'+E.state.get('meta').seed+'_'+p.bornAt});if(adjustMoney&&bg.money!==undefined)E.player.addMoney(bg.money-p.money);
+  this.note(`เกิดใน${bg.name}`)}
+ background(){const b=this.get().background,c=this.E.worlds.ctx(this.E.player.get().location.world);return((c&&c.config.familyBackgrounds)||[]).find(x=>x.id===b)||null}
+ married(){const s=this.get().spouse;return!!(s&&(this.E.npcs.get(s)||{}).alive)}
+ // แต่งงาน: เงื่อนไขขั้นต่ำตรวจที่นี่เสมอ ไม่ว่าเรียกจากการกระทำหรือเหตุการณ์
+ canMarry(npc){const n=this.E.npcs.get(npc),p=this.E.player.get(),x=this.E.rels.edge(npc,'player');
+  if(!n||!n.alive)return'ไม่มีคนนี้';if(this.married())return'แต่งงานแล้ว';if(this.roleOf(npc))return'เป็นครอบครัว';if(p.age<18*12||this.E.npcs.ageY(npc)<18)return'อายุยังไม่ถึง';
+  if(!x||x.romance<1)return'ยังไม่มีใจให้กัน';if(x.aff<50)return'ยังไม่สนิทพอ';return''}
+ marry(npc){const why=this.canMarry(npc);if(why)throw new Error('แต่งงานไม่ได้: '+why);this._add(npc,'spouse');this._m(s=>{s.spouse=npc;s.marriedAt=this.E.loop.month});
+  this.E.npcs.remember(npc,'แต่งงานกับผู้เล่น','marry');this.note(`แต่งงานกับ${this.E.npcs.get(npc).name}`);this.E.bus.emit('family:married',{npc})}
+ children(){return this.members('child')}
+ canHaveChild(){const s=this.get();if(!this.married())return'ยังไม่ได้แต่งงาน';if(this.E.loop.month-s.marriedAt<10)return'เพิ่งแต่งงาน';
+  if(this.E.player.get().age/12>=50||this.E.npcs.ageY(s.spouse)>=50)return'อายุมากเกินไป';if(this.children().length>=6)return'ลูกเยอะพอแล้ว';return''}
+ haveChild(){const why=this.canHaveChild();if(why)throw new Error('มีลูกไม่ได้: '+why);const E=this.E,p=E.player.get(),sp=E.npcs.get(this.get().spouse),w=p.location.world,c=E.worlds.ctx(w);
+  const surname=(p.gender==='f'?sp:E.npcs.get((this.members('father')[0]||{}).npc)||sp).name.split(' ')[0];
+  const n=E.npcs.generate(w,{age:0,surname,role:'ลูก',home:(E.life&&E.life.get().home&&E.life.get().home.loc)||p.location.loc,tags:['family','child']});
+  this._add(n.id,'child');E.rels.change(n.id,'player',{aff:70,trust:40,fam:60});E.rels.change('player',n.id,{aff:80,fam:60});
+  this._m(s=>{s.lineage.children.push({npc:n.id,born:E.loop.month,parents:['player',s.spouse]})});this.note(`${n.name} ลืมตาดูโลก`);E.bus.emit('family:child',{npc:n.id});return n}
+}
+AW.systems.FamilySystem=FamilySystem;AW.systems.FAMILY_ROLE_NAME=ROLE_NAME;
+AW.systems.FamilyModule={id:'family',deps:['rels'],install(e){e.family=new FamilySystem(e)}};
+})(globalThis.AW);
+
+// ==== src/systems/health.js ====
+// Health System: สุขภาพ เจ็บป่วย รักษา ชราภาพ และความตาย ของผู้เล่น (NPC ใช้ฟังก์ชัน roll เดียวกัน)
+// slice 'health' เจ้าของ 'health': ill (โรคปัจจุบัน), lifeMod (ปรับอายุขัย), lives (ประวัติชีวิตที่จบแล้ว ห้ามลบ)
+// ผู้เล่นตาย: หยุดเวลา (loop reason 'dead') ปิดกิจกรรมทั้งหมด บันทึกประวัติชีวิต ไม่ลบข้อมูลใด ๆ · ยังไม่มีการเล่นต่อเป็นลูก (Phase 6)
+// การต่อสู้ยังไม่ทำให้ตาย (HP หมด = บาดเจ็บ 3 เดือน ตาม Phase 3)
+(function(AW){
+'use strict';
+const OWNER='health',VERSION=1,BASE_ILL=0.02;
+const ills=()=>(AW.data.shared&&AW.data.shared.illnesses)||[];
+// สุ่มสุขภาพ f เดือนรวดเดียว (NPC ในโลกที่ไม่ได้อยู่ใช้ f=12) · คืน {ill, die}
+function roll(s,rng,f=1){let ill=s.ill?Object.assign({},s.ill):null,die=null;const mod=s.lifeMod||0;
+ if(ill){const def=ills().find(x=>x.id===ill.id)||{};
+  // โรคร้ายที่ไม่รักษา: คนหนุ่มสาวรอดง่ายกว่ามาก (อายุ <40 x0.15, <60 x0.5)
+  const dp=0.06*(s.ageY<40?0.15:s.ageY<60?0.5:1);if(def.deadly&&!ill.treated&&rng.next()<1-Math.pow(1-dp,f))die=def.name||ill.id;
+  ill.months-=f;if(ill.months<=0)ill=null}
+ else{const p=BASE_ILL*(1+(100-(s.condition??100))/50)*(s.ageY>50?2:1),pf=1-Math.pow(1-p,f);
+  if(rng.next()<pf){const pool=ills().filter(x=>!x.minAge||s.ageY>=x.minAge),tot=pool.reduce((a,x)=>a+x.weight,0);let r=rng.next()*tot;
+   for(const x of pool){r-=x.weight;if(r<0){ill={id:x.id,months:x.months,severity:x.severity,treated:false};break}}}}
+ const old=s.ageY-mod;if(!die&&old>=62){const py=(old-58)/220;if(rng.next()<1-Math.pow(1-py/12,f))die='ชราภาพ'}
+ return{ill,die}}
+class HealthSystem{
+ constructor(E){this.E=E;E.state.register(OWNER,OWNER,()=>({_v:VERSION,ill:null,lifeMod:0,lives:[]}));
+  E.bus.on('month',()=>this._month(),{prio:35,owner:OWNER});
+  E.bus.on('game:loaded',()=>{if(E.player.get().created&&!E.player.get().alive)E.loop.pause('dead')},{prio:0,owner:OWNER});
+  E.bus.on('game:new',()=>E.loop.resume('dead'),{prio:0,owner:OWNER})}
+ get(){return this.E.state.get(OWNER)}
+ _m(fn){return this.E.state.mutate(OWNER,OWNER,fn)}
+ illDef(id){return ills().find(x=>x.id===id)||null}
+ // สภาพร่างกาย 0-100: ลดลงหลังอายุ 40 ปี (ปีละ 1.5) ปรับด้วย lifeMod และการบาดเจ็บ
+ condition(){const p=this.E.player.get(),a=p.age/12,h=this.get();return Math.max(10,Math.min(100,Math.round(100-Math.max(0,a-40)*1.5+h.lifeMod*3-p.injury*10)))}
+ severity(){const i=this.get().ill;return i?i.severity:0}
+ // ผลต่อกิจกรรม: ป่วยระดับ 2 ขึ้นไป AP ลด 1 และรับภารกิจไม่ได้ · พลังต่อสู้ลด 10% ต่อระดับ
+ powerFactor(){return 1-0.1*this.severity()}
+ makeIll(id){const d=this.illDef(id);if(!d)throw new Error('ไม่มีโรค '+id);this._m(s=>{s.ill={id,months:d.months,severity:d.severity,treated:false}});this.E.bus.emit('health:ill',{id})}
+ treat(){if(!this.get().ill)return false;this._m(s=>{s.ill.treated=true;s.ill.months=Math.ceil(s.ill.months/2)});return true}
+ addLifeMod(n){this._m(s=>{s.lifeMod+=n})}
+ _month(){const P=this.E.player,p=P.get();if(!p.created||!p.alive)return;
+  const r=roll({ageY:p.age/12,ill:this.get().ill,condition:this.condition(),lifeMod:this.get().lifeMod},this.E.rng,1),was=this.get().ill;
+  this._m(s=>{s.ill=r.ill});if(r.ill&&!was){this.E.events&&this.E.events.log(`ล้มป่วยเป็น${this.illDef(r.ill.id).name}`)}else if(was&&!r.ill&&!r.die)this.E.events&&this.E.events.log(`หายจาก${this.illDef(was.id).name}แล้ว`);
+  if(r.die)return this.die(r.die);if(this.severity()>=2&&P.get().ap>0)P.spendAp(1)}
+ // ผู้เล่นเสียชีวิต: บันทึกประวัติชีวิตแบบครบ แล้วหยุดทุกอย่าง (เซฟ/โหลดได้ตามปกติ)
+ die(cause){const P=this.E.player;if(!P.get().alive)return null;P.die(cause);const rec=this.record();this._m(s=>{s.lives.push(rec)});
+  if(this.E.events&&this.E.events.get().pending)this.E.events._m(s=>{s.pending=null});this.E.loop.resume('event');this.E.loop.pause('dead');
+  this.E.events&&this.E.events.log(`${rec.name} เสียชีวิตเมื่ออายุ ${rec.ageY} ปี (${cause})`);this.E.bus.emit('player:died',rec);return rec}
+ // ประวัติชีวิต: สำหรับแสดงผลและให้ระบบสืบทอดใน Phase 6 ใช้ต่อ
+ record(){const E=this.E,p=E.player.get(),fam=E.family?E.family.get():null,life=E.life?E.life.get():null,R=E.rels;
+  const people=R?R.list('player',{dir:'in'}).sort((a,b)=>b.aff-a.aff).slice(0,8).map(x=>({id:x.from,name:(E.npcs.get(x.from)||{}).name||x.from,type:R.type(x.from,'player'),aff:x.aff})):[];
+  return{id:'life_'+(this.get().lives.length+1),name:p.name,gender:p.gender,world:p.location.world,bornGlobal:p.bornAt,diedGlobal:E.loop.month,ageY:Math.floor(p.age/12),cause:p.death&&p.death.cause,
+   level:p.level,class:p.class,ranks:Object.assign({},p.ranks),karma:p.karma,traits:Object.assign({},p.traits),reputation:p.reputation,
+   assets:{money:p.money,items:Object.assign({},p.inventory),equipment:Object.assign({},p.equipment),home:life&&life.home},job:life&&life.job,
+   family:fam?{background:fam.background,spouse:fam.spouse,members:fam.members.map(m=>({npc:m.npc,role:m.role,name:(E.npcs.get(m.npc)||{}).name,alive:(E.npcs.get(m.npc)||{}).alive})),lineage:fam.lineage}:null,
+   people,flags:Object.assign({},p.flags)}}
+}
+AW.systems.HealthSystem=HealthSystem;AW.systems.Health={roll};
+AW.systems.HealthModule={id:'health',deps:['player'],install(e){e.health=new HealthSystem(e)}};
+})(globalThis.AW);
+
+// ==== src/systems/life.js ====
+// Life System: ที่อยู่อาศัย งาน รายได้ ค่าใช้จ่าย สถานะทางสังคม (แนวคิดจาก life9/life5 เขียนใหม่เป็นโมดูลแยก)
+// ข้อมูลบ้านและงานอยู่ในข้อมูลโลก (data.housing, data.jobs) งานไม่จำกัดแค่ฮันเตอร์ ตื่นพลังแล้วก็ทำงานธรรมดาได้
+// ทุกเดือน: ทำงาน (ใช้ AP ตามงาน) ได้เงินเดือน หักค่าเช่า/ค่าดูแล/ค่าครองชีพ
+// เงินไม่พอ: จ่ายเท่าที่มี ส่วนที่ขาดเป็นหนี้ค้าง (arrears) ห้ามเงินติดลบ · ค้างเกิน 3 เดือนของค่าเช่าถูกให้ออกจากบ้านเช่า กลับบ้านครอบครัว
+// slice 'life' เจ้าของ 'life' · ดู docs/phase4/LIFE_SYSTEM_DESIGN.md
+(function(AW){
+'use strict';
+const OWNER='life',VERSION=1,R=()=>AW.systems.Rules;
+const STATUS=[[0,'ชนชั้นล่าง'],[30,'ชนชั้นกลาง'],[70,'ชนชั้นกลางค่อนบน'],[120,'ชนชั้นสูง']];
+function validateLife(def){const d=def.data||{},e=[],locs=new Set((d.locations||[]).map(l=>l.id));
+ for(const h of d.housing||[]){const p='housing '+h.id+': ';if(!locs.has(h.loc))e.push(p+'ไม่มีสถานที่ '+h.loc);for(const k of['rent','price','upkeep','comfort'])if(h[k]!==undefined&&!(Number.isInteger(h[k])&&h[k]>=0))e.push(p+k+' ต้องเป็นจำนวนเต็ม >= 0');
+  if(h.rent===undefined&&h.price===undefined&&!h.family&&!h.shelter)e.push(p+'ต้องมี rent หรือ price');e.push(...R().validateCond(h.when).map(x=>p+x))}
+ for(const j of d.jobs||[]){const p='job '+j.id+': ';if(!locs.has(j.at))e.push(p+'ไม่มีสถานที่ '+j.at);if(!(Number.isInteger(j.salary)&&j.salary>=0))e.push(p+'salary ต้องเป็นจำนวนเต็ม >= 0');
+  if(j.ap!==undefined&&![0,1,2].includes(j.ap))e.push(p+'ap ต้องเป็น 0-2');e.push(...R().validateCond(j.when).map(x=>p+x),...R().validateEffects(j.monthly).map(x=>p+'monthly: '+x))}
+ return e}
+class LifeSystem{
+ constructor(E){this.E=E;E.state.register(OWNER,OWNER,()=>({_v:VERSION,home:null,job:null,arrears:0,ledger:[],worked:0}));E.worlds.addValidator(validateLife);
+  E.bus.on('player:created',()=>this._start(),{prio:15,owner:OWNER});
+  E.bus.on('month',()=>this._month(),{prio:30,owner:OWNER});
+  E.bus.on('game:loaded',()=>this._afterLoad(),{prio:70,owner:OWNER})}
+ get(){return this.E.state.get(OWNER)}
+ _m(fn){return this.E.state.mutate(OWNER,OWNER,fn)}
+ _ctx(w){return this.E.worlds.ctx(w||this.E.player.get().location.world)}
+ house(h=this.get().home){if(!h)return null;const c=this._ctx(h.world);return c?c.list('housing').get(h.id)||null:null}
+ jobDef(j=this.get().job){if(!j)return null;const c=this._ctx(j.world);return c?c.list('jobs').get(j.id)||null:null}
+ _familyHome(w){const c=this._ctx(w);return c?[...c.list('housing').values()].find(h=>h.family)||null:null}
+ _start(){const w=this.E.player.get().location.world,h=this._familyHome(w);if(h&&!this.get().home)this._m(s=>{s.home={world:w,id:h.id,loc:h.loc,mode:'family'}})}
+ // ---- งาน ----
+ jobsHere(){const p=this.E.player.get(),c=this._ctx();if(!c||!p.alive)return[];const v=this.E.view(c.id),cur=this.get().job;
+  return[...c.list('jobs').values()].filter(j=>j.at===p.location.loc&&!j.npcOnly).map(j=>({id:j.id,name:j.name,salary:j.salary,ap:j.ap??1,current:!!(cur&&cur.id===j.id&&cur.world===c.id),ok:R().check(j.when,v)}))}
+ takeJob(id,{force=false}={}){const c=this._ctx(),j=c&&c.list('jobs').get(id);if(!j)throw new Error('ไม่มีงาน '+id);if(!force&&!R().check(j.when,this.E.view(c.id)))throw new Error('ยังไม่ผ่านเงื่อนไขของงานนี้');
+  this._m(s=>{s.job={world:c.id,id,since:this.E.loop.month}});this.E.events&&this.E.events.log(`เริ่มงาน${j.name}`)}
+ quitJob(){const j=this.jobDef();if(!j)return false;this._m(s=>{s.job=null});this.E.events&&this.E.events.log(`ลาออกจากงาน${j.name}`);return true}
+ // ---- บ้าน ----
+ housingHere(){const p=this.E.player.get(),c=this._ctx();if(!c||!p.alive)return[];const v=this.E.view(c.id),cur=this.get().home;
+  return[...c.list('housing').values()].filter(h=>h.agent===p.location.loc||h.loc===p.location.loc).map(h=>({id:h.id,name:h.name,rent:h.rent,price:h.price,comfort:h.comfort||0,current:!!(cur&&cur.id===h.id),ok:R().check(h.when,v)}))}
+ moveIn(id,mode){const c=this._ctx(),h=c&&c.list('housing').get(id);if(!h)throw new Error('ไม่มีที่พัก '+id);if(!R().check(h.when,this.E.view(c.id)))throw new Error('ยังไม่ผ่านเงื่อนไข');
+  const P=this.E.player;if(mode==='own'){if(h.price===undefined)throw new Error('ที่นี่ไม่ขาย');P.addMoney(-h.price)}
+  else if(mode==='rent'){if(h.rent===undefined)throw new Error('ที่นี่ไม่ให้เช่า');P.addMoney(-h.rent)}
+  else if(!(mode==='family'&&h.family)&&!(mode==='shelter'&&h.shelter))throw new Error('รูปแบบไม่ถูกต้อง');
+  this._m(s=>{s.home={world:c.id,id,loc:h.loc,mode};if(mode!=='rent')s.arrears=0});this.E.events&&this.E.events.log(`ย้ายไปอยู่${h.name}`)}
+ // ---- รายเดือน ----
+ // ค่าครองชีพ: อยู่บ้านครอบครัวไม่เสีย · อื่น ๆ ตาม config.livingCost ของโลก
+ dues(){const s=this.get(),h=this.house(),c=this._ctx(s.home&&s.home.world),lc=(c&&c.config.livingCost)||0;if(!h)return{rent:0,upkeep:0,living:0};
+  return{rent:s.home.mode==='rent'?h.rent||0:0,upkeep:s.home.mode==='own'?h.upkeep||0:0,living:s.home.mode==='family'||s.home.mode==='shelter'?0:lc}}
+ _month(){const P=this.E.player,p=P.get();if(!p.created||!p.alive)return;const s=this.get(),j=this.jobDef(),m=this.E.loop.month;let income=0,note=[];
+  if(j&&s.job.world===p.location.world){const ill=this.E.health?this.E.health.severity():0,cal=(this._ctx(s.job.world).config.calendar||{}),off=(cal.holidayMonths||[]).includes(this.E.time.month(s.job.world)%12);
+   const ap=off?0:(j.ap??1);if(p.injury>=2||ill>=2){note.push('ลาป่วย ไม่ได้เงินเดือน')}else if(p.ap<ap){note.push('แรงไม่พอไปทำงาน')}else{if(ap)P.spendAp(ap);income=j.salary;P.addMoney(income);
+    if(j.monthly)R().apply(j.monthly,this.E.view(s.job.world));note.push(off?'วันหยุดยาว ได้เงินเดือนตามปกติ':'ทำงาน '+j.name)}}
+  const d=this.dues(),due=d.rent+d.upkeep+d.living+s.arrears,pay=Math.min(due,P.get().money);if(pay)P.addMoney(-pay);const left=due-pay;
+  this._m(x=>{x.arrears=left;x.ledger.unshift({m,income,expense:pay,owed:left,note:note.join(', ')});if(x.ledger.length>12)x.ledger.length=12});
+  if(left>0&&d.rent&&left>d.rent*3)this._evict()}
+ _evict(){const s=this.get(),w=s.home.world,h=this._familyHome(w),parents=this.E.family?this.E.family.members().filter(m=>/mother|father/.test(m.role)&&(this.E.npcs.get(m.npc)||{}).alive):[];
+  const c=this._ctx(w),shelter=[...c.list('housing').values()].find(x=>x.shelter);const to=parents.length&&h?{id:h.id,loc:h.loc,mode:'family'}:shelter?{id:shelter.id,loc:shelter.loc,mode:'shelter'}:null;
+  this._m(x=>{x.home=to?Object.assign({world:w},to):null;x.arrears=0});this.E.events&&this.E.events.log('ค้างค่าเช่านานเกินไป ถูกให้ออกจากที่พัก'+(to?` ย้ายไป${(c.list('housing').get(to.id)||{}).name}`:''));this.E.bus.emit('life:evicted',{})}
+ // สถานะทางสังคม: งาน + บ้าน + ชื่อเสียง + แรงก์ (ทุกแรงก์ระบบที่ผู้เล่นมี)
+ statusScore(){const p=this.E.player.get(),j=this.jobDef(),h=this.house(),s=this.get();let r=0;for(const k of Object.keys(p.ranks)){try{r+=this.E.ranks.index(k,p.ranks[k])*10}catch(e){}}
+  return Math.max(0,Math.round((j&&j.status||0)+(h&&h.comfort||0)*(s.home&&s.home.mode==='own'?2:1)+p.reputation/5+r))}
+ status(){const v=this.statusScore();let n=STATUS[0][1];for(const[t,name]of STATUS)if(v>=t)n=name;return n}
+ _afterLoad(){const p=this.E.player.get();if(p.created&&!this.get().home)this._start()}
+}
+AW.systems.LifeSystem=LifeSystem;AW.systems.validateLife=validateLife;
+AW.systems.LifeModule={id:'life',deps:['player'],install(e){e.life=new LifeSystem(e)}};
+})(globalThis.AW);
+
+// ==== src/systems/gates.js ====
+// Gate Progression: การเข้าถึง Gate แบบเกมเพลย์ (แยกจาก Debug ซึ่งเรียก worlds.travelVia ตรง ๆ)
+// สถานะ gate: hidden (ยังไม่ค้นพบ) -> known (ค้นพบแล้ว แต่ยังไม่เปิด) -> open (เดินทางได้)
+// ข้อมูลใน data.gates: discover (เงื่อนไขค้นพบอัตโนมัติ), openBy:'event' (ต้องเปิดด้วยผล gateOpen), travel (เงื่อนไขเดินทาง), cost (ผลที่หักตอนเดินทาง)
+// gate ที่ไม่มี discover/openBy ถือว่าเปิดอยู่แล้ว (เข้ากันได้กับโลกเดิม) · slice 'gates' เจ้าของ 'gates'
+(function(AW){
+'use strict';
+const OWNER='gates',VERSION=1,R=()=>AW.systems.Rules;
+function validateGates(def){const e=[];for(const g of(def.data||{}).gates||[]){const p='gate '+g.id+': ';e.push(...R().validateCond(g.discover).map(x=>p+'discover: '+x),...R().validateCond(g.travel).map(x=>p+'travel: '+x),...R().validateEffects(g.cost).map(x=>p+'cost: '+x));
+ if(g.openBy!==undefined&&g.openBy!=='event')e.push(p+"openBy ต้องเป็น 'event'")}return e}
+class GateSystem{
+ constructor(E){this.E=E;E.state.register(OWNER,OWNER,()=>({_v:VERSION,known:{},open:{}}));E.worlds.addValidator(validateGates);
+  E.bus.on('month:after',()=>this._discover(),{prio:5,owner:OWNER});E.bus.on('player:moved',()=>this._discover(),{prio:5,owner:OWNER})}
+ get(){return this.E.state.get(OWNER)}
+ _m(fn){return this.E.state.mutate(OWNER,OWNER,fn)}
+ def(q){const[w,id]=q.split('.'),c=this.E.worlds.ctx(w);return c?c.list('gates').get(id)||null:null}
+ status(q){const g=this.def(q);if(!g)return null;const s=this.get();if(s.open[q]||(!g.discover&&!g.openBy))return'open';if(s.known[q]||!g.discover)return g.openBy?'known':'open';return'hidden'}
+ discover(q){if(!this.def(q))throw new Error('ไม่มี gate '+q);if(this.get().known[q])return false;this._m(s=>{s.known[q]=true});this.E.events&&this.E.events.log('ค้นพบ '+this.def(q).name);this.E.bus.emit('gate:discovered',{id:q});return true}
+ open(q){if(!this.def(q))throw new Error('ไม่มี gate '+q);this._m(s=>{s.known[q]=true;s.open[q]=true});this.E.bus.emit('gate:opened',{id:q})}
+ _discover(){const p=this.E.player.get(),w=p.location.world,c=w&&this.E.worlds.ctx(w);if(!c||!p.created||!p.alive)return;const v=this.E.view(w);
+  for(const g of c.list('gates').values()){const q=w+'.'+g.id;if(g.discover&&!this.get().known[q]&&R().check(g.discover,v))this.discover(q)}}
+ // รายการสำหรับ UI: gate ที่ค้นพบแล้วในโลกปัจจุบัน พร้อมเหตุผลถ้ายังไปไม่ได้
+ list(){const p=this.E.player.get(),w=p.location.world,c=w&&this.E.worlds.ctx(w);if(!c)return[];const v=this.E.view(w);
+  return[...c.list('gates').values()].map(g=>{const q=w+'.'+g.id,st=this.status(q);if(st==='hidden')return null;
+   const why=!p.alive?'เสียชีวิตแล้ว':st!=='open'?'ยังไม่เปิด':!R().check(g.travel,v)?(g.travelText||'ยังไม่ผ่านเงื่อนไข'):!R().affordable(g.cost,v)?'ค่าใช้จ่ายไม่พอ':this.E.events&&this.E.events.get().pending?'มีเหตุการณ์ค้าง':'';
+   return{id:q,name:g.name,to:g.to,months:g.months||0,status:st,why}}).filter(Boolean)}
+ travel(q){const g=this.def(q),a=this.list().find(x=>x.id===q);if(!g||!a)throw new Error('ไม่มี gate นี้ในที่ที่อยู่');if(a.why)throw new Error(a.why);
+  const w=q.split('.')[0];if(g.cost)R().apply(g.cost,this.E.view(w));return this.E.worlds.travelVia(g.id)}
+}
+AW.systems.GateSystem=GateSystem;AW.systems.validateGates=validateGates;
+AW.systems.GatesModule={id:'gates',deps:['events'],install(e){e.gates=new GateSystem(e)}};
 })(globalThis.AW);
 
 // ==== data/assets/manifest.js ====
@@ -775,6 +1246,38 @@ AW.data.assetCandidates=[
  {for:'fantasy.mon.*',file:'a/m/*',source:'CraftPix.net',license:'craftpix-free'},
  {for:'fantasy.mon.general_*',file:'a/m2/rat|frost|necro|demonlord.png',source:'ไม่ทราบ',license:null},
 ];
+})(globalThis.AW);
+
+// ==== data/shared/people.js ====
+// ข้อมูลกลางเรื่องคน ใช้ได้ทุกโลก (ข้อมูลล้วน)
+// tempers: นิสัยหลักของ NPC จากเกมเดิม rel12.js:2-7 (TEMPERS) ตัวคูณมีผลจริงกับการคุย ของขวัญ ความไว้ใจ ความนับถือ
+// traits: แกนนิสัยของผู้เล่นและ NPC จาก logic4.js:10 (TRAITS) ค่า -100..100 (ลบ=ซ้าย บวก=ขวา)
+// illnesses: โรคทั่วไป (ใหม่) severity 1-3 · deadly=อาจเสียชีวิตถ้าไม่รักษา
+(function(AW){
+AW.data.shared=AW.data.shared||{};
+AW.data.shared.tempers=[
+ {id:'kind',name:'ใจดี',desc:'ใจอ่อน ช่วยคนอื่นก่อนตัวเอง ชอบคนที่ทำดี',talk:1,karmaLike:1},
+ {id:'proud',name:'หยิ่ง',desc:'ถือตัว นับถือคนที่เก่งกว่าเท่านั้น',talk:-1,resp:1,first:-5},
+ {id:'greedy',name:'โลภ',desc:'ชอบของมีค่า ของขวัญได้ผลดีเป็นพิเศษ',gift:1.5,karmaLike:-0.5},
+ {id:'honest',name:'ซื่อสัตย์',desc:'รักษาคำพูด ไว้ใจคนช้าแต่ไม่เปลี่ยนใจ',trust:1,karmaLike:0.5},
+ {id:'sly',name:'เจ้าเล่ห์',desc:'พูดเก่ง แต่ไว้ใจยาก',trust:-1},
+ {id:'cold',name:'เย็นชา',desc:'พูดน้อย เปิดใจยาก',talk:-1,first:-3},
+ {id:'cheerful',name:'ร่าเริง',desc:'คุยสนุก สนิทเร็ว',talk:1,first:3},
+ {id:'ambitious',name:'ทะเยอทะยาน',desc:'อยากก้าวหน้า ชอบคนที่มีอนาคต',resp:1},
+ {id:'shy',name:'ขี้อาย',desc:'เขินง่าย คุยนาน ๆ จะค่อยเปิดใจ',first:-2},
+ {id:'hothead',name:'ใจร้อน',desc:'โกรธง่ายหายเร็ว',first:-2,karmaLike:-0.5}];
+// คู่ที่เข้ากันดี/ไม่ดี จาก rel12.js:8-9 (เปลี่ยนจากเลขลำดับเป็น id)
+AW.data.shared.temperPairs={good:[['kind','shy'],['cheerful','shy'],['honest','kind'],['cheerful','cold'],['proud','sly'],['ambitious','honest'],['cheerful','cheerful'],['honest','honest'],['kind','kind']],
+ bad:[['greedy','kind'],['hothead','shy'],['sly','honest'],['proud','proud'],['hothead','hothead'],['greedy','greedy']]};
+AW.data.shared.traits=[
+ {id:'brave',low:'ขี้ขลาด',high:'กล้าหาญ'},{id:'kind',low:'โหดร้าย',high:'ใจดี'},
+ {id:'dili',low:'ขี้เกียจ',high:'ขยัน'},{id:'loyal',low:'เห็นแก่ตัว',high:'ซื่อสัตย์'}];
+AW.data.shared.illnesses=[
+ {id:'cold',name:'ไข้หวัด',months:1,severity:1,weight:6},
+ {id:'flu',name:'ไข้หวัดใหญ่',months:2,severity:2,weight:3},
+ {id:'pneumonia',name:'ปอดอักเสบ',months:3,severity:3,deadly:true,weight:1},
+ {id:'back_pain',name:'ปวดหลังเรื้อรัง',months:4,severity:1,minAge:35,weight:2},
+ {id:'heart',name:'โรคหัวใจ',months:6,severity:3,deadly:true,minAge:50,weight:1}];
 })(globalThis.AW);
 
 // ==== data/worlds/index.js ====
@@ -830,17 +1333,71 @@ H.enemies=[
  {id:'exam_d',name:'หุ่นประเมินของสมาคม (เกณฑ์ D)',power:115,asset:'mon.golem',src:'new'},
  {id:'skel_a',name:'โครงกระดูกนักธนู',power:210,src:'logic4.js:40'},
  {id:'wolf_b',name:'มนุษย์หมาป่าดำ',power:230,asset:'mon.dire_wolf',src:'logic4.js:40'},
- {id:'exam_c',name:'หุ่นประเมินของสมาคม (เกณฑ์ C)',power:225,asset:'mon.golem',src:'new'}];
-H.npcs=[
- {id:'best_friend',name:'ฮาจุน',role:'เพื่อนสนิทตั้งแต่ ม.1',src:'new (แทนเพื่อนสนิทที่เกมเดิมสุ่มสร้าง logic4.js:89)'},
- {id:'clerk_yoon',name:'ยุนแชอา',role:'เจ้าหน้าที่สมาคม',at:'association',src:'new'},
- {id:'master_kang',name:'ครูฝึกคัง',role:'ครูฝึกที่ศูนย์ฝึก',at:'gym',src:'new'}];
+ {id:'exam_c',name:'หุ่นประเมินของสมาคม (เกณฑ์ C)',power:225,asset:'mon.golem',src:'new'},
+ // อิงแรงก์ผู้เล่น (แทน GATE_DIFF[P.rank] ในเหตุการณ์เดิม) _ = ยังไม่มีแรงก์
+ {id:'gate_threat',name:'สัตว์อสูรในเกต',power:60,powerByRank:{_:40,E:60,D:120,C:220,B:400,A:680,S:1100},asset:'mon.goblin',src:'logic4.js:3 (GATE_DIFF)'},
+ {id:'gate_boss',name:'บอสของเกต',power:80,powerByRank:{_:60,E:80,D:160,C:290,B:520,A:880,S:1400},asset:'mon.gate_boss',src:'logic4.js:3,387'},
+ {id:'street_thugs',name:'อันธพาลนอกกฎหมาย',power:50,powerByRank:{_:30,E:50,D:100,C:180,B:330,A:560,S:900},src:'logic4.js:262 (foe thug)'},
+ {id:'sparring_rival',name:'คู่ซ้อมฝีมือดี',power:70,powerByRank:{_:40,E:70,D:140,C:260,B:470,A:800,S:1300},src:'events2.js:135 (foe rival)'}];
+// NPC ย้ายไป people.js (Phase 4)
 // เกณฑ์แรงก์ (ใหม่): ไม่มีทางเลื่อนด้วยเวลาอย่างเดียว ต้องมีเลเวล ค่าสถานะ จำนวนภารกิจ และผ่านภารกิจสอบ
 H.rankSystem={id:'hunter',name:'แรงก์ฮันเตอร์',order:['E','D','C','B','A','S'],
  initial:[{rank:'D',when:{all:[{statTotal:{min:150}},{mana:{min:25}}]}},{rank:'E'}],
  promote:{
   D:{when:{all:[{level:{min:6}},{statTotal:{min:140}},{missions:{tag:'rank_e',min:4}}]}},
   C:{when:{all:[{level:{min:11}},{statTotal:{min:190}},{missions:{tag:'rank_d',min:6}}]}}}};
+})(globalThis.AW);
+
+// ==== data/worlds/hunter/people.js ====
+// Hunter World: คน ตาราง งาน ที่พัก ภูมิหลังครอบครัว (Phase 4) ข้อมูลล้วน
+// ฮาจุนเป็น NPC ธรรมดาในระบบ ไม่มีโค้ดพิเศษ · flagChance.hunter = โอกาสตื่นพลัง (คงที่ตาม seed เกม)
+(function(AW){
+const H=(AW.data.parts=AW.data.parts||{}).hunter=AW.data.parts.hunter||{};
+H.schedules=[
+ {id:'student',entries:[{slot:'morning',days:'work',at:'school'},{slot:'day',days:'work',at:'school'},{slot:'evening',at:'city',chance:0.4},{slot:'evening',at:'home'},{slot:'morning',days:'off',at:'home'},{slot:'day',days:'off',at:'city'},{slot:'night',at:'home'}],src:'new'},
+ {id:'worker',entries:[{slot:'morning',days:'work',at:'work'},{slot:'day',days:'work',at:'work'},{slot:'evening',at:'city',chance:0.3},{slot:'evening',at:'home'},{slot:'morning',days:'off',at:'home'},{slot:'day',days:'off',at:'city',chance:0.5},{slot:'night',at:'home'}],src:'new'},
+ {id:'shift',entries:[{slot:'day',at:'work'},{slot:'evening',at:'work'},{slot:'morning',at:'home'},{slot:'night',at:'home'}],src:'new'},
+ {id:'hunter_npc',entries:[{slot:'morning',at:'association'},{slot:'day',at:'gate_zone',chance:0.5},{slot:'day',at:'association'},{slot:'evening',at:'city',chance:0.5},{slot:'evening',at:'home'},{slot:'night',at:'home'}],src:'new'},
+ {id:'homebody',entries:[{slot:'morning',at:'home'},{slot:'day',at:'home'},{slot:'evening',at:'home'},{slot:'night',at:'home'}],src:'new'}];
+// งาน: npcOnly = อาชีพของ NPC ที่ผู้เล่นสมัครไม่ได้ · monthly = ผลรายเดือนจากงาน (การเติบโตแบบ PATHS เดิม)
+H.jobs=[
+ {id:'conv_store',name:'พนักงานร้านสะดวกซื้อ',at:'city',salary:60,ap:1,status:5,schedule:'shift',when:{age:{min:15}},monthly:[{stat:{agi:1}}],src:'logic4.js:15,201 (ทำงานพิเศษ/กะดึกร้านสะดวกซื้อ)'},
+ {id:'ramen',name:'ลูกจ้างร้านราเมงหน้าสถานี',at:'city',salary:70,ap:1,status:5,schedule:'shift',when:{age:{min:15}},src:'events2.js:21'},
+ {id:'gym_assist',name:'ผู้ช่วยครูฝึก',at:'gym',salary:90,ap:1,status:10,schedule:'worker',when:{stat:{str:{min:20}}},monthly:[{stat:{str:1}}],src:'new'},
+ {id:'hospital_aide',name:'ผู้ช่วยพยาบาล',at:'hospital',salary:100,ap:1,status:15,schedule:'worker',when:{age:{min:18}},monthly:[{stat:{vit:1}}],src:'new'},
+ {id:'office',name:'พนักงานบริษัท',at:'city',salary:180,ap:2,status:30,schedule:'worker',when:{all:[{age:{min:18}},{stat:{int:{min:25}}}]},src:'new'},
+ {id:'assoc_clerk',name:'เจ้าหน้าที่สมาคม',at:'association',salary:140,ap:1,status:30,schedule:'worker',when:{all:[{age:{min:18}},{stat:{int:{min:30}}}]},src:'new'},
+ {id:'guild_contract',name:'ฮันเตอร์สัญญากิลด์',at:'association',salary:300,ap:1,status:45,schedule:'hunter_npc',when:{all:[{rank:{min:'D'}},{any:[{worldFlag:'guild_ironfang'},{worldFlag:'guild_northstar'},{worldFlag:'guild_silverdragon'}]}]},monthly:[{exp:40}],src:'new'},
+ {id:'teacher',name:'ครู',at:'school',salary:150,npcOnly:true,status:30,schedule:'worker',src:'new'},
+ {id:'shopkeeper',name:'เจ้าของร้าน',at:'market',salary:200,npcOnly:true,status:25,schedule:'worker',src:'new'},
+ {id:'doctor',name:'หมอฮันเตอร์',at:'hospital',salary:400,npcOnly:true,status:60,schedule:'worker',src:'new'},
+ {id:'trainer',name:'ครูฝึก',at:'gym',salary:200,npcOnly:true,status:20,schedule:'worker',src:'new'},
+ {id:'npc_hunter',name:'ฮันเตอร์',at:'association',salary:250,npcOnly:true,status:40,schedule:'hunter_npc',src:'new'},
+ {id:'student',name:'นักเรียน',at:'school',salary:0,npcOnly:true,status:0,schedule:'student',src:'new'}];
+// ที่พัก: agent = ที่ที่ไปติดต่อ · family = บ้านครอบครัว (ไม่เสียค่าใช้จ่าย) · shelter = ที่พักพิงเมื่อไม่มีที่ไป
+H.housing=[
+ {id:'family_home',name:'บ้านพ่อแม่',loc:'home',family:true,comfort:5,src:'logic4.js:20'},
+ {id:'shelter',name:'ห้องพักพิงของเขต',loc:'home',shelter:true,comfort:0,src:'new'},
+ {id:'one_room',name:'ห้องเช่าเล็กย่านเก่า',loc:'home',agent:'city',rent:60,comfort:5,when:{age:{min:18}},src:'new'},
+ {id:'apartment',name:'อพาร์ตเมนต์ใกล้สถานี',loc:'home',agent:'city',rent:150,comfort:15,when:{age:{min:18}},src:'new'},
+ {id:'hunter_dorm',name:'หอพักฮันเตอร์ของสมาคม',loc:'home',agent:'association',rent:80,comfort:10,when:{worldFlag:'registered'},src:'new'},
+ {id:'house',name:'บ้านเดี่ยวชานเมือง',loc:'home',agent:'city',price:20000,upkeep:40,comfort:35,when:{age:{min:20}},src:'new'}];
+// ภูมิหลังครอบครัว จาก logic4.js:85-86 (เงินเริ่มต้นตามเดิม: ยากจน 40, พ่อค้า 600)
+H.familyBackgrounds=[
+ {id:'middle',name:'ครอบครัวชนชั้นกลาง',weight:4,motherJob:'teacher',src:'logic4.js:85'},
+ {id:'poor',name:'ครอบครัวยากจน',weight:2,money:40,src:'logic4.js:85-86'},
+ {id:'merchant',name:'ครอบครัวพ่อค้า',weight:2,money:600,fatherJob:'shopkeeper',src:'logic4.js:85-86'},
+ {id:'retired_hunter',name:'ครอบครัวฮันเตอร์เกษียณ',weight:1,src:'logic4.js:85'}];
+H.namePool={family:['คิม','อี','พัก','ชเว','จอง','คัง','โจ','ยุน','ฮัน','ซอ'],m:['มินจุน','ซอจุน','โดฮยอน','ฮยอนอู','จีโฮ','ยองฮุน','แทยัง','จุนโฮ'],f:['ซออา','ฮาอึน','จียู','มินซอ','ยูนา','ซูอา','ดาอึน','เยริน']};
+H.npcs=[
+ {id:'best_friend',name:'ฮาจุน',gender:'m',age:15,role:'เพื่อนสนิทตั้งแต่ ม.1',temper:'cheerful',traits:{brave:20,kind:30,loyal:40},home:'city',occupation:'student',schedule:'student',flagChance:{hunter:0.5},tags:['bf'],src:'new (แทนเพื่อนสนิทที่เกมเดิมสุ่มสร้าง logic4.js:89)'},
+ {id:'clerk_yoon',name:'ยุนแชอา',gender:'f',age:26,role:'เจ้าหน้าที่สมาคม',temper:'honest',traits:{kind:20,dili:40},home:'city',occupation:'assoc_clerk',work:'association',src:'new'},
+ {id:'master_kang',name:'ครูฝึกคัง',gender:'m',age:48,role:'ครูฝึกที่ศูนย์ฝึก',temper:'proud',traits:{brave:40,dili:50},home:'city',occupation:'trainer',work:'gym',tags:['retired_hunter'],src:'new'},
+ {id:'teacher_park',name:'ครูพัก',gender:'f',age:41,role:'ครูวิทยาศาสตร์',temper:'kind',traits:{kind:40,dili:30},home:'city',occupation:'teacher',work:'school',src:'events2.js:9 (ครูวิทยาศาสตร์)'},
+ {id:'ramen_owner',name:'ลุงโจ',gender:'m',age:55,role:'เจ้าของร้านราเมง',temper:'cheerful',home:'city',occupation:'shopkeeper',work:'city',src:'events2.js:21'},
+ {id:'chef_retired',name:'แทซอก',gender:'m',age:44,role:'ฮันเตอร์เกษียณ เจ้าของร้านข้าวมันไก่',temper:'shy',traits:{kind:30,brave:30},home:'city',occupationName:'เจ้าของร้านข้าวมันไก่',work:'association',schedule:'worker',tags:['retired_hunter'],src:'events2.js:131'},
+ {id:'rival_hunter',name:'คังมินซอก',gender:'m',age:19,role:'ฮันเตอร์รุ่นเดียวกัน',temper:'hothead',traits:{brave:50,kind:-30,loyal:-20},home:'city',occupation:'npc_hunter',rels:[{to:'best_friend',aff:-20}],src:'new (แทนคู่อริที่เกมเดิมสุ่มสร้าง logic4.js:192)'},
+ {id:'doctor_seo',name:'หมอซอ',gender:'f',age:37,role:'หมอฮันเตอร์',temper:'cold',traits:{kind:20,dili:60},home:'city',occupation:'doctor',work:'hospital',src:'new'}];
 })(globalThis.AW);
 
 // ==== data/worlds/hunter/events_life.js ====
@@ -862,9 +1419,9 @@ H.events=(H.events||[]).concat([
 {id:'midterm',title:'สอบกลางภาค',trigger:'month',at:'school',when:school,cooldown:6,weight:3,src:'logic4.js:183',
  text:'ข้อสอบคณิตศาสตร์ยากกว่าที่คิด เพื่อนข้าง ๆ เลื่อนกระดาษคำตอบมาให้ดูครึ่งแผ่น ครูกำลังหันหลังเขียนกระดาน',
  choices:[
-  {text:'ตั้งใจทำเอง',check:{stat:'int',dc:'mid'},ok:{text:'ทำได้เกือบเต็ม ครูชมหน้าห้อง',effects:[{stat:{int:2}},{reputation:1}]},fail:{text:'คะแนนกลาง ๆ แต่ภูมิใจที่ทำเอง',effects:[{stat:{int:1}}]}},
-  {text:'แอบลอกคำตอบ',check:{stat:'agi',dc:'mid'},ok:{text:'ได้คะแนนสูงโดยไม่มีใครรู้',effects:[]},fail:{text:'ครูจับได้ ถูกเรียกพบผู้ปกครอง',effects:[{stat:{cha:-1}}]}},
-  {text:'ส่งกระดาษเปล่าแล้วนอน',ok:{text:'ตื่นมาอีกทีห้องว่างแล้ว',effects:[{stat:{vit:1}}]}}]},
+  {text:'ตั้งใจทำเอง',check:{stat:'int',dc:'mid'},ok:{text:'ทำได้เกือบเต็ม ครูชมหน้าห้อง',effects:[{stat:{int:2}},{reputation:1},{trait:{dili:5}}]},fail:{text:'คะแนนกลาง ๆ แต่ภูมิใจที่ทำเอง',effects:[{stat:{int:1}},{trait:{dili:3}}]}},
+  {text:'แอบลอกคำตอบ',check:{stat:'agi',dc:'mid'},ok:{text:'ได้คะแนนสูงโดยไม่มีใครรู้',effects:[{trait:{loyal:-5}}]},fail:{text:'ครูจับได้ ถูกเรียกพบผู้ปกครอง',effects:[{stat:{cha:-1}},{trait:{loyal:-5}}]}},
+  {text:'ส่งกระดาษเปล่าแล้วนอน',ok:{text:'ตื่นมาอีกทีห้องว่างแล้ว',effects:[{stat:{vit:1}},{trait:{dili:-8}}]}}]},
 {id:'club',title:'ชมรมเปิดรับสมัคร',trigger:'month',at:'school',when:school,once:true,weight:2,src:'logic4.js:187',
  text:'ต้นเทอมแต่ละชมรมตั้งโต๊ะเรียกสมาชิกเต็มโถงอาคาร ชมรมไหนก็ได้เลือกแค่ชมรมเดียว',
  choices:[
@@ -875,27 +1432,27 @@ H.events=(H.events||[]).concat([
 {id:'locker_letter',title:'จดหมายในล็อกเกอร์',trigger:'month',at:'school',when:school,once:true,weight:2,src:'logic4.js:197',
  text:'มีซองสีฟ้าเสียบอยู่ในล็อกเกอร์ ข้างในเขียนว่า "หลังเลิกเรียน ดาดฟ้า" ไม่ได้ลงชื่อ',
  choices:[
-  {text:'ขึ้นไปตามนัด',ok:{text:'คนที่รออยู่เป็นรุ่นเดียวกันห้องข้าง ๆ หน้าแดงจนพูดไม่ออก',effects:[{stat:{cha:2}}]}},
+  {text:'ขึ้นไปตามนัด',ok:{text:'คนที่รออยู่คือ{who} รุ่นเดียวกันห้องข้าง ๆ หน้าแดงจนพูดไม่ออก',effects:[{meet:{role:'คนที่แอบชอบ',tags:['crush'],gender:'opposite',aff:60}},{relx:{npc:'$who',romance:0.5}},{stat:{cha:2}}]}},
   {text:'พาเพื่อนสนิทไปด้วย',ok:{text:'ฮาจุนแซวท่านทั้งทางจนลืมไปว่ามานัดใคร คนที่รอหนีไปก่อน',effects:[{rel:{npc:'best_friend',n:5}}]}},
-  {text:'ไม่ไป',ok:{text:'วันต่อมาซองฟ้าหายไปจากล็อกเกอร์',effects:[]}}]},
+  {text:'ไม่ไป',ok:{text:'วันต่อมาซองฟ้าหายไปจากล็อกเกอร์',effects:[{trait:{brave:-2}}]}}]},
 {id:'store_robber',title:'โจรในร้านสะดวกซื้อ',trigger:'month',when:{all:[school,{flag:'path_work'}]},cooldown:12,weight:3,src:'logic4.js:201',
  text:'กะดึกที่ร้านสะดวกซื้อ ชายสวมหมวกไหมพรมยื่นมีดข้ามเคาน์เตอร์ สั่งให้เปิดลิ้นชักเงิน',
  choices:[
-  {text:'แย่งมีด',check:{stat:'agi',dc:'hard'},ok:{text:'ท่านบิดข้อมือเขาจนมีดหล่น ตำรวจมาถึงพอดี เจ้าของร้านให้โบนัส',effects:[{money:120},{reputation:3}]},fail:{text:'มีดเฉี่ยวแขนเป็นแผลยาว',effects:[{hp:-25}]}},
+  {text:'แย่งมีด',check:{stat:'agi',dc:'hard'},ok:{text:'ท่านบิดข้อมือเขาจนมีดหล่น ตำรวจมาถึงพอดี เจ้าของร้านให้โบนัส',effects:[{money:120},{reputation:3},{trait:{brave:10}}]},fail:{text:'มีดเฉี่ยวแขนเป็นแผลยาว',effects:[{hp:-25},{trait:{brave:6}}]}},
   {text:'ส่งเงินให้แล้วกดปุ่มฉุกเฉิน',check:{stat:'int',dc:'easy'},ok:{text:'ตำรวจจับเขาได้ที่ปากซอย',effects:[{stat:{int:1}}]},fail:{text:'ปุ่มเสีย เขาหนีไปได้ เจ้าของร้านหักเงินเดือน',effects:[{money:-60}]}},
-  {text:'ชวนคุย ถามว่าเดือดร้อนเรื่องอะไร',check:{stat:'cha',dc:'mid'},ok:{text:'เขาร้องไห้ บอกว่าลูกป่วยหนัก แล้ววางมีดเดินออกไปเอง',effects:[{stat:{cha:2}}]},fail:{text:'เขาตะคอกให้หุบปากแล้วกวาดเงินไป',effects:[{money:-40}]}}]},
+  {text:'ชวนคุย ถามว่าเดือดร้อนเรื่องอะไร',check:{stat:'cha',dc:'mid'},ok:{text:'เขาร้องไห้ บอกว่าลูกป่วยหนัก แล้ววางมีดเดินออกไปเอง',effects:[{stat:{cha:2}},{karma:4},{trait:{kind:8}}]},fail:{text:'เขาตะคอกให้หุบปากแล้วกวาดเงินไป',effects:[{money:-40}]}}]},
 {id:'friend_gate_clip',title:'เพื่อนชวนแอบเข้าเขตเกต',trigger:'month',when:school,cooldown:18,weight:2,src:'logic4.js:217',
  text:'ฮาจุนกระซิบว่ารั้วกั้นเกตแรงก์ E หลังตลาดมีช่องโหว่ อยากเข้าไปถ่ายคลิปลงโซเชียล',
  choices:[
-  {text:'ไปด้วย',check:{stat:'luk',dc:'mid'},ok:{text:'ทั้งคู่ได้คลิปหน้าเกตเรืองแสง ยอดวิวทะลุแสน',effects:[{reputation:4},{rel:{npc:'best_friend',n:6}}]},fail:{text:'สไลม์ตัวหนึ่งพุ่งออกมา ท่านลากเพื่อนหนีจนแขนถลอก',effects:[{hp:-30},{rel:{npc:'best_friend',n:10}}]}},
-  {text:'ห้ามเพื่อน',check:{stat:'cha',dc:'mid'},ok:{text:'เพื่อนยอมกลับบ้าน',effects:[{rel:{npc:'best_friend',n:2}}]},fail:{text:'เพื่อนไปคนเดียว กลับมาพร้อมแผลที่ขา',effects:[{rel:{npc:'best_friend',n:-5}}]}},
-  {text:'แจ้งยามสมาคม',ok:{text:'ยามปิดช่องโหว่ เพื่อนโกรธท่านไปหนึ่งสัปดาห์',effects:[{rel:{npc:'best_friend',n:-6}}]}}]},
+  {text:'ไปด้วย',check:{stat:'luk',dc:'mid'},ok:{text:'ทั้งคู่ได้คลิปหน้าเกตเรืองแสง ยอดวิวทะลุแสน',effects:[{reputation:4},{rel:{npc:'best_friend',n:6}},{trait:{brave:6}}]},fail:{text:'สไลม์ตัวหนึ่งพุ่งออกมา ท่านลากเพื่อนหนีจนแขนถลอก',effects:[{hp:-30},{rel:{npc:'best_friend',n:10}},{trait:{brave:6}}]}},
+  {text:'ห้ามเพื่อน',check:{stat:'cha',dc:'mid'},ok:{text:'เพื่อนยอมกลับบ้าน',effects:[{rel:{npc:'best_friend',n:2}},{trait:{loyal:3}}]},fail:{text:'เพื่อนไปคนเดียว กลับมาพร้อมแผลที่ขา',effects:[{rel:{npc:'best_friend',n:-5}}]}},
+  {text:'แจ้งยามสมาคม',ok:{text:'ยามปิดช่องโหว่ เพื่อนโกรธท่านไปหนึ่งสัปดาห์',effects:[{karma:2},{rel:{npc:'best_friend',n:-6}}]}}]},
 {id:'track_meet',title:'แข่งกรีฑาระดับเขต',trigger:'month',when:{all:[school,{flag:'path_sport'}]},cooldown:12,weight:3,src:'logic4.js:221',
  text:'ท่านถูกส่งลงแข่งวิ่ง 400 เมตรแทนเพื่อนที่ขาพลิก แมวมองจากสมาคมนั่งอยู่บนอัฒจันทร์',
  choices:[
-  {text:'ออกตัวแรงตั้งแต่ต้น',check:{stat:'agi',dc:'mid'},ok:{text:'เข้าเส้นชัยเป็นอันดับหนึ่ง แมวมองจดชื่อท่านไว้',effects:[{stat:{agi:2}},{reputation:3}]},fail:{text:'หมดแรงช่วงโค้งสุดท้าย ได้ที่ห้า',effects:[{stat:{vit:1}}]}},
+  {text:'ออกตัวแรงตั้งแต่ต้น',check:{stat:'agi',dc:'mid'},ok:{text:'เข้าเส้นชัยเป็นอันดับหนึ่ง แมวมองจดชื่อท่านไว้',effects:[{stat:{agi:2}},{reputation:3},{trait:{brave:4}}]},fail:{text:'หมดแรงช่วงโค้งสุดท้าย ได้ที่ห้า',effects:[{stat:{vit:1}}]}},
   {text:'เก็บแรงไว้ช่วงท้าย',check:{stat:'vit',dc:'mid'},ok:{text:'แซงสามคนในร้อยเมตรสุดท้าย ได้ที่สอง',effects:[{stat:{vit:2}},{reputation:2}]},fail:{text:'แซงไม่ทัน ได้ที่สี่',effects:[{stat:{vit:1}}]}},
-  {text:'วิ่งเป็นเพื่อนคนที่ล้ม',ok:{text:'ไม่ได้เหรียญแต่ภาพนั้นถูกแชร์ทั่วเมือง',effects:[{stat:{cha:2}}]}}]},
+  {text:'วิ่งเป็นเพื่อนคนที่ล้ม',ok:{text:'ไม่ได้เหรียญแต่ภาพนั้นถูกแชร์ทั่วเมือง',effects:[{stat:{cha:2}},{karma:3},{trait:{kind:6}}]}}]},
 {id:'library_night',title:'ห้องสมุดตอนดึก',trigger:'month',at:'school',when:{all:[school,{flag:'path_study'}]},once:true,weight:2,src:'logic4.js:225',
  text:'ท่านเจอหนังสือเล่มบาง ๆ ไม่มีชื่อผู้แต่ง ชื่อเรื่องว่า "บันทึกก่อนเกตแรกเปิด" ซ่อนอยู่หลังชั้นวาง',
  choices:[
@@ -905,9 +1462,9 @@ H.events=(H.events||[]).concat([
 {id:'scout_rumor',title:'ข่าวลือเรื่องแมวมอง',trigger:'month',when:{all:[school,{age:{min:17}}]},once:true,weight:2,src:'logic4.js:229',
  text:'มีข่าวว่ากิลด์ใหญ่ส่งคนมาดูตัวนักเรียน ม.6 ที่มีแววจะตื่นพลังแรงก์สูง หลายคนเริ่มไปฟิตเนส',
  choices:[
-  {text:'ฝึกหนักทุกเช้า',ok:{text:'กล้ามเนื้อเริ่มแน่น',effects:[{stat:{str:2,vit:1}}]}},
+  {text:'ฝึกหนักทุกเช้า',ok:{text:'กล้ามเนื้อเริ่มแน่น',effects:[{stat:{str:2,vit:1}},{trait:{dili:6}}]}},
   {text:'อ่านเรื่องฮันเตอร์ให้มากที่สุด',ok:{text:'ท่านรู้ชื่อมอนสเตอร์ทุกตัวในฐานข้อมูลสมาคม',effects:[{stat:{int:2}},{mana:2}]}},
-  {text:'ไม่สน ตื่นได้ก็ตื่น',ok:{text:'ชีวิตยังเหมือนเดิม',effects:[{stat:{luk:1}}]}}]},
+  {text:'ไม่สน ตื่นได้ก็ตื่น',ok:{text:'ชีวิตยังเหมือนเดิม',effects:[{stat:{luk:1}},{trait:{dili:-3}}]}}]},
 // ---------- เรื่องหลัก ----------
 {id:'awakening',title:'วันตื่นพลัง',trigger:'auto',once:true,priority:90,src:'prog6.js:86-98 (ข้อความลูกแก้วย้ายไปเหตุการณ์ประเมินแรงก์)',
  when:{all:[{awakened:false},{age:{min:17.5}},{any:[{chance:0.25},{age:{min:18.5}}]}]},
@@ -948,6 +1505,7 @@ H.events=(H.events||[]).concat([
 
 // ==== data/worlds/hunter/events_hunter.js ====
 // Hunter World: เหตุการณ์ช่วงเป็นฮันเตอร์ (หลังตื่นพลัง) ย้ายจาก logic4.js
+// Phase 4: ใส่ผล karma/trait เดิมกลับจาก logic4.js
 // ค่าที่เดิมคำนวณจากแรงก์ (เช่น GATE_DIFF[P.rank]*x) ถูกแทนด้วยตัวเลขคงที่ระดับแรงก์ E–D หรือศัตรูในข้อมูล
 (function(AW){
 const H=(AW.data.parts=AW.data.parts||{}).hunter=AW.data.parts.hunter||{};
@@ -962,9 +1520,9 @@ H.events=(H.events||[]).concat([
 {id:'teammate_stone',title:'เพื่อนร่วมทีมกับหินมานา',trigger:'month',at:'gate_zone',when:hunter,cooldown:12,weight:3,src:'logic4.js:238',
  text:'เพื่อนร่วมทีมบาดเจ็บหนักอยู่กลางดันเจี้ยน ข้างตัวเขามีหินมานาก้อนใหญ่ ฝูงอสูรกำลังวนกลับมา',
  choices:[
-  {text:'แบกเขาออกมา',check:{stat:'str',dc:'mid'},ok:{text:'ท่านแบกเขาออกมาได้ ข่าวนี้แพร่ไปทั่วสมาคม',effects:[{reputation:4}]},fail:{text:'ท่านพาเขาออกมาได้แต่โดนกรงเล็บเต็มหลัง',effects:[{hp:-40},{injury:1},{reputation:3}]}},
-  {text:'เก็บหินแล้วทิ้งเขาไว้',ok:{text:'ไม่มีใครเห็นท่านทำแบบนั้น',effects:[{item:{id:'mana_stone',n:3}},{reputation:-3}]}},
-  {text:'ยิงพลุขอความช่วยเหลือแล้วยันไว้',fight:{enemy:'goblins'},ok:{text:'ทีมกู้ภัยมาถึงทันเวลา ทั้งคู่รอด',effects:[{reputation:2},{exp:40}]},fail:{text:'ทีมกู้ภัยมาช้า เพื่อนร่วมทีมเสียชีวิต',effects:[]}}]},
+  {text:'แบกเขาออกมา',check:{stat:'str',dc:'mid'},ok:{text:'ท่านแบกเขาออกมาได้ ข่าวนี้แพร่ไปทั่วสมาคม',effects:[{reputation:4},{karma:8},{trait:{loyal:10,kind:6}}]},fail:{text:'ท่านพาเขาออกมาได้แต่โดนกรงเล็บเต็มหลัง',effects:[{hp:-40},{injury:1},{reputation:3},{karma:8},{trait:{loyal:10}}]}},
+  {text:'เก็บหินแล้วทิ้งเขาไว้',ok:{text:'ไม่มีใครเห็นท่านทำแบบนั้น',effects:[{item:{id:'mana_stone',n:3}},{karma:-12},{trait:{loyal:-15,kind:-8}}]}},
+  {text:'ยิงพลุขอความช่วยเหลือแล้วยันไว้',fight:{enemy:'goblins'},ok:{text:'ทีมกู้ภัยมาถึงทันเวลา ทั้งคู่รอด',effects:[{reputation:2},{exp:40},{karma:5},{trait:{brave:8}}]},fail:{text:'ทีมกู้ภัยมาช้า เพื่อนร่วมทีมเสียชีวิต',effects:[]}}]},
 {id:'energy_drink',title:'บริษัทเครื่องดื่มชูกำลัง',trigger:'month',at:'city',when:{all:[hunter,{rank:{min:'E'}}]},once:true,weight:2,src:'logic4.js:242 (เดิมต้องมีชื่อเสียง 10)',
  text:'บริษัทเครื่องดื่มเสนอให้ท่านเป็นพรีเซนเตอร์ ค่าตัวสูงกว่ารายได้จากเกตสามเดือน',
  choices:[
@@ -976,37 +1534,303 @@ H.events=(H.events||[]).concat([
  choices:[
   {text:'เปิดเข้าไปคนเดียว',check:{stat:'luk',dc:'hard'},ok:{text:'ข้างในมีคัมภีร์สกิลเก่า',effects:[{skill:'mana_burst'}]},fail:{text:'กับดักลูกดอกพุ่งใส่',effects:[{hp:-50},{injury:1}]}},
   {text:'ถอดรหัสตัวอักษรก่อน',check:{stat:'int',dc:'hard'},ok:{text:'ท่านปลดกลไกได้ ได้แกนอสูรหายากมาขาย',effects:[{item:{id:'monster_core',n:2}}]},fail:{text:'อ่านไม่ออก ประตูปิดตายไปเอง',effects:[{stat:{int:1}}]}},
-  {text:'รายงานสมาคม',ok:{text:'สมาคมส่งทีมวิจัยมา จ่ายค่าข้อมูลให้ท่าน',effects:[{money:120},{rel:{npc:'clerk_yoon',n:3}}]}}]},
+  {text:'รายงานสมาคม',ok:{text:'สมาคมส่งทีมวิจัยมา จ่ายค่าข้อมูลให้ท่าน',effects:[{money:120},{karma:2},{rel:{npc:'clerk_yoon',n:3}}]}}]},
 {id:'alley_thugs',title:'เสียงร้องในซอยมืด',trigger:'month',at:'city',when:{awakened:true},cooldown:8,weight:2,src:'logic4.js:262',
  text:'ฮันเตอร์นอกกฎหมายสามคนรุมรีดไถพ่อค้าแผงลอยในซอยหลังตลาด',
  choices:[
-  {text:'เข้าไปจัดการ',fight:{enemy:'thugs'},ok:{text:'พวกมันวิ่งหนีกระเจิง พ่อค้าก้มหัวขอบคุณไม่หยุด',effects:[{reputation:2},{exp:20}]},fail:{text:'พวกมันมีหลายคนเกินไป ท่านต้องถอย',effects:[]}},
-  {text:'ถ่ายคลิปแจ้งสมาคม',check:{stat:'agi',dc:'easy'},ok:{text:'สมาคมจับได้ทั้งแก๊ง',effects:[{stat:{int:1}}]},fail:{text:'ถูกจับได้ว่าถ่ายคลิป ต้องวิ่งหนี',effects:[{hp:-10}]}},
-  {text:'เดินผ่านไป',ok:{text:'ท่านไม่อยากยุ่ง',effects:[]}}]},
+  {text:'เข้าไปจัดการ',fight:{enemy:'thugs'},ok:{text:'พวกมันวิ่งหนีกระเจิง พ่อค้าก้มหัวขอบคุณไม่หยุด',effects:[{reputation:2},{exp:20},{karma:5},{trait:{brave:6}}]},fail:{text:'พวกมันมีหลายคนเกินไป ท่านต้องถอย',effects:[]}},
+  {text:'ถ่ายคลิปแจ้งสมาคม',check:{stat:'agi',dc:'easy'},ok:{text:'สมาคมจับได้ทั้งแก๊ง',effects:[{stat:{int:1}},{karma:3}]},fail:{text:'ถูกจับได้ว่าถ่ายคลิป ต้องวิ่งหนี',effects:[{hp:-10}]}},
+  {text:'เดินผ่านไป',ok:{text:'ท่านไม่อยากยุ่ง',effects:[{trait:{kind:-4}}]}}]},
 {id:'orphan_patient',title:'ผู้ป่วยไร้ญาติ',trigger:'enter',at:'hospital',when:{awakened:true},cooldown:24,weight:1,src:'logic4.js:266',
  text:'เด็กหญิงที่รอดจาก Dungeon Break นอนอยู่เตียงข้าง ๆ ไม่มีใครมาเยี่ยม ค่ารักษายังค้างอยู่ก้อนใหญ่',
  choices:[
-  {text:'จ่ายค่ารักษาให้ (300)',when:{money:{min:300}},lockText:'เงินไม่พอ',ok:{text:'นางยิ้มครั้งแรกตั้งแต่เข้าโรงพยาบาล',effects:[{money:-300},{reputation:3}]}},
-  {text:'อยู่เป็นเพื่อนคุย',ok:{text:'นางเล่าว่าอยากเป็นฮันเตอร์เหมือนท่าน',effects:[{stat:{cha:2}}]}},
-  {text:'ขอย้ายเตียง',ok:{text:'ท่านอยากพักผ่อนเงียบ ๆ',effects:[{stat:{vit:1}}]}}]},
+  {text:'จ่ายค่ารักษาให้ (300)',when:{money:{min:300}},lockText:'เงินไม่พอ',ok:{text:'นางยิ้มครั้งแรกตั้งแต่เข้าโรงพยาบาล',effects:[{money:-300},{reputation:3},{karma:8},{trait:{kind:8}}]}},
+  {text:'อยู่เป็นเพื่อนคุย',ok:{text:'นางเล่าว่าอยากเป็นฮันเตอร์เหมือนท่าน',effects:[{stat:{cha:2}},{karma:3}]}},
+  {text:'ขอย้ายเตียง',ok:{text:'ท่านอยากพักผ่อนเงียบ ๆ',effects:[{stat:{vit:1}},{trait:{kind:-3}}]}}]},
 {id:'escort_governor',title:'ภารกิจคุ้มกันผู้ว่าการ',trigger:'month',at:'association',when:{all:[{worldFlag:'guild_northstar'},{rank:{min:'D'}}]},cooldown:12,weight:3,src:'logic4.js:274 (เดิมสำหรับสาย "คนของสมาคม" ตอนนี้ผูกกับกิลด์ดาวเหนือ)',
  text:'สมาคมมอบหมายให้คุ้มกันผู้ว่าการเมืองระหว่างเยี่ยมย่านเกต มีข่าวว่ากลุ่มต่อต้านฮันเตอร์จะก่อเหตุ',
  choices:[
   {text:'ตรวจเส้นทางล่วงหน้า',check:{stat:'int',dc:'mid'},ok:{text:'ท่านเจอระเบิดใต้รถก่อนออกเดินทาง',effects:[{reputation:6},{money:500}]},fail:{text:'ระเบิดดังกลางขบวน ผู้ว่าการรอดแต่ท่านเจ็บ',effects:[{hp:-30},{money:250}]}},
-  {text:'ยืนประกบตัวตลอดทาง',check:{stat:'vit',dc:'mid'},ok:{text:'ท่านใช้ตัวบังกระสุนลูกหลง ผู้ว่าการจับมือขอบคุณ',effects:[{reputation:5},{money:400}]},fail:{text:'ท่านโดนกระสุนเข้าไหล่',effects:[{hp:-45},{injury:1},{money:400}]}},
+  {text:'ยืนประกบตัวตลอดทาง',check:{stat:'vit',dc:'mid'},ok:{text:'ท่านใช้ตัวบังกระสุนลูกหลง ผู้ว่าการจับมือขอบคุณ',effects:[{reputation:5},{money:400},{trait:{brave:5}}]},fail:{text:'ท่านโดนกระสุนเข้าไหล่',effects:[{hp:-45},{injury:1},{money:400}]}},
   {text:'ขอเปลี่ยนเป็นงานอื่น',ok:{text:'หัวหน้าสมาคมจดชื่อท่านไว้ในแฟ้มสีเหลือง',effects:[{reputation:-2}]}}]},
 {id:'reporter',title:'นักข่าวขอสัมภาษณ์',trigger:'month',when:hunter,cooldown:18,weight:2,src:'logic4.js:278',
  text:'นักข่าวช่องดังขอสัมภาษณ์เรื่องเกตล่าสุดที่ท่านเคลียร์ เธอถามว่าท่านคิดอย่างไรกับฮันเตอร์ที่ทิ้งชาวบ้านระหว่าง Dungeon Break',
  choices:[
-  {text:'ตอบตรง ๆ ว่าคนแบบนั้นไม่ควรเป็นฮันเตอร์',ok:{text:'คลิปถูกแชร์ทั่วประเทศ กิลด์ใหญ่บางแห่งไม่พอใจ',effects:[{reputation:6}]}},
+  {text:'ตอบตรง ๆ ว่าคนแบบนั้นไม่ควรเป็นฮันเตอร์',ok:{text:'คลิปถูกแชร์ทั่วประเทศ กิลด์ใหญ่บางแห่งไม่พอใจ',effects:[{reputation:6},{karma:2},{trait:{brave:5}}]}},
   {text:'ตอบกลาง ๆ',check:{stat:'cha',dc:'easy'},ok:{text:'ทุกฝ่ายพอใจ',effects:[{reputation:2},{stat:{cha:1}}]},fail:{text:'คำตอบฟังดูเลี่ยง คนดูไม่ชอบ',effects:[{reputation:-1}]}},
   {text:'ปฏิเสธการสัมภาษณ์',ok:{text:'ท่านเดินหนีกล้อง',effects:[]}}]},
 {id:'border_village',title:'ชาวบ้านชายแดนขอความช่วยเหลือ',trigger:'month',when:hunter,cooldown:10,weight:2,src:'logic4.js:286',
  text:'หมู่บ้านชายแดนมีสัตว์อสูรหลุดออกจากเกตที่ไม่มีใครดูแล ชาวบ้านมีเงินจ่ายแค่ข้าวกับไข่ไก่',
  choices:[
-  {text:'ไปช่วย',fight:{enemy:'border_beast'},ok:{text:'หมู่บ้านจัดงานเลี้ยงให้ท่านทั้งคืน',effects:[{reputation:2},{exp:40}]},fail:{text:'ท่านไล่มันไปได้ แต่เจ็บไม่น้อย',effects:[{reputation:1}]}},
-  {text:'บอกให้ไปจ้างกิลด์',ok:{text:'ชาวบ้านมองท่านด้วยสายตาผิดหวัง',effects:[]}},
-  {text:'ขอเงินค่าจ้างก่อน',check:{stat:'cha',dc:'mid'},ok:{text:'ชาวบ้านรวมเงินกันได้ก้อนหนึ่ง',effects:[{money:200}]},fail:{text:'ชาวบ้านไล่ท่านออกจากหมู่บ้าน',effects:[{reputation:-2}]}}]},
+  {text:'ไปช่วย',fight:{enemy:'border_beast'},ok:{text:'หมู่บ้านจัดงานเลี้ยงให้ท่านทั้งคืน',effects:[{reputation:2},{exp:40},{karma:8}]},fail:{text:'ท่านไล่มันไปได้ แต่เจ็บไม่น้อย',effects:[{reputation:1},{karma:4}]}},
+  {text:'บอกให้ไปจ้างกิลด์',ok:{text:'ชาวบ้านมองท่านด้วยสายตาผิดหวัง',effects:[{karma:-2}]}},
+  {text:'ขอเงินค่าจ้างก่อน',check:{stat:'cha',dc:'mid'},ok:{text:'ชาวบ้านรวมเงินกันได้ก้อนหนึ่ง',effects:[{money:200},{karma:-1}]},fail:{text:'ชาวบ้านไล่ท่านออกจากหมู่บ้าน',effects:[{reputation:-2}]}}]},
+]);
+})(globalThis.AW);
+
+// ==== data/worlds/hunter/events_e2.js ====
+// Hunter World: เหตุการณ์ที่ย้ายจาก events2.js (Phase 4) · ตารางตรวจทั้ง 62 รายการอยู่ใน docs/phase4/EVENTS2_MIGRATION_AUDIT.md
+// การแปลงผล: tr->trait, karma->karma, fame->reputation, gold->money, aff(คน)->rel, [cls().m]->classStat, hp ตามสัดส่วน->hpPct
+// ผลที่ยังไม่มีระบบ (fav ความโปรดปรานดวงดาว, coin ดาวเหรียญ) ตัดออก · cause (ตายได้ในเกมเดิม) -> บาดเจ็บ (การต่อสู้ยังไม่ทำให้ตาย)
+// ค่าเงินที่เดิมคูณตามแรงก์ (G()) ใช้ตัวเลขคงที่ระดับ E-D · การต่อสู้ที่อิงแรงก์ใช้ศัตรู powerByRank พร้อม mult เดิม
+(function(AW){
+const H=(AW.data.parts=AW.data.parts||{}).hunter=AW.data.parts.hunter||{};
+const school={awakened:false},hunter={awakened:true};
+const ev=(id,line,o)=>Object.assign({id:'e2_'+id,trigger:'month',weight:2,src:'events2.js:'+line},o);
+H.events=(H.events||[]).concat([
+// ---------- ช่วงนักเรียน ----------
+ev('transfer',5,{title:'เพื่อนใหม่ย้ายมากลางเทอม',at:'school',when:school,cooldown:24,text:'นักเรียนย้ายมาใหม่นั่งโต๊ะข้างท่าน ไม่พูดกับใครเลยทั้งวัน กระเป๋าของเขามีรอยไหม้เหมือนผ่านไฟมา',choices:[
+ {text:'ชวนไปกินข้าวด้วยกัน',check:{stat:'cha',dc:'easy',trait:'kind'},ok:{text:'{who}พูดเบา ๆ ว่าบ้านเก่าอยู่ในเขต Dungeon Break เมื่อปีก่อน',effects:[{meet:{role:'เพื่อนร่วมชั้น',tags:['classmate'],ageOffset:0,aff:45}},{stat:{cha:1}},{karma:2},{trait:{kind:5}}]},fail:{text:'เขาส่ายหน้าแล้วเดินหนีไป',effects:[]}},
+ {text:'ปล่อยให้เขามีที่ส่วนตัว',ok:{text:'สัปดาห์ต่อมาเขาวางขนมไว้บนโต๊ะท่านหนึ่งห่อ',effects:[{stat:{luk:1}}]}},
+ {text:'ถามเรื่องรอยไหม้ตรง ๆ',check:{stat:'cha',dc:'hard'},ok:{text:'เขาเล่าเรื่องคืนนั้นทั้งน้ำตา ท่านนั่งฟังจนจบ',effects:[{stat:{cha:2}},{karma:3}]},fail:{text:'เขาโกรธจนลุกเดินออกจากห้อง',effects:[{stat:{cha:-1}}]}}]}),
+ev('quiz',9,{title:'ครูเสนอให้ลงแข่งตอบปัญหา',at:'school',when:{all:[school,{flag:'path_study'}]},once:true,who:{npc:'teacher_park'},text:'{who} ครูวิทยาศาสตร์อยากให้ท่านเป็นตัวแทนแข่งตอบปัญหาเรื่องเกตระดับประเทศ ต้องติวทุกเย็นสองเดือน',choices:[
+ {text:'รับ แล้วติวหนัก',check:{stat:'int',dc:'mid',trait:'dili'},ok:{text:'ทีมของท่านได้ที่สอง รูปขึ้นบอร์ดหน้าโรงเรียน',effects:[{stat:{int:3}},{reputation:3},{trait:{dili:6}},{rel:{npc:'$who',n:5}}]},fail:{text:'ตกรอบแรก แต่ได้ความรู้ติดตัวมาเยอะ',effects:[{stat:{int:2}}]}},
+ {text:'รับ แต่ไม่ค่อยไปติว',check:{stat:'luk',dc:'hard'},ok:{text:'คำถามสุดท้ายเป็นเรื่องที่ท่านบังเอิญอ่านเมื่อคืน ทีมชนะ',effects:[{reputation:4},{trait:{dili:-3}}]},fail:{text:'ท่านตอบผิดข้อง่าย ๆ ต่อหน้ากล้อง',effects:[{reputation:-1},{trait:{dili:-3}}]}},
+ {text:'ปฏิเสธ',ok:{text:'ครูดูผิดหวังเล็กน้อย',effects:[{rel:{npc:'$who',n:-2}}]}}]}),
+ev('election',13,{title:'โกงเลือกตั้งประธานนักเรียน',at:'school',when:school,once:true,text:'ท่านเห็นกรรมการคนหนึ่งแอบเปลี่ยนกล่องบัตรเลือกตั้งในห้องเก็บของ เขาเป็นเพื่อนของคนที่กำลังจะชนะ',choices:[
+ {text:'แจ้งครูทันที',check:{stat:'cha',dc:'mid',trait:'brave'},ok:{text:'มีการนับคะแนนใหม่ ผลพลิก ทั้งโรงเรียนพูดถึงท่าน',effects:[{reputation:3},{karma:4},{trait:{loyal:6,brave:4}}]},fail:{text:'ครูไม่เชื่อ ท่านถูกมองว่าอิจฉา',effects:[{stat:{cha:-1}},{karma:2}]}},
+ {text:'ถ่ายรูปเก็บไว้ก่อน',check:{stat:'agi',dc:'mid'},ok:{text:'รูปนั้นกลายเป็นหลักฐานชิ้นสำคัญในภายหลัง',effects:[{stat:{int:1}},{karma:3}]},fail:{text:'เขาหันมาเห็นพอดี',effects:[{hp:-10}]}},
+ {text:'ทำเป็นไม่เห็น',ok:{text:'ท่านเดินกลับห้องเงียบ ๆ',effects:[{trait:{loyal:-4,brave:-3}}]}}]}),
+ev('sibling_sick',17,{title:'{who}ป่วยหนัก',at:'home',when:school,cooldown:36,who:{role:'sibling'},text:'{who}ไข้ขึ้นสูงกลางดึก พ่อแม่ไปต่างจังหวัด โรงพยาบาลอยู่อีกฝั่งเมือง และฝนกำลังตกหนัก',choices:[
+ {text:'แบกไปโรงพยาบาลเอง',check:{stat:'vit',dc:'mid',trait:'brave'},ok:{text:'ท่านไปถึงทันเวลา หมอบอกว่าช้ากว่านี้อีกนิดอาจอันตราย "ขอบคุณนะ"',effects:[{stat:{vit:2}},{rel:{npc:'$who',n:15}},{trait:{brave:5}}]},fail:{text:'ท่านไปถึงได้แต่หมดแรงล้มหน้าห้องฉุกเฉิน',effects:[{hp:-20},{rel:{npc:'$who',n:15}}]}},
+ {text:'โทรเรียกรถพยาบาล',check:{stat:'luk',dc:'mid'},ok:{text:'รถมาถึงในสิบนาที',effects:[{rel:{npc:'$who',n:5}}]},fail:{text:'รถติดน้ำท่วม มาถึงตอนเช้า ไข้ลดลงเองพอดี',effects:[{rel:{npc:'$who',n:3}}]}},
+ {text:'เช็ดตัวและเฝ้าทั้งคืน',check:{stat:'int',dc:'easy'},ok:{text:'ไข้ลดตอนรุ่งสาง ท่านหลับคาเก้าอี้',effects:[{stat:{int:1}},{rel:{npc:'$who',n:8}}]},fail:{text:'ไข้ไม่ลด ต้องพาไปโรงพยาบาลตอนเช้า',effects:[{rel:{npc:'$who',n:4}}]}}]}),
+ev('ramen_rush',21,{title:'ร้านราเมงขาดคน',at:'city',when:{all:[{age:{max:22}},{any:[{flag:'path_work'},{job:'ramen'}]}]},cooldown:12,weight:3,who:{npc:'ramen_owner'},text:'{who} เจ้าของร้านราเมงหน้าสถานีขอให้ช่วยทำกะเพิ่มช่วงสอบ จ่ายเป็นสองเท่า',choices:[
+ {text:'รับกะเพิ่ม',ok:{text:'ได้เงินก้อนโต แต่สอบได้คะแนนแย่',effects:[{money:200},{stat:{int:-1}},{trait:{dili:4}},{rel:{npc:'$who',n:4}}]}},
+ {text:'ขอทำครึ่งเดียว',check:{stat:'cha',dc:'easy'},ok:{text:'เจ้าของร้านยอม แถมราเมงให้กลับบ้าน',effects:[{money:100},{hp:10}]},fail:{text:'เจ้าของร้านไปหาคนอื่นแทน',effects:[]}},
+ {text:'ปฏิเสธเพื่อไปอ่านหนังสือ',ok:{text:'ท่านอ่านหนังสือจนดึกทุกคืน',effects:[{stat:{int:2}}]}}]}),
+ev('harsh_senior',25,{title:'รุ่นพี่ชมรมกีฬาซ้อมโหด',when:{all:[school,{flag:'path_sport'}]},cooldown:18,text:'รุ่นพี่สั่งให้วิ่งรอบสนามจนกว่าจะอาเจียน ใครหยุดก่อนต้องล้างห้องน้ำทั้งเทอม',choices:[
+ {text:'วิ่งจนสุดแรง',check:{stat:'vit',dc:'mid',trait:'dili'},ok:{text:'ท่านเป็นคนสุดท้ายที่ยังวิ่งอยู่ รุ่นพี่ตบไหล่',effects:[{stat:{vit:3}},{trait:{dili:5}}]},fail:{text:'ท่านเป็นลมกลางสนาม',effects:[{hp:-15},{stat:{vit:1}}]}},
+ {text:'บอกว่านี่ไม่ใช่การฝึก นี่คือการแกล้ง',check:{stat:'cha',dc:'hard',trait:'brave'},ok:{text:'สมาชิกคนอื่นพยักหน้าตาม รุ่นพี่ยอมเลิก',effects:[{stat:{cha:2}},{reputation:2},{trait:{brave:6}}]},fail:{text:'ท่านถูกสั่งล้างห้องน้ำทั้งเทอม',effects:[{stat:{str:1}}]}},
+ {text:'แกล้งเจ็บข้อเท้า',check:{stat:'cha',dc:'mid'},ok:{text:'รุ่นพี่เชื่อ ท่านนั่งพักข้างสนาม',effects:[{trait:{dili:-5}}]},fail:{text:'รุ่นพี่จับได้ โทษหนักขึ้นสองเท่า',effects:[{stat:{str:1}},{trait:{dili:-5}}]}}]}),
+ev('bf_birthday',29,{title:'ปาร์ตี้วันเกิดเพื่อน',at:'city',when:{all:[{age:{max:19}},{npcAlive:'best_friend'}]},cooldown:12,weight:3,who:{npc:'best_friend'},text:'{who}จัดปาร์ตี้วันเกิดที่ห้องคาราโอเกะ มีคนในโรงเรียนมาเกือบครึ่ง',choices:[
+ {text:'ร้องเพลงเปิดงาน',check:{stat:'cha',dc:'mid'},ok:{text:'ทั้งห้องร้องตาม คลิปถูกส่งต่อในกลุ่มโรงเรียน',effects:[{stat:{cha:2}},{reputation:2},{rel:{npc:'$who',n:5}}]},fail:{text:'เสียงหลงตั้งแต่ท่อนแรก แต่ทุกคนหัวเราะอย่างเอ็นดู',effects:[{stat:{cha:1}},{rel:{npc:'$who',n:3}}]}},
+ {text:'ซื้อของขวัญราคาแพง (150)',when:{money:{min:150}},lockText:'เงินไม่พอ',ok:{text:'{who}กอดท่านแน่น',effects:[{money:-150},{rel:{npc:'$who',n:10}}]}},
+ {text:'นั่งคุยกับคนที่ไม่รู้จัก',ok:{text:'ท่านได้รู้จักคนที่ฝันอยากเป็นนักวิจัยเกต',effects:[{meet:{role:'คนรู้จักจากงานเลี้ยง',aff:35}},{stat:{cha:1}}]}}]}),
+ev('old_man',33,{title:'ชายชราที่ป้ายรถเมล์',when:school,once:true,weight:1,text:'ชายชรามือข้างหนึ่งเป็นเหล็ก ถามท่านว่า "ถ้าวันหนึ่งเจ้ามีพลัง เจ้าจะใช้มันปกป้องใคร"',choices:[
+ {text:'ครอบครัว',ok:{text:'เขายิ้มแล้วยื่นเหรียญทองแดงเก่า ๆ ให้หนึ่งเหรียญ',effects:[{stat:{luk:2}},{flag:'coin_old'}]}},
+ {text:'ทุกคนที่อ่อนแอกว่า',ok:{text:'เขาหัวเราะเสียงดัง "เด็กโง่แบบนี้แหละที่โลกต้องการ" แล้ววางเหรียญทองแดงไว้ในมือท่าน',effects:[{karma:4},{flag:'coin_old'}]}},
+ {text:'ตัวเอง',ok:{text:'เขาพยักหน้า "อย่างน้อยเจ้าก็ซื่อสัตย์" แล้วโยนเหรียญทองแดงให้',effects:[{stat:{vit:2}},{flag:'coin_old'}]}},
+ {text:'ไม่รู้',ok:{text:'"ดีแล้ว คนที่ตอบได้ทันทีมักจะตอบผิด" เขาทิ้งเหรียญทองแดงไว้บนม้านั่ง',effects:[{stat:{int:2}},{flag:'coin_old'}]}}]}),
+ev('drunk_hunter',38,{title:'ฮันเตอร์เมาอาละวาด',at:'city',when:school,cooldown:24,text:'ฮันเตอร์แรงก์ D เมาเหล้าทุบกระจกร้านสะดวกซื้อ พนักงานหญิงตัวสั่นอยู่หลังเคาน์เตอร์',choices:[
+ {text:'ถ่ายคลิปแล้วเรียกตำรวจ',check:{stat:'agi',dc:'easy'},ok:{text:'ทีมสมาคมมาลากเขาไปในห้านาที',effects:[{karma:2}]},fail:{text:'เขาเห็นท่านถ่ายคลิป แล้วปาขวดใส่',effects:[{hp:-15}]}},
+ {text:'พาพนักงานหนีออกประตูหลัง',check:{stat:'agi',dc:'mid',trait:'brave'},ok:{text:'ทั้งคู่ปลอดภัย เธอขอบคุณจนร้องไห้',effects:[{karma:5},{trait:{brave:6,kind:4}}]},fail:{text:'เขาเห็นแล้วเหวี่ยงชั้นวางล้มใส่',effects:[{hp:-25},{karma:3}]}},
+ {text:'เดินหนี',ok:{text:'คืนนั้นท่านนอนไม่หลับ',effects:[{trait:{brave:-4}}]}}]}),
+ev('tuition',42,{title:'ค่าเทอมค้างจ่าย',at:'home',when:{all:[school,{familyBg:['poor','middle','retired_hunter']},{familyRole:{role:'mother',alive:true}}]},cooldown:24,who:{role:'mother'},text:'จดหมายจากโรงเรียนแจ้งว่าค่าเทอมค้างจ่ายสองเดือน {who}บอกว่ารอเงินเดือนพ่อออกก่อน',choices:[
+ {text:'เอาเงินเก็บของตัวเองจ่าย (150)',when:{money:{min:150}},lockText:'เงินไม่พอ',ok:{text:'แม่ไม่พูดอะไร แต่คืนนั้นทำกับข้าวที่ท่านชอบ',effects:[{money:-150},{rel:{npc:'$who',n:10}},{trait:{loyal:5}}]}},
+ {text:'ขอผ่อนผันกับฝ่ายการเงิน',check:{stat:'cha',dc:'mid'},ok:{text:'โรงเรียนให้ผ่อนได้สามเดือน',effects:[{stat:{cha:1}}]},fail:{text:'ท่านถูกเรียกชื่อหน้าแถวตอนเช้า',effects:[{stat:{cha:-1}}]}},
+ {text:'ทำเป็นไม่รู้',ok:{text:'พ่อทำงานล่วงเวลาทุกคืนจนจ่ายได้',effects:[{trait:{loyal:-2}}]}}]}),
+ev('gym_gate',46,{title:'เกตเปิดในโรงยิม',at:'school',when:school,once:true,weight:1,text:'เสียงไซเรนดังทั่วโรงเรียน เกตแรงก์ E เปิดขึ้นกลางโรงยิมระหว่างคาบพละ ครูพละสั่งให้ทุกคนวิ่งออกไป แต่มีเด็กชั้น ม.1 ติดอยู่บนอัฒจันทร์',choices:[
+ {text:'วิ่งกลับไปช่วย',check:{stat:'agi',dc:'hard',trait:'brave'},ok:{text:'ท่านอุ้มเด็กกระโดดลงจากอัฒจันทร์ได้ทันก่อนสไลม์จะพุ่งถึง ทั้งเมืองพูดถึงชื่อท่าน',effects:[{reputation:8},{karma:6},{trait:{brave:12}},{flag:'title_hero'}]},fail:{text:'ท่านพาเด็กออกมาได้แต่ถูกกรดสไลม์ลวกแขน',effects:[{hp:-40},{injury:2},{karma:6},{reputation:4},{trait:{brave:10}}]}},
+ {text:'ตะโกนบอกให้ครูไปช่วย',check:{stat:'cha',dc:'mid'},ok:{text:'ครูพละวิ่งกลับไปพาเด็กออกมาได้',effects:[{karma:2}]},fail:{text:'เสียงไซเรนกลบเสียงท่านหมด',effects:[]}},
+ {text:'วิ่งออกไปตามคำสั่ง',ok:{text:'ทีมสมาคมช่วยเด็กออกมาได้ในสิบนาที',effects:[{trait:{brave:-3}}]}}]}),
+ev('tutor',50,{title:'ติวเตอร์ราคาแพง',at:'city',when:{all:[school,{flag:'path_study'}]},once:true,text:'สถาบันกวดวิชาชื่อดังเปิดคอร์ส "เตรียมตัวตื่นพลัง" สอนทฤษฎีมานา ราคาเท่ากับค่าขนมทั้งปี',choices:[
+ {text:'ลงเรียน (300)',when:{money:{min:300}},lockText:'เงินไม่พอ',ok:{text:'เนื้อหาครึ่งหนึ่งเป็นเรื่องจริง อีกครึ่งเป็นการขายของ',effects:[{money:-300},{stat:{int:3}},{mana:3}]}},
+ {text:'ขอเอกสารเพื่อนมาอ่าน',check:{stat:'cha',dc:'easy'},ok:{text:'ได้เนื้อหาเดียวกันโดยไม่เสียเงิน',effects:[{stat:{int:2}}]},fail:{text:'เพื่อนบอกว่าเอกสารมีลิขสิทธิ์',effects:[]}},
+ {text:'ไม่เชื่อว่าเรียนแล้วจะตื่นพลังได้',ok:{text:'ท่านใช้เวลาไปออกกำลังกายแทน',effects:[{stat:{str:1,vit:1}}]}}]}),
+ev('father_hunter',54,{title:'พ่อเคยเป็นฮันเตอร์',at:'home',when:{all:[school,{familyBg:'retired_hunter'},{familyRole:{role:'father',alive:true}}]},once:true,who:{role:'father'},text:'ท่านเจอกล่องเหล็กใต้เตียงพ่อ ข้างในมีบัตรฮันเตอร์แรงก์ C ที่ถูกตัดมุม และรูปถ่ายทีมห้าคนที่หน้าถูกขีดฆ่าไปสามคน',choices:[
+ {text:'ถามพ่อตรง ๆ',check:{stat:'cha',dc:'mid'},ok:{text:'พ่อเล่าเรื่องเกตแดงเมื่อยี่สิบปีก่อนเป็นครั้งแรก แล้วสอนท่าฟันพื้นฐานให้',effects:[{stat:{str:3}},{rel:{npc:'$who',n:12}},{remember:{npc:'$who',t:'เล่าเรื่องเกตแดงให้ลูกฟัง'}}]},fail:{text:'พ่อเงียบไปทั้งคืน แล้วเก็บกล่องไปซ่อนที่อื่น',effects:[{rel:{npc:'$who',n:-4}}]}},
+ {text:'เก็บไว้ที่เดิม',ok:{text:'ท่านจำหน้าสองคนที่เหลือในรูปไว้',effects:[{stat:{int:1}}]}},
+ {text:'เอาบัตรไปค้นประวัติในเน็ต',check:{stat:'int',dc:'mid'},ok:{text:'ทีมของพ่อเคยถูกยกย่องว่าเป็นทีมที่ดีที่สุดของเมือง',effects:[{stat:{int:2}}]},fail:{text:'ข้อมูลถูกลบออกจากระบบหมด',effects:[]}}]}),
+// ---------- หลังตื่นพลัง ----------
+ev('rookies',59,{title:'ฮันเตอร์มือใหม่ขอคำแนะนำ',at:'association',when:{rank:{min:'E'}},cooldown:12,weight:3,text:'ฮันเตอร์แรงก์ E สองคนที่เพิ่งได้บัตรมายืนลังเลหน้ากระดานภารกิจ แล้วหันมาถามท่านว่าควรเริ่มจากเกตไหน',choices:[
+ {text:'พาลงเกตง่าย ๆ หนึ่งรอบ',fight:{enemy:'goblins',mult:0.8},ok:{text:'ทั้งคู่ผ่านเกตแรกได้ แล้วขอแลกเบอร์ไว้',effects:[{reputation:2},{karma:3},{stat:{cha:1}},{meet:{role:'ฮันเตอร์รุ่นน้อง',occupation:'npc_hunter',aff:40}}]},fail:{text:'ท่านพาทั้งคู่ถอยออกมาได้ ทุกคนรอด',effects:[{karma:2}]}},
+ {text:'สอนวิธีอ่านกระดานภารกิจ',ok:{text:'ทั้งคู่จดตามท่านทุกคำ',effects:[{stat:{int:1}},{karma:2}]}},
+ {text:'บอกให้ไปถามเจ้าหน้าที่',ok:{text:'ทั้งคู่เดินจากไปอย่างเก้อ ๆ',effects:[{trait:{kind:-2}}]}}]}),
+ev('ranking',63,{title:'ระบบจัดอันดับฮันเตอร์',at:'association',when:{rank:{min:'E'}},cooldown:12,text:'สมาคมเปิดการประเมินอันดับประจำปี ใครติดร้อยอันดับแรกจะได้สิทธิ์เลือกเกตก่อน ต้องสู้กับหุ่นจำลองต่อหน้ากรรมการ',choices:[
+ {text:'ลงแข่งเต็มที่',fight:{enemy:'street_thugs',mult:1.1},ok:{text:'ท่านติดอันดับ ชื่อขึ้นป้ายไฟหน้าสมาคม',effects:[{reputation:8},{money:500}]},fail:{text:'คะแนนท่านอยู่กลางตาราง',effects:[{reputation:1}]}},
+ {text:'ศึกษาจุดอ่อนหุ่นก่อนแข่ง',check:{stat:'int',dc:'mid'},ok:{text:'ท่านจบการทดสอบเร็วเป็นอันดับสาม',effects:[{reputation:6},{stat:{int:1}}]},fail:{text:'หุ่นอัปเดตรุ่นใหม่ จุดอ่อนที่จดไว้ใช้ไม่ได้',effects:[]}},
+ {text:'ไม่ลงแข่ง',ok:{text:'ท่านใช้เวลาไปฝึกแทน',effects:[{classStat:1}]}}]}),
+ev('gate_break',67,{title:'เกตกำลังจะแตก',at:'gate_zone',when:{rank:{min:'E'}},cooldown:18,weight:3,text:'เกตที่ไม่มีใครรับมาสามเดือนเริ่มสั่นและมีรอยร้าว เจ้าหน้าที่ประเมินว่าเหลือเวลาไม่ถึงชั่วโมง ทีมใหญ่ยังมาไม่ถึง',choices:[
+ {text:'บุกเข้าไปปิดเกตก่อน',fight:{enemy:'gate_boss',mult:1.3},ok:{text:'ท่านล้มบอสได้ก่อนเกตแตก ทั้งย่านปลอดภัย',effects:[{reputation:10},{exp:120},{money:300}]},fail:{text:'ท่านลากตัวเองออกมาทันก่อนประตูปิด',effects:[{injury:1}]}},
+ {text:'จัดคนอพยพชาวบ้าน',check:{stat:'cha',dc:'mid',trait:'kind'},ok:{text:'ทุกบ้านในรัศมีห้าร้อยเมตรว่างเปล่าเมื่อเกตแตก ไม่มีใครเจ็บ',effects:[{karma:8},{reputation:4}]},fail:{text:'คนแก่บางคนไม่ยอมออกจากบ้าน',effects:[{karma:3}]}},
+ {text:'รอทีมใหญ่',ok:{text:'ทีมใหญ่มาช้าไปสิบนาที ร้านค้าแถวนั้นพังหมด',effects:[{trait:{brave:-2}}]}}]}),
+ev('mom_request',71,{title:'คำขอจากแม่',when:{all:[{rank:{min:'E'}},{familyRole:{role:'mother',alive:true}}]},cooldown:36,who:{role:'mother'},text:'{who}โทรมาเสียงสั่น ขอให้ท่านเลิกลงเกตแล้วกลับมาทำงานที่บ้าน "แม่ฝันร้ายทุกคืนตั้งแต่ลูกเป็นฮันเตอร์"',choices:[
+ {text:'กลับไปหาแม่หนึ่งสัปดาห์',ok:{text:'แม่ทำอาหารให้ทุกมื้อ ท่านได้พักเต็มที่ "กินเยอะ ๆ นะลูก"',effects:[{hp:999},{rel:{npc:'$who',n:10}}]}},
+ {text:'ส่งเงินให้แม่แทน (500)',when:{money:{min:500}},lockText:'เงินไม่พอ',ok:{text:'แม่รับเงินแต่น้ำเสียงยังเป็นห่วง',effects:[{money:-500},{rel:{npc:'$who',n:4}}]}},
+ {text:'บอกว่าลูกเลือกทางนี้แล้ว',check:{stat:'cha',dc:'mid'},ok:{text:'แม่เงียบไปนาน แล้วบอกว่า "ระวังตัวด้วยนะ"',effects:[{rel:{npc:'$who',n:2}}]},fail:{text:'แม่วางสายใส่',effects:[{rel:{npc:'$who',n:-8}}]}}]}),
+ev('hunter_corpse',83,{title:'ศพฮันเตอร์ในดันเจี้ยน',at:'gate_zone',when:{rank:{min:'E'}},cooldown:24,weight:3,text:'ท่านเจอศพฮันเตอร์ที่หายไปเมื่อเดือนก่อน ในมือยังกำโทรศัพท์ไว้ ในนั้นยังมีเสียงฝากถึงลูกสาวที่ยังส่งไม่ถึง',choices:[
+ {text:'นำศพและโทรศัพท์กลับไปให้ครอบครัว',check:{stat:'str',dc:'mid'},ok:{text:'ลูกสาวของเขาได้ฟังข้อความสุดท้ายของพ่อ',effects:[{karma:8},{trait:{kind:6}}]},fail:{text:'ท่านนำได้แค่โทรศัพท์กลับมา',effects:[{karma:5}]}},
+ {text:'เก็บอุปกรณ์ของเขามาใช้',ok:{text:'อาวุธของเขาดีกว่าของท่าน',effects:[{classStat:2},{karma:-3},{item:{id:'mana_blade_d'}}]}},
+ {text:'แจ้งพิกัดให้สมาคม',ok:{text:'ทีมกู้ศพมาถึงในสองวัน',effects:[{karma:2}]}}]}),
+ev('empty_gate',87,{title:'เกตที่ไม่มีมอนสเตอร์',when:{rank:{min:'E'}},once:true,weight:1,text:'ข้างในเกตเงียบสนิท มีแต่สวนดอกไม้สีขาวกับบ้านไม้หลังเล็ก ประตูบ้านแง้มอยู่',choices:[
+ {text:'เข้าไปในบ้าน',check:{stat:'luk',dc:'hard'},ok:{text:'บนโต๊ะมีจดหมายที่จ่าหน้าถึงท่าน ลายมือของท่านเอง ข้างในเขียนว่า "อย่าเชื่อดวงดาวทุกดวง"',effects:[{stat:{int:3,luk:3}},{flag:'letter_from_self'}]},fail:{text:'ท่านตื่นขึ้นมานอกเกต จำอะไรไม่ได้เลยสามวัน',effects:[{hp:-20}]}},
+ {text:'เก็บดอกไม้ไปให้นักวิจัย',ok:{text:'ดอกไม้เหี่ยวทันทีที่ออกจากเกต',effects:[{stat:{int:1}}]}},
+ {text:'ออกจากเกตทันที',ok:{text:'ประตูเกตปิดลงข้างหลังท่านช้า ๆ เหมือนโบกมือลา',effects:[]}}]}),
+ev('blood_donation',91,{title:'หมอขอเลือดฮันเตอร์',at:'hospital',when:{rank:{min:'E'}},cooldown:24,weight:3,who:{npc:'doctor_seo'},text:'{who}บอกว่าเด็กที่ถูกพิษอสูรต้องการเลือดของฮันเตอร์ที่มีค่ามานาสูงเพื่อทำเซรุ่ม ถ้าให้ ท่านจะอ่อนแรงไปหนึ่งเดือน',choices:[
+ {text:'ให้เลือด',ok:{text:'เด็กฟื้นในสามวัน แม่ของเด็กส่งจดหมายขอบคุณมาทุกปี',effects:[{hpPct:-0.4},{karma:10},{trait:{kind:8}},{rel:{npc:'$who',n:6}}]}},
+ {text:'ขอค่าตอบแทน',check:{stat:'cha',dc:'easy'},ok:{text:'โรงพยาบาลจ่ายค่าตอบแทนให้ตามระเบียบ',effects:[{hpPct:-0.4},{money:400},{karma:4}]},fail:{text:'หมอมองท่านด้วยสายตาที่ไม่ค่อยดี',effects:[{karma:-2},{rel:{npc:'$who',n:-4}}]}},
+ {text:'ปฏิเสธ',ok:{text:'คืนนั้นมีฮันเตอร์อีกคนมาให้เลือดแทน',effects:[{trait:{kind:-4}}]}}]}),
+ev('reality_show',99,{title:'รายการเรียลลิตี้ฮันเตอร์',at:'city',when:{all:[{rank:{min:'E'}},{reputation:{min:20}}]},once:true,text:'สถานีโทรทัศน์เสนอให้ท่านเป็นนักแสดงหลักในรายการ "หนึ่งปีในชีวิตฮันเตอร์" กล้องจะตามท่านเข้าเกตทุกครั้ง',choices:[
+ {text:'รับเล่น',ok:{text:'ทั้งประเทศรู้จักหน้าท่าน แต่ไม่มีเวลาส่วนตัวอีกเลย',effects:[{reputation:20},{money:3000},{stat:{cha:2}}]}},
+ {text:'รับ แต่ห้ามกล้องเข้าเกต',check:{stat:'cha',dc:'hard'},ok:{text:'สถานียอม รายการออกมาอบอุ่นกว่าที่คิด',effects:[{reputation:12},{money:1800}]},fail:{text:'สถานีไปจ้างคู่แข่งของท่านแทน',effects:[]}},
+ {text:'ปฏิเสธ',ok:{text:'ท่านอยากเป็นฮันเตอร์ ไม่ใช่ดารา',effects:[{trait:{loyal:3}}]}}]}),
+ev('secret_files',103,{title:'เอกสารลับในห้องประธาน',at:'association',when:{all:[{rank:{min:'D'}},{any:[{worldFlag:'guild_northstar'},{job:'assoc_clerk'}]}]},once:true,text:'ระหว่างส่งรายงาน ท่านเห็นแฟ้มบนโต๊ะประธานสมาคม หน้าแรกเขียนว่า "เกตแรงก์ S ที่ปิดข่าว: 4 แห่ง"',choices:[
+ {text:'แอบเปิดอ่าน',check:{stat:'agi',dc:'hard'},ok:{text:'มีเกต S แห่งหนึ่งอยู่ใต้หอคอยกลางเมือง ท่านรีบปิดแฟ้มก่อนประตูเปิด',effects:[{stat:{int:3}},{flag:'secret_s_gates'}]},fail:{text:'เลขาประธานเดินเข้ามาพอดี ท่านถูกพักงานหนึ่งเดือน',effects:[{reputation:-5}]}},
+ {text:'ถามประธานตรง ๆ',check:{stat:'cha',dc:'ext',trait:'brave'},ok:{text:'ประธานจ้องท่านนาน แล้วเชิญเข้าทีมพิเศษ',effects:[{reputation:6},{money:1000}]},fail:{text:'ประธานยิ้มแล้วบอกว่าท่านเห็นผิด',effects:[]}},
+ {text:'ทำเป็นไม่เห็น',ok:{text:'ท่านวางรายงานแล้วเดินออกไป',effects:[]}}]}),
+ev('stalker',107,{title:'คนสะกดรอยตาม',at:'city',when:{rank:{min:'E'}},cooldown:24,text:'สามวันติดกันที่ท่านเห็นรถตู้สีดำจอดหน้าที่พัก คืนนี้มีคนลงจากรถแล้วเดินตามท่านเข้าซอย',choices:[
+ {text:'หันไปเผชิญหน้า',fight:{enemy:'street_thugs',mult:0.9},ok:{text:'ท่านจับเขาได้ เขาเป็นคนของกิลด์คู่แข่งที่ถูกจ้างมาข่มขู่',effects:[{reputation:3},{trait:{brave:6}}]},fail:{text:'มีคนอีกสามคนออกมาจากเงา ท่านหนีขึ้นหลังคาได้',effects:[{injury:1}]}},
+ {text:'ล่อเข้ากล้องวงจรปิด',check:{stat:'int',dc:'mid'},ok:{text:'ตำรวจตามรอยรถตู้จนเจอผู้จ้างวาน',effects:[{stat:{int:2}},{karma:2}]},fail:{text:'กล้องเสียพอดี',effects:[]}},
+ {text:'ย้ายที่พัก (400)',when:{money:{min:400}},lockText:'เงินไม่พอ',ok:{text:'รถตู้ไม่กลับมาอีก',effects:[{money:-400}]}}]}),
+ev('red_gate_kids',111,{title:'เกตแดงกับเด็กนักเรียน',at:'gate_zone',when:{rank:{min:'D'}},once:true,weight:1,text:'รถทัศนศึกษาถูกดูดเข้าไปในเกตแดงที่เพิ่งเปิดกลางถนน ข้างในมีนักเรียนสามสิบคน ทีมกู้ภัยต้องใช้เวลาอีกสองชั่วโมง',choices:[
+ {text:'เข้าไปทันที',fight:{enemy:'gate_boss',mult:1.5},ok:{text:'ท่านพาเด็กออกมาได้ทั้งสามสิบคน ภาพนั้นขึ้นปกหนังสือพิมพ์ทุกฉบับ',effects:[{reputation:20},{karma:15},{exp:240},{flag:'title_red'},{flag:'title_hero'}]},fail:{text:'ท่านพาเด็กออกมาได้ยี่สิบคนก่อนหมดแรง',effects:[{reputation:8},{karma:8},{injury:2}]}},
+ {text:'เปิดทางให้ทีมอื่นตามเข้ามา',check:{stat:'int',dc:'hard'},ok:{text:'ท่านปักหมุดเส้นทางในเกตให้ทีมกู้ภัย ทุกคนรอด',effects:[{reputation:8},{karma:8}]},fail:{text:'หมุดหายไปกับหมอกแดง',effects:[]}},
+ {text:'รอทีมกู้ภัย',ok:{text:'สองชั่วโมงต่อมา มีเด็กออกมาไม่ครบ',effects:[{karma:-3}]}}]}),
+ev('artificial_gate',115,{title:'การทดลองเปิดเกตเทียม',at:'association',when:{all:[{rank:{min:'E'}},{stat:{int:{min:30}}}]},once:true,text:'ห้องวิจัยอยากลองเปิดเกตขนาดเล็กด้วยแกนอสูรห้าสิบก้อน ต้องมีฮันเตอร์ยืนเฝ้าเผื่อมีอะไรหลุดออกมา',choices:[
+ {text:'อาสาเฝ้าหน้าเกต',fight:{enemy:'gate_threat'},ok:{text:'เกตเทียมเปิดได้สามวินาที มีสไลม์หลุดออกมาตัวเดียว ท่านจัดการได้',effects:[{stat:{int:2}},{reputation:3}]},fail:{text:'อสูรตัวที่หลุดมาแรงกว่าที่คิด ห้องแล็บพังครึ่งห้อง',effects:[{stat:{int:1}}]}},
+ {text:'คำนวณใหม่ก่อนเปิด',check:{stat:'int',dc:'hard'},ok:{text:'ท่านเจอจุดผิดพลาดที่อาจทำให้หอทั้งหอหายไป',effects:[{stat:{int:4}},{reputation:4}]},fail:{text:'ตัวเลขดูถูกต้องทุกตัว',effects:[{stat:{int:1}}]}},
+ {text:'คัดค้านการทดลอง',check:{stat:'cha',dc:'mid'},ok:{text:'การทดลองถูกเลื่อนไปไม่มีกำหนด',effects:[{karma:2}]},fail:{text:'ท่านถูกย้ายไปทำงานเอกสาร',effects:[]}}]}),
+ev('livestream',119,{title:'ไลฟ์สดในเกต',when:{rank:{min:'E'}},cooldown:18,text:'สตรีมเมอร์ชื่อดังจ้างท่านเป็นบอดี้การ์ดระหว่างไลฟ์สดในเกตแรงก์ต่ำ คนดูห้าแสนคน',choices:[
+ {text:'คุ้มกันอย่างจริงจัง',fight:{enemy:'gate_threat',mult:0.7},ok:{text:'ไลฟ์จบสวย ยอดผู้ติดตามท่านเพิ่มขึ้นมาก',effects:[{reputation:6},{money:600}]},fail:{text:'สตรีมเมอร์ล้มกลางไลฟ์ คลิปกลายเป็นมีม',effects:[{reputation:2},{money:300}]}},
+ {text:'โชว์ท่าเท่ ๆ ให้คนดู',check:{stat:'cha',dc:'mid'},ok:{text:'คลิปท่านถูกตัดไปลงทุกแพลตฟอร์ม',effects:[{reputation:10},{stat:{cha:2}}]},fail:{text:'ท่านพลาดท่าตกบ่อน้ำต่อหน้าคนห้าแสน',effects:[{reputation:-2}]}},
+ {text:'ปฏิเสธงาน',ok:{text:'ท่านไม่ชอบความวุ่นวาย',effects:[]}}]}),
+ev('chicken_rice',131,{title:'ร้านเปิดใหม่ของฮันเตอร์เกษียณ',at:'city',when:{all:[hunter,{npcAlive:'chef_retired'}]},once:true,who:{npc:'chef_retired'},text:'{who} ฮันเตอร์ขาพิการเปิดร้านข้าวมันไก่หน้าสมาคม ลูกค้าน้อยมากเพราะคนกลัวรอยแผลบนหน้าเขา',choices:[
+ {text:'ชวนทีมมากินทุกวัน',ok:{text:'ไม่นานร้านก็มีคิวยาวทุกเที่ยง',effects:[{karma:5},{reputation:2},{rel:{npc:'$who',n:15}}]}},
+ {text:'โพสต์รีวิวลงโซเชียล',check:{stat:'cha',dc:'mid'},ok:{text:'รีวิวไวรัล ร้านขายหมดก่อนบ่ายทุกวัน',effects:[{karma:4},{stat:{cha:1}},{rel:{npc:'$who',n:10}}]},fail:{text:'มีคนเข้ามาด่าว่าท่านรับเงินรีวิว',effects:[]}},
+ {text:'กินแล้วกลับ',ok:{text:'ข้าวมันไก่อร่อยมาก',effects:[{hp:20}]}}]}),
+ev('overtrain',135,{title:'ฝึกจนเกินขีด',at:'gym',when:{rank:{min:'E'}},cooldown:12,weight:3,text:'ท่านรู้สึกว่าพลังติดอยู่ที่เดิมหลายเดือน มีตำราเก่าบอกว่าการฝึกจนเกือบตายจะทะลุขีดจำกัดได้',choices:[
+ {text:'ฝึกจนเกือบตาย',check:{stat:'vit',dc:'hard',trait:'dili'},ok:{text:'ร่างกายแตกสลายแล้วประกอบใหม่ ท่านรู้สึกแข็งแกร่งขึ้นชัดเจน',effects:[{classStat:5},{stat:{vit:3}}]},fail:{text:'ท่านสลบกลางลานฝึก ตื่นมาในโรงพยาบาล',effects:[{hpPct:-0.5},{injury:2}]}},
+ {text:'หาคู่ซ้อมที่เก่งกว่า',fight:{enemy:'sparring_rival',mult:1.2},ok:{text:'ท่านเห็นจุดบกพร่องของตัวเองชัดเจน',effects:[{classStat:3},{exp:80}]},fail:{text:'ท่านแพ้ทุกยก แต่ได้เรียนรู้',effects:[{classStat:1}]}},
+ {text:'พักผ่อนเต็มที่สักเดือน',ok:{text:'ร่างกายสดชื่น',effects:[{hp:999},{trait:{dili:-3}}]}}]}),
+ev('guild_poach',139,{title:'กิลด์ใหญ่ซื้อตัว',at:'association',when:{any:[{worldFlag:'guild_ironfang'},{worldFlag:'guild_northstar'}]},once:true,text:'กิลด์มังกรเงินเสนอเงินเซ็นสัญญาสองเท่าให้ย้ายจากกิลด์เดิม แต่ต้องเอาข้อมูลเกตของกิลด์เก่าไปด้วย',choices:[
+ {text:'ย้ายพร้อมข้อมูล',ok:{text:'ท่านรวยขึ้นทันที แต่คนในกิลด์เก่าเลิกพูดกับท่าน',effects:[{money:4000},{karma:-8},{trait:{loyal:-15}},{worldUnflag:'guild_ironfang'},{worldUnflag:'guild_northstar'},{worldFlag:'guild_silverdragon'}]}},
+ {text:'ย้ายแต่ไม่เอาข้อมูล',check:{stat:'cha',dc:'hard'},ok:{text:'กิลด์ใหม่ยอมรับเงื่อนไข',effects:[{money:2000},{worldUnflag:'guild_ironfang'},{worldUnflag:'guild_northstar'},{worldFlag:'guild_silverdragon'}]},fail:{text:'ข้อเสนอถูกถอน',effects:[]}},
+ {text:'อยู่กิลด์เดิม',ok:{text:'หัวหน้ากิลด์รู้เรื่องนี้ แล้วขึ้นเงินเดือนให้',effects:[{money:500},{trait:{loyal:8}}]}}]}),
+ev('monster_cub',143,{title:'สัตว์อสูรตัวน้อย',at:'gate_zone',when:{rank:{min:'E'}},once:true,text:'หลังล้มบอส ท่านเจอลูกสัตว์อสูรตัวเล็กซุกอยู่ใต้ร่างแม่ของมัน มันส่งเสียงขู่แต่ขาสั่น',choices:[
+ {text:'พามันกลับไปเลี้ยง',check:{stat:'cha',dc:'hard',trait:'kind'},ok:{text:'มันกัดมือท่านหนึ่งครั้ง แล้วเลียแผลนั้น',effects:[{stat:{luk:2,str:2}},{flag:'pet_silverfang'}]},fail:{text:'มันวิ่งหายเข้าไปในความมืด',effects:[]}},
+ {text:'ส่งให้ห้องวิจัย',ok:{text:'ห้องวิจัยจ่ายเงินให้ก้อนหนึ่ง',effects:[{money:200}]}},
+ {text:'จบชีวิตมันอย่างไม่ทรมาน',ok:{text:'ท่านเก็บแกนเล็ก ๆ ของมันไว้ในกระเป๋า',effects:[{exp:30},{trait:{kind:-5}}]}}]}),
+ev('classmate_funeral',147,{title:'งานศพของเพื่อนร่วมรุ่น',when:{rank:{min:'E'}},once:true,text:'เพื่อนร่วมรุ่นที่ตื่นพลังวันเดียวกับท่านเสียชีวิตในเกตแรงก์ C ที่งานศพ แม่ของเขาถามท่านว่า "ลูกฉันกลัวไหมตอนนั้น"',choices:[
+ {text:'บอกว่าเขากล้าหาญจนวินาทีสุดท้าย',ok:{text:'แม่ของเขากอดท่านแล้วร้องไห้',effects:[{karma:3},{stat:{cha:1}}]}},
+ {text:'บอกความจริงว่าไม่รู้',ok:{text:'แม่ของเขาพยักหน้าเงียบ ๆ',effects:[{trait:{loyal:4}}]}},
+ {text:'ไปสืบว่าเกิดอะไรขึ้นในเกต',check:{stat:'int',dc:'hard'},ok:{text:'ท่านพบว่าหัวหน้าทีมทิ้งเขาไว้ แล้วนำหลักฐานส่งสมาคม',effects:[{karma:8},{reputation:4},{trait:{brave:5}}]},fail:{text:'ทุกคนในทีมให้การตรงกันว่าเป็นอุบัติเหตุ',effects:[]}}]}),
+ev('old_flame',155,{title:'คนเก่าในวันฝนตก',at:'city',when:{rank:{min:'E'}},once:true,who:{tag:'crush'},text:'{who}ยืนหลบฝนใต้ป้ายรถเมล์เดิมเหมือนสมัยเรียน ตอนนี้เป็นพยาบาลที่โรงพยาบาลฮันเตอร์ ยิ้มแล้วถามว่า "ยังจำซองสีฟ้าได้ไหม"',choices:[
+ {text:'ชวนไปกินข้าว',check:{stat:'cha',dc:'mid'},ok:{text:'คืนนั้นทั้งคู่คุยกันจนร้านปิด "ไม่คิดว่าจะได้เจอกันอีก"',effects:[{relx:{npc:'$who',aff:20,romance:1}},{stat:{cha:2}},{npcJob:{npc:'$who',job:'hospital_aide'}}]},fail:{text:'วันนี้มีเวรกลางคืน',effects:[{rel:{npc:'$who',n:5}}]}},
+ {text:'ยื่นร่มให้แล้วเดินตากฝนกลับ',ok:{text:'สัปดาห์ต่อมาร่มถูกส่งคืนพร้อมโน้ตและเบอร์โทร',effects:[{relx:{npc:'$who',aff:12,romance:0.5}},{karma:2}]}},
+ {text:'ทำเป็นจำไม่ได้',ok:{text:'ยิ้มเศร้า ๆ แล้วก้าวขึ้นรถเมล์',effects:[{rel:{npc:'$who',n:-10}}]}}]}),
+ev('body_age',159,{title:'ร่างกายเริ่มบอกอายุ',at:'hospital',when:{all:[{awakened:true},{age:{min:30}}]},once:true,trigger:'enter',text:'หมอบอกว่ามานาในร่างกายท่านเริ่มกัดกร่อนข้อต่อ ถ้ายังลงเกตหนักแบบนี้อีกสิบปีอาจเดินไม่ได้',choices:[
+ {text:'ลดงานลงครึ่งหนึ่ง',ok:{text:'ร่างกายดีขึ้น แต่รายได้ก็ลดลง',effects:[{stat:{vit:3}},{trait:{dili:-3}},{lifespan:3}]}},
+ {text:'ซื้อยาฟื้นฟูราคาแพง (3000)',when:{money:{min:3000}},lockText:'เงินไม่พอ',ok:{text:'ข้อต่อกลับมาแข็งแรงเหมือนอายุยี่สิบ',effects:[{money:-3000},{stat:{vit:5}},{lifespan:5}]}},
+ {text:'ไม่สนใจคำเตือน',ok:{text:'ท่านลงเกตต่อตามปกติ',effects:[{classStat:1},{lifespan:-2}]}}]}),
+ev('disciple',163,{title:'ศิษย์คนแรก',when:{all:[{rank:{min:'D'}},{age:{min:35}}]},once:true,text:'เด็กหนุ่มที่เพิ่งตื่นพลังแรงก์ E มานั่งรอหน้าที่พักท่านทุกวันเป็นเดือน ขอให้รับเป็นศิษย์',choices:[
+ {text:'รับเป็นศิษย์',ok:{text:'{who}ร้องไห้ดีใจ แล้วกวาดลานฝึกให้ทุกเช้า',effects:[{meet:{role:'ศิษย์',tags:['disciple'],age:18,occupation:'npc_hunter',aff:60}},{reputation:3},{stat:{cha:2}}]}},
+ {text:'ให้ทดสอบก่อน',check:{stat:'int',dc:'mid'},ok:{text:'ท่านเห็นแววในตัวเด็กคนนี้ แล้วฝากไปเรียนกับอาจารย์ที่ดีกว่า',effects:[{karma:3}]},fail:{text:'เด็กสอบไม่ผ่าน แต่ยังมานั่งรอทุกวัน',effects:[]}},
+ {text:'ไล่กลับไป',ok:{text:'เด็กไม่มาอีก',effects:[{trait:{kind:-3}}]}}]}),
+// ---------- เรื่องต่อเนื่อง (QUESTS ใน events2.js:193-206) ----------
+{id:'e2_bf_promise',title:'คำสัญญาใต้ต้นมะม่วง',trigger:'auto',priority:40,once:true,src:'events2.js:193,205 (เดิมนัดไว้ 30-34 เดือนหลังเริ่มเกม)',when:{all:[{age:{min:17.6}},{npcAlive:'best_friend'}]},who:{npc:'best_friend'},
+ text:'วันปัจฉิมนิเทศ {who}ลากท่านไปใต้ต้นมะม่วงหลังโรงเรียน "ไม่ว่าใครตื่นพลังหรือไม่ เราจะยังเป็นทีมเดียวกันนะ"',choices:[
+ {text:'สัญญา',ok:{text:'ทั้งคู่สลักชื่อไว้บนเปลือกต้นมะม่วง "สัญญาแล้วนะ!"',effects:[{rel:{npc:'$who',n:15}},{trait:{loyal:8}},{flag:'promise_bf'},{remember:{npc:'$who',t:'สัญญาใต้ต้นมะม่วง',tag:'promise'}}]}},
+ {text:'บอกว่าอนาคตไม่แน่นอน',ok:{text:'{who}หัวเราะแห้ง ๆ "อือ...จริงของแก"',effects:[{rel:{npc:'$who',n:-5}}]}},
+ {text:'ล้อว่าพูดเหมือนพระเอกละคร',check:{stat:'cha',dc:'easy'},ok:{text:'ทั้งคู่หัวเราะจนน้ำตาไหล',effects:[{rel:{npc:'$who',n:8}}]},fail:{text:'เพื่อนงอนไปทั้งวัน',effects:[{rel:{npc:'$who',n:-3}}]}}]},
+{id:'e2_bf_promise2_hunter',title:'ทวงคำสัญญา',trigger:'enter',at:'association',priority:30,once:true,src:'events2.js:197 (กรณีเพื่อนเป็นฮันเตอร์)',when:{all:[{flag:'promise_bf'},{rank:{min:'D'}},{npcFlag:{npc:'best_friend',flag:'hunter'}},{notDone:'e2_bf_promise2_maker'}]},who:{npc:'best_friend'},
+ text:'{who}เป็นฮันเตอร์แล้ว เดินเข้ามาในสมาคมพร้อมเปลือกไม้ที่สลักชื่อสองคน "ทีมเดียวกันนะ"',choices:[
+ {text:'รักษาคำสัญญา',ok:{text:'{who}เข้าทีมของท่าน "รู้อยู่แล้วว่าแกไม่ลืม"',effects:[{rel:{npc:'$who',n:25}},{karma:4},{npcFlag:{npc:'$who',flag:'party'}}]}},
+ {text:'บอกว่าทีมเต็มแล้ว',ok:{text:'{who}ยิ้ม แล้ววางเปลือกไม้ไว้บนโต๊ะก่อนเดินออกไป "...โอเค"',effects:[{rel:{npc:'$who',n:-30}},{trait:{loyal:-15}}]}}]},
+{id:'e2_bf_promise2_maker',title:'ทวงคำสัญญา',trigger:'enter',at:'association',priority:30,once:true,src:'events2.js:197 (กรณีเพื่อนไม่ได้ตื่นพลัง)',when:{all:[{flag:'promise_bf'},{rank:{min:'D'}},{npcFlag:{npc:'best_friend',flag:'hunter',is:false}},{notDone:'e2_bf_promise2_hunter'}]},who:{npc:'best_friend'},
+ text:'{who}ไม่ได้ตื่นพลัง แต่เรียนจบด้านวิศวกรรมอุปกรณ์ฮันเตอร์ แล้วเดินมาหาพร้อมเปลือกไม้ที่สลักชื่อสองคน "ข้าเป็นฮันเตอร์ไม่ได้ แต่สร้างอาวุธให้แกได้"',choices:[
+ {text:'รักษาคำสัญญา',ok:{text:'{who}ตีอาวุธเล่มใหม่ให้ท่านโดยไม่คิดเงิน "รู้อยู่แล้วว่าแกไม่ลืม"',effects:[{rel:{npc:'$who',n:25}},{karma:4},{item:{id:'crystal_blade_c'}},{equip:'crystal_blade_c'}]}},
+ {text:'บอกว่าไม่ต้องหรอก',ok:{text:'{who}ยิ้ม แล้ววางเปลือกไม้ไว้บนโต๊ะก่อนเดินออกไป',effects:[{rel:{npc:'$who',n:-30}},{trait:{loyal:-15}}]}}]},
+{id:'e2_oldman_coin',title:'เหรียญทองแดงของชายชรา',trigger:'month',weight:2,once:true,src:'events2.js:201,206',when:{all:[{flag:'coin_old'},{rank:{min:'E'}}]},
+ text:'เหรียญทองแดงที่ชายชรามือเหล็กให้ไว้เริ่มร้อนในกระเป๋า แล้วชี้ทางไปยังตรอกเล็กที่ท่านไม่เคยเห็นมาก่อน',choices:[
+ {text:'ตามเหรียญไป',check:{stat:'luk',dc:'mid'},ok:{text:'ปลายตรอกคือร้านซ่อมแขนกลของชายชรา เขายิ้มแล้วมอบเกราะที่เขาเคยใช้ให้ท่าน',effects:[{stat:{str:4,vit:4}},{item:{id:'light_armor_d'}},{equip:'light_armor_d'}]},fail:{text:'ตรอกพาไปทางตัน เหรียญเย็นลง',effects:[{stat:{luk:1}}]}},
+ {text:'เก็บเหรียญไว้',ok:{text:'เหรียญเย็นลงเหมือนผิดหวัง',effects:[]}}]},
+]);
+// ---------- เรื่องสั้นบรรทัดเดียว (PASSIVE ใน events2.js:168-189) ----------
+const pv=(id,line,text,effects,when)=>({id:'e2p_'+id,title:'',trigger:'passive',cooldown:24,src:'events2.js:'+line,when,text,choices:[{text:'',ok:{text,effects}}]});
+H.events=H.events.concat([
+ pv('quiz_full',169,'สอบย่อยได้คะแนนเต็ม ครูเอากระดาษไปติดบอร์ด',[{stat:{int:1}}],school),
+ pv('movie',170,'ไปดูหนังฮันเตอร์กับเพื่อน ฉากต่อสู้ไม่สมจริงเลย',[{stat:{cha:1}}],school),
+ pv('neighbor',171,'ช่วยยายข้างบ้านแบกข้าวสารขึ้นบันได',[{stat:{str:1}},{karma:1}],school),
+ pv('train_view',172,'นั่งรถไฟฟ้าผ่านเขตกั้นเกต เห็นแสงสีฟ้าเรืองอยู่ไกล ๆ',[{stat:{luk:1}}],school),
+ pv('sib_snack',173,'{who}แอบเอาขนมของท่านไปกิน',[{rel:{npc:'$who',n:-1}}],school),
+ pv('late',174,'ตื่นสายจนวิ่งไปโรงเรียน ทันเข้าแถวพอดี',[{stat:{agi:1}}],school),
+ pv('comic',175,'อ่านการ์ตูนฮันเตอร์ทั้งเล่มในคืนเดียว',[{trait:{dili:-1}}],school),
+ pv('sports_day',176,'งานกีฬาสี ท่านได้เหรียญทองแดงวิ่งผลัด',[{stat:{agi:1}},{reputation:1}],school),
+ pv('blackout',177,'ไฟดับทั้งเมืองเพราะเกตรบกวนสายไฟ ทั้งบ้านจุดเทียนกินข้าวด้วยกัน',[{stat:{vit:1}}],school),
+ pv('guidance',178,'ครูแนะแนวถามว่าถ้าไม่ตื่นพลังจะเรียนต่ออะไร ท่านตอบไม่ได้',[{stat:{int:1}}],school),
+ pv('fan_art',179,'ได้อีเมลจากแฟนคลับที่วาดรูปท่านส่งมา',[{stat:{cha:1}}],hunter),
+ pv('repair',180,'อาวุธบิ่นจากเกตครั้งก่อน ต้องส่งซ่อม',[{money:-120}],{all:[hunter,{money:{min:120}}]}),
+ pv('dream_class',181,'ฝันว่ากลับไปนั่งในห้องเรียนเก่า ทุกคนยังอยู่ครบ',[{hp:10}],hunter),
+ pv('scarf',182,'สมาคมส่งของขวัญปีใหม่มาให้ เป็นผ้าพันคอลายโลโก้สมาคม',[],{worldFlag:'registered'}),
+ pv('mom_call',183,'โทรหา{who} (แม่) แม่บ่นเรื่องข้าวราคาแพงอยู่ครึ่งชั่วโมง',[{rel:{npc:'$who',n:2}}],{all:[hunter,{familyRole:{role:'mother',alive:true}}]}),
+ pv('sale',184,'ร้านขายอุปกรณ์ลดราคาครึ่งหนึ่ง ท่านซื้อยาสามัญเก็บไว้เต็มกระเป๋า',[{hp:20}],hunter),
+ pv('old_school',185,'เดินผ่านโรงเรียนเก่า ภารโรงคนเดิมยังจำหน้าท่านได้',[{stat:{cha:1}}],hunter),
+ pv('photo',186,'ฮันเตอร์รุ่นน้องขอถ่ายรูปคู่',[{reputation:1}],hunter),
+ pv('gate_hum',187,'นอนไม่หลับเพราะได้ยินเสียงเกตสั่นในหัว',[{hp:-8}],hunter),
+ pv('savings',188,'เก็บเงินได้ก้อนหนึ่ง ฝากธนาคารไว้',[{stat:{luk:1}}],hunter),
+ pv('rain',189,'ฝนตกทั้งวัน ท่านนั่งดูสายฝนจากหน้าต่าง',[{stat:{vit:1}}]),
+ pv('kittens',190,'แมวจรคลอดลูกสามตัวใต้บันไดที่พัก',[{karma:1}]),
+]);
+const sib=H.events.find(e=>e.id==='e2p_sib_snack');sib.who={role:'sibling'};
+const mom=H.events.find(e=>e.id==='e2p_mom_call');mom.who={role:'mother'};
+})(globalThis.AW);
+
+// ==== data/worlds/hunter/events_people.js ====
+// Hunter World: เหตุการณ์เรื่องคน ครอบครัว ความรัก ชีวิต งาน และ Gate (Phase 4) ข้อมูลล้วน
+// ส่วนที่มีต้นแบบในเกมเดิมระบุ src ไว้ (life9.js kinDying/kinFuneral, rel12.js) ที่เหลือเป็นของใหม่
+(function(AW){
+const H=(AW.data.parts=AW.data.parts||{}).hunter=AW.data.parts.hunter||{};
+H.events=(H.events||[]).concat([
+// ---------- ครอบครัวแก่ลงและจากไป (life9.js) ----------
+{id:'kin_dying',title:'ผู้ใกล้ชิดใกล้สิ้นอายุขัย',trigger:'month',weight:4,oncePerWho:true,who:{role:'family',minAge:68},src:'life9.js:4-7 (kinDying)',
+ text:'{who}ผมขาวโพลน ลุกเดินช้าลงทุกวัน ท่านรู้ในใจว่าเวลาที่เหลืออยู่ด้วยกันไม่มากแล้ว',choices:[
+ {text:'อยู่ข้าง ๆ ทุกวันที่เหลือ',ok:{text:'ท่านพาไปดูทะเลสาบที่ชอบ เล่าเรื่องเก่า ๆ จนดึก "ขอบใจนะ ที่ยังจำได้"',effects:[{rel:{npc:'$who',n:15}},{trait:{kind:8}},{remember:{npc:'$who',t:'อยู่ข้าง ๆ ในวันท้าย ๆ',tag:'care'}}]}},
+ {text:'จ่ายค่าดูแลพิเศษ (3000)',when:{money:{min:3000}},lockText:'เงินไม่พอ',ok:{text:'สีหน้าของเขาดีขึ้นในสามวัน',effects:[{money:-3000},{rel:{npc:'$who',n:10}}]}},
+ {text:'ไปทำงานต่อ ส่งเงินกลับบ้านแทน (200)',when:{money:{min:200}},lockText:'เงินไม่พอ',ok:{text:'ท่านส่งเงินกลับบ้านทุกเดือน แต่ไม่ได้กลับไปเอง',effects:[{money:-200},{rel:{npc:'$who',n:-5}}]}}]},
+{id:'kin_funeral',title:'งานศพของ{who}',trigger:'auto',priority:70,oncePerWho:true,who:{role:'family',died:{within:3}},src:'life9.js:8-11 (kinFuneral)',
+ text:'{who}จากไปอย่างสงบ ญาติและเพื่อนบ้านมากันเต็มลาน',choices:[
+ {text:'กล่าวคำอำลา',check:{stat:'cha',dc:'easy'},ok:{text:'ทุกคนร้องไห้ตามคำพูดของท่าน',effects:[{reputation:2},{trait:{kind:5}}]},fail:{text:'ท่านพูดได้แค่ประโยคเดียวแล้วเสียงก็หายไป',effects:[]}},
+ {text:'เก็บของที่ระลึกไว้หนึ่งชิ้น',ok:{text:'ท่านได้ของเก่า ๆ ชิ้นหนึ่งมาพกติดตัว',effects:[{stat:{luk:2}}]}},
+ {text:'กลับไปฝึกทันทีหลังงานจบ',ok:{text:'ท่านฝึกจนมือแตก เพราะไม่อยากคิดถึงอะไร',effects:[{stat:{str:2}},{trait:{kind:-5}}]}}]},
+{id:'friend_funeral',title:'ลาก่อน {who}',trigger:'auto',priority:65,oncePerWho:true,who:{rel:['friend','close_friend','best_friend','romantic'],died:{within:3}},src:'new',
+ text:'ข่าวว่า{who}จากไปมาถึงท่านในเช้าวันธรรมดา ที่งานศพมีรูปถ่ายที่ท่านเคยถ่ายให้วางอยู่ข้างโลง',choices:[
+ {text:'ไปร่วมงานจนจบ',ok:{text:'ท่านอยู่จนคนสุดท้ายกลับ',effects:[{trait:{loyal:4}}]}},
+ {text:'ส่งพวงหรีดไปแทน (100)',when:{money:{min:100}},lockText:'เงินไม่พอ',ok:{text:'ชื่อท่านอยู่บนพวงหรีดหน้างาน',effects:[{money:-100}]}}]},
+// ---------- ความรักและครอบครัวใหม่ ----------
+{id:'npc_confession',title:'{who}มีเรื่องอยากบอก',trigger:'month',weight:2,oncePerWho:true,when:{all:[{age:{min:18}},{married:false}]},who:{rel:['friend','close_friend','best_friend'],minAff:45,minAge:18},src:'rel12.js:111 (confess) กลับด้านให้ NPC เป็นฝ่ายเริ่ม',
+ text:'{who}ชวนท่านเดินเล่นริมแม่น้ำ แล้วหยุดกลางสะพาน "ฉันชอบเธอมานานแล้ว"',choices:[
+ {text:'ตอบรับ',ok:{text:'ทั้งคู่ยืนอยู่บนสะพานจนไฟถนนติด',effects:[{relx:{npc:'$who',aff:10,romance:1}}]}},
+ {text:'ขอเวลาคิด',ok:{text:'{who}พยักหน้า "รอได้"',effects:[{relx:{npc:'$who',romance:0.5}}]}},
+ {text:'ปฏิเสธอย่างสุภาพ',ok:{text:'{who}ยิ้มฝืน ๆ แล้วบอกว่าเป็นเพื่อนกันเหมือนเดิมนะ',effects:[{rel:{npc:'$who',n:-10}}]}}]},
+{id:'child_news',title:'ข่าวดีในบ้าน',trigger:'month',weight:3,when:{all:[{canHaveChild:true},{chance:0.15}]},src:'rel12.js:91 (child) ย้ายเป็นเหตุการณ์ที่มีเงื่อนไข',
+ text:'คู่ครองของท่านยื่นผลตรวจให้ดูพร้อมรอยยิ้ม อีกไม่กี่เดือนบ้านนี้จะมีสมาชิกเพิ่ม',choices:[
+ {text:'กอดแน่น ๆ',ok:{text:'ท่านทาสีห้องเล็กเป็นสีฟ้าอ่อนในสัปดาห์นั้น',effects:[{haveChild:true},{trait:{kind:3}}]}}]},
+{id:'child_growing',title:'',trigger:'passive',cooldown:12,when:{children:{min:1}},who:{role:'child'},src:'new',text:'{who}พูดคำแรกได้แล้ว คำนั้นคือชื่อของท่าน',choices:[{text:'',ok:{text:'{who}โตขึ้นทุกวัน',effects:[{rel:{npc:'$who',n:2}}]}}]},
+// ---------- ชีวิตและงาน ----------
+{id:'move_out',title:'ถึงเวลาออกจากบ้าน?',trigger:'month',weight:2,once:true,when:{all:[{age:{min:20}},{homeMode:'family'}]},src:'new',
+ text:'เพื่อนรุ่นเดียวกันเริ่มย้ายออกไปอยู่เอง ห้องเช่าแถวสถานีมีป้ายว่างหลายห้อง',choices:[
+ {text:'ไว้ไปดูที่นายหน้าในเมือง',ok:{text:'ท่านจดเบอร์นายหน้าไว้ (ย้ายได้ที่ย่านใจกลางเมือง)',effects:[]}},
+ {text:'อยู่กับครอบครัวต่อ',ok:{text:'ค่าครองชีพไม่ต้องจ่าย แต่แม่เริ่มถามเรื่องแฟน',effects:[{trait:{loyal:2}}]}}]},
+{id:'office_offer',title:'งานประจำที่มั่นคง',trigger:'month',weight:2,once:true,when:{all:[{age:{min:18}},{stat:{int:{min:25}}},{job:false}]},src:'new',
+ text:'บริษัทประกันภัยข้างสถานีกำลังรับพนักงาน ไม่ต้องตื่นพลังก็สมัครได้ เงินเดือนมั่นคงแต่ต้องเข้างานเต็มเวลา',choices:[
+ {text:'สมัครเลย',ok:{text:'ท่านได้งาน เริ่มเดือนนี้',effects:[{takeJob:'office'}]}},
+ {text:'ยังไม่สนใจ',ok:{text:'ท่านเก็บใบประกาศไว้ในลิ้นชัก',effects:[]}}]},
+{id:'bf_grad_hunter',title:'',trigger:'passive',once:true,when:{all:[{age:{min:18.2}},{npcFlag:{npc:'best_friend',flag:'hunter'}},{npcAlive:'best_friend'}]},who:{npc:'best_friend'},src:'events2.js:197 (เพื่อนตื่นพลัง)',
+ text:'{who}ตื่นพลังแล้ว และลงทะเบียนเป็นฮันเตอร์',choices:[{text:'',ok:{text:'{who}ตื่นพลังแล้ว และลงทะเบียนเป็นฮันเตอร์',effects:[{npcJob:{npc:'$who',job:'npc_hunter'}}]}}]},
+{id:'bf_grad_engineer',title:'',trigger:'passive',once:true,when:{all:[{age:{min:18.2}},{npcFlag:{npc:'best_friend',flag:'hunter',is:false}},{npcAlive:'best_friend'}]},who:{npc:'best_friend'},src:'events2.js:197 (เพื่อนไม่ได้ตื่นพลัง)',
+ text:'{who}ไม่ได้ตื่นพลัง แต่สอบติดวิศวกรรมอุปกรณ์ฮันเตอร์',choices:[{text:'',ok:{text:'{who}ไม่ได้ตื่นพลัง แต่สอบติดวิศวกรรมอุปกรณ์ฮันเตอร์',effects:[{npcJob:{npc:'$who',job:'office'}}]}}]},
+// ---------- คู่แข่ง ----------
+{id:'rival_meet',title:'คนที่ไม่ชอบหน้าท่าน',trigger:'enter',at:'association',once:true,priority:20,when:{rank:{min:'E'}},who:{npc:'rival_hunter'},src:'new (แทนเหตุการณ์คู่อริ logic4.js:192, rel12 rival)',
+ text:'{who}ฮันเตอร์รุ่นเดียวกันเดินชนไหล่ท่านกลางล็อบบี้ "แรงก์เท่านี้ก็กล้ามายืนหน้ากระดานงาน D เหรอ"',choices:[
+ {text:'ท้าประลอง',fight:{enemy:'sparring_rival'},ok:{text:'{who}ล้มลงกลางวง คนมุงปรบมือ',effects:[{relx:{npc:'$who',aff:-20,resp:20}},{reputation:3}]},fail:{text:'{who}หัวเราะแล้วเดินจากไป',effects:[{relx:{npc:'$who',aff:-10,resp:-10}}]}},
+ {text:'ไม่ตอบโต้',ok:{text:'ท่านเดินผ่านไปเหมือนไม่ได้ยิน',effects:[{relx:{npc:'$who',aff:-15}},{trait:{brave:-2,kind:2}}]}},
+ {text:'ชวนไปกินข้าว',check:{stat:'cha',dc:'hard',trait:'kind'},ok:{text:'{who}งงไปครู่หนึ่ง แล้วตามไปจริง ๆ',effects:[{relx:{npc:'$who',aff:25,trust:10}}]},fail:{text:'"ไม่ว่าง"',effects:[{relx:{npc:'$who',aff:-25}}]}}]},
+// ---------- กรรมส่งผลต่อผู้คน ----------
+{id:'karma_good',title:'',trigger:'passive',cooldown:12,when:{karma:{min:40}},who:{here:true,maxAff:90},src:'new',text:'{who}ได้ยินเรื่องดี ๆ ที่ท่านทำ',choices:[{text:'',ok:{text:'{who}ได้ยินเรื่องดี ๆ ที่ท่านทำ แล้วยิ้มทักทายก่อน',effects:[{rel:{npc:'$who',n:3}}]}}]},
+{id:'karma_bad',title:'',trigger:'passive',cooldown:12,when:{karma:{max:-40}},who:{here:true,minAff:-90},src:'new',text:'{who}เลี่ยงสายตาท่าน',choices:[{text:'',ok:{text:'{who}ได้ยินข่าวลือไม่ดีเรื่องท่าน แล้วเลี่ยงสายตา',effects:[{rel:{npc:'$who',n:-3}}]}}]},
+// ---------- Gate ไปแดนอาร์เคน ----------
+{id:'blue_rift_open',title:'รอยแยกสีน้ำเงิน',trigger:'enter',at:'gate_zone',once:true,priority:40,when:{gate:{id:'rift_fantasy',is:'known'}},src:'new',
+ text:'ที่ขอบเขตกักกันมีรอยแยกสีน้ำเงินที่ไม่ได้อยู่ในรายชื่อเกตของสมาคม อีกฝั่งเป็นป่าที่ต้นไม้สูงเท่าตึก และได้ยินเสียงระฆังแบบที่ไม่มีในเมืองนี้',choices:[
+ {text:'ใช้มานาเปิดรอยแยกให้คงที่',check:{stat:'int',dc:'mid'},ok:{text:'รอยแยกนิ่งลง ท่านรู้ว่าตอนนี้ข้ามไปกลับได้แล้ว',effects:[{gateOpen:'rift_fantasy'},{mana:2}]},fail:{text:'รอยแยกสั่นแล้วหดเล็กลง ต้องกลับมาลองใหม่',effects:[{hp:-15}]}},
+ {text:'รายงานสมาคมให้ทีมวิจัยมาตรึงไว้ (300)',when:{money:{min:300}},lockText:'เงินไม่พอ',ok:{text:'ทีมวิจัยติดตั้งเสาตรึงมานา เปิดทางให้ท่านใช้เป็นคนแรก',effects:[{money:-300},{gateOpen:'rift_fantasy'},{rel:{npc:'clerk_yoon',n:3}}]}},
+ {text:'ปล่อยไว้ก่อน',ok:{text:'ท่านจดพิกัดไว้แล้วเดินกลับ',effects:[]}}]},
+{id:'blue_rift_retry',title:'รอยแยกสีน้ำเงิน (อีกครั้ง)',trigger:'action',at:'gate_zone',cost:{ap:1},when:{all:[{gate:{id:'rift_fantasy',is:'known'}},{done:'blue_rift_open'}]},src:'new',
+ text:'รอยแยกสีน้ำเงินยังอยู่ที่เดิม',choices:[{text:'ลองตรึงรอยแยกอีกครั้ง',check:{stat:'int',dc:'mid'},ok:{text:'รอยแยกนิ่งลงแล้ว',effects:[{gateOpen:'rift_fantasy'}]},fail:{text:'ยังไม่สำเร็จ',effects:[]}}]},
+{id:'deep_rift_research',title:'รอยแยกลึก',trigger:'enter',at:'association',once:true,priority:35,when:{gate:{id:'deep_rift_fantasy',is:'known'}},who:{npc:'clerk_yoon'},src:'new',
+ text:'{who}กระซิบว่าทีมวิจัยพบรอยแยกที่ลึกกว่าเดิม ข้ามไปแล้วจะออกอีกฝั่งช้ากว่าปกติราวสามเดือน ทุกครั้งที่ใช้ต้องจ่ายหินมานาสามก้อนกับค่าตรึงทาง',choices:[
+ {text:'ขอสิทธิ์ใช้ทาง',ok:{text:'ชื่อท่านอยู่ในรายชื่อผู้ใช้รอยแยกลึก',effects:[{gateOpen:'deep_rift_fantasy'}]}},
+ {text:'ไม่สนใจ',ok:{text:'ท่านพยักหน้าแล้วเดินออกมา',effects:[]}}]},
 ]);
 })(globalThis.AW);
 
@@ -1030,7 +1854,7 @@ H.events=(H.events||[]).concat([
  act('train_agi','gym','ฝึกความเร็ว (20)','ท่านวิ่งหลบลูกบอลจนขาสั่น',[{money:-20},{stat:{agi:1}}],{src:'new',when:{money:{min:20}}}),
  act('train_vit','gym','ฝึกความอึด (20)','ท่านแช่น้ำแข็งตามตำราครูฝึก',[{money:-20},{stat:{vit:1}}],{src:'new',when:{money:{min:20}}}),
  act('meditate','gym','ฝึกควบคุมมานา (30)','ท่านนั่งสมาธิในห้องกันเสียงจนมานาไหลเรียบ',[{money:-30},{mana:2},{stat:{int:1}}],{src:'new',when:{all:[{awakened:true},{money:{min:30}}]}}),
- act('treat','hospital','รักษาตัว (100)','หมอฮันเตอร์ใช้มานารักษาแผลจนหายสนิท',[{money:-100},{cure:true},{hp:999}],{src:'logic4.js:25 (โรงพยาบาลฮันเตอร์)',when:{money:{min:100}}}),
+ act('treat','hospital','รักษาตัว (100)','หมอฮันเตอร์ใช้มานารักษาแผลและอาการป่วย',[{money:-100},{cure:true},{treat:true},{hp:999}],{src:'logic4.js:25 (โรงพยาบาลฮันเตอร์)',when:{money:{min:100}}}),
  buy('iron_dagger','มีดสั้นเหล็ก',150),
  buy('leather_vest','เสื้อหนังกันมีด',120),
  buy('mana_blade_d','อาวุธมานาเกรด D',600,{rank:{min:'D'}}),
@@ -1054,7 +1878,7 @@ H.missions=[
 })(globalThis.AW);
 
 // ==== data/worlds/hunter/world.js ====
-// Hunter World: ประกอบนิยามโลกจากไฟล์ข้อมูลในโฟลเดอร์นี้ (base, events_life, events_hunter, actions)
+// Hunter World: ประกอบนิยามโลกจากไฟล์ข้อมูลในโฟลเดอร์นี้ (base, people, events_life, events_hunter, events_e2, events_people, actions)
 // state ของโลกเก็บเฉพาะเรื่องของโลก (flags การลงทะเบียน กิลด์ ข่าวเกต) ส่วนข้อมูลผู้เล่นอยู่ใน Player System
 (function(AW){
 const H=AW.data.parts.hunter;
@@ -1062,11 +1886,15 @@ AW.data.worlds.push({
  id:'hunter',name:'โลกฮันเตอร์',
  description:'โลกยุคปัจจุบันที่เกตเปิดมาได้ 20 ปี ผู้ตื่นพลังลงทะเบียนเป็นฮันเตอร์กับสมาคม',
  timeRate:1,entry:'home',assetNs:'hunter',storyNs:'hunter',stateVersion:2,
- config:{currency:'วอน',startAge:15,eventChance:0.45,rankSystem:H.rankSystem,rules:{ranks:H.rankSystem.order}},
- data:{locations:H.locations,npcs:H.npcs,classes:H.classes,skills:H.skills,items:H.items,enemies:H.enemies,events:H.events,missions:H.missions,
+ config:{currency:'วอน',startAge:15,eventChance:0.45,passiveChance:0.3,rankSystem:H.rankSystem,rules:{ranks:H.rankSystem.order},
+  namePool:H.namePool,familyBackgrounds:H.familyBackgrounds,homeLocs:['city'],defaultSchedule:'worker',livingCost:30,
+  calendar:{holidayMonths:[0,6]},population:{count:12,jobs:['student','teacher','shopkeeper','npc_hunter','trainer','doctor',null]}},
+ data:{locations:H.locations,npcs:H.npcs,schedules:H.schedules,jobs:H.jobs,housing:H.housing,classes:H.classes,skills:H.skills,items:H.items,enemies:H.enemies,events:H.events,missions:H.missions,
   quests:[{id:'reach_rank_c',name:'เป็นฮันเตอร์แรงก์ C',src:'new'}],
-  gates:[{id:'rift_fantasy',name:'รอยแยกสีน้ำเงิน (ทดสอบ)',to:'fantasy',months:0},
-         {id:'deep_rift_fantasy',name:'รอยแยกลึก 3 เดือน (ทดสอบ)',to:'fantasy',months:3}],
+  // Gate (Phase 4): ต้องค้นพบและเปิดตามเนื้อเรื่อง · ปุ่ม Debug ในหน้าทดสอบยังเรียก worlds.travelVia ได้ตรง ๆ
+  gates:[{id:'rift_fantasy',name:'รอยแยกสีน้ำเงิน',to:'fantasy',months:0,discover:{all:[{rank:{min:'D'}},{location:'gate_zone'}]},openBy:'event'},
+         {id:'deep_rift_fantasy',name:'รอยแยกลึก (3 เดือน)',to:'fantasy',months:3,discover:{all:[{rank:{min:'C'}},{gate:{id:'rift_fantasy',is:'open'}}]},openBy:'event',
+          cost:[{item:{id:'mana_stone',n:-3}},{money:-500}],travel:{item:{id:'mana_stone',min:3}},travelText:'ต้องมีหินมานา 3 ก้อน'}],
   assets:['hunter.bg.city_day','hunter.bg.association_hall','hunter.bg.apartment','hunter.bg.gate_blue','hunter.bg.training_center','hunter.bg.market','hunter.bg.hunter_hospital','hunter.mon.goblin','hunter.mon.dire_wolf','hunter.mon.golem','hunter.mon.gate_boss']},
  state:()=>({visits:0,monthsLived:0,gateAlerts:0,flags:{}}),
  module:{
@@ -1107,7 +1935,7 @@ AW.data.worlds.push({
 })(globalThis.AW);
 
 // ==== src/ui/shell.js ====
-// หน้าเล่น Phase 3 (Hunter World vertical slice) + เครื่องมือทดสอบ (เวลา เซฟ debug gate)
+// หน้าเล่น Phase 4 (ชีวิต คน ครอบครัว งาน สุขภาพ) + เครื่องมือทดสอบ (เวลา เซฟ debug gate)
 // UI อ่าน state และเรียก API ของระบบเท่านั้น ไม่มีกติกาเกมในไฟล์นี้
 // ปุ่มที่สร้างใหม่ทุกครั้งใช้ event delegation (data-*) จึงกดได้แม้เวลาเดินเร็ว
 (function(AW){
@@ -1124,15 +1952,15 @@ function createPlayer(name,gender){const E=AW.engine,r=E.rng,st={};for(const k o
 function bgId(){const E=AW.engine,p=E.player.get(),w=p.location.world||E.worlds.current,c=w&&E.worlds.ctx(w);if(!c)return 'hunter.bg.city_day';const l=c.locations.get(p.location.loc)||c.locations.get(c.def.entry);return c.def.assetNs+'.'+l.bg}
 function draw(){const cv=$('#stage');if(!cv)return;const g=cv.getContext('2d'),E=AW.engine;g.imageSmoothingEnabled=false;g.clearRect(0,0,cv.width,cv.height);
  g.drawImage(E.assets.get(bgId()),0,0,576,324);g.drawImage(E.assets.get('shared.char.base_m'),200,230,80,64)}
-function render(){$('#app').innerHTML=`<header><b>Multiverse Hunter · Phase 3 (Hunter World)</b><span id="status"></span><span id="world"></span></header>
+function render(){$('#app').innerHTML=`<header><b>Multiverse Hunter · Phase 4 (Life)</b><span id="status"></span><span id="world"></span></header>
  <div id="create"></div>
  <canvas id="stage" width="576" height="324"></canvas>
  <div id="player" class="panel"></div>
  <div id="modal"></div>
- <div class="row" id="locs"></div><div class="row" id="acts"></div><div id="miss"></div>
+ <div class="row" id="locs"></div><div class="row" id="acts"></div><div id="miss"></div><div id="people"></div><div id="lifep"></div><div class="row" id="pgates"></div>
  <div class="row">${[0,1,3,10].map(s=>`<button data-s="${s}">${s?s+'x':'หยุด'}</button>`).join('')}<button id="step">+1 เดือน</button><button id="menu">เปิด/ปิดเมนู (หยุดเวลา)</button><button id="new">เกมใหม่</button></div>
  <div class="row">${[0,1,2].map(i=>`<button data-save="${i}">เซฟช่อง ${i}</button><button data-load="${i}">โหลดช่อง ${i}</button>`).join('')}</div>
- <div class="row" id="gates"></div><div id="journal" class="panel"></div>
+ <div id="famp" class="panel"></div><div id="journal" class="panel"></div><div class="row" id="gates"></div>
 <div id="info"></div>`;
  wire();update(true)}
 const RN=()=>AW.systems.STAT_NAME;
@@ -1146,24 +1974,39 @@ function playerPanel(){const E=AW.engine,P=E.player,p=P.get();if(!p.created)retu
  return `<b>${esc(p.name)}</b> · ${p.class?esc(P.className(p.class)):'ยังไม่ตื่นพลัง'} · แรงก์ ${esc(rank)} · เลเวล ${p.level} (EXP ${p.exp}/${P.expNeed()}) · มานา ${p.mana}<br>
  พลังชีวิต ${p.hp}/${P.maxHp()}${p.injury?` · <span class="err">บาดเจ็บ ${p.injury} เดือน</span>`:''} · เงิน ${p.money} · ชื่อเสียง ${p.reputation} · AP ${p.ap}/2 · อยู่ที่ <b>${esc(loc?loc.name:p.location.loc)}</b><br>
  ${AW.systems.Rules.STATS.map(k=>`${RN()[k]} ${p.stats[k]}`).join(' · ')}<br>
+ กรรม ${p.karma} · นิสัย: ${traitText(p.traits)} · สุขภาพ ${E.health.condition()}${E.health.get().ill?` · <span class="err">ป่วย: ${esc(E.health.illDef(E.health.get().ill.id).name)} (${E.health.get().ill.months} เดือน${E.health.get().ill.treated?' รักษาแล้ว':''})</span>`:''}<br>
+ ที่พัก: ${esc((E.life.house()||{}).name||'-')} (${({family:'บ้านครอบครัว',rent:'เช่า',own:'เจ้าของ',shelter:'ที่พักพิง'})[(E.life.get().home||{}).mode]||'-'}) · งาน: ${esc((E.life.jobDef()||{}).name||'ไม่มี')} · ${esc(E.life.status())}${E.life.get().arrears?` · <span class="err">ค้างจ่าย ${E.life.get().arrears}</span>`:''}<br>
  <small>อุปกรณ์: ${['weapon','armor'].map(s=>p.equipment[s]?esc(P.itemName(p.equipment[s])):'-').join(' / ')} · กระเป๋า: ${Object.keys(p.inventory).map(q=>esc(P.itemName(q))+' x'+p.inventory[q]).join(', ')||'ว่าง'} · สกิล: ${p.skills.map(q=>esc(P.skillName(q))).join(', ')||'-'}</small>`}
-function modal(){const E=AW.engine;if(result){const r=result;return `<div class="card"><b>${esc(r.title)}</b><p>${esc(r.choice?'› '+r.choice:'')}</p>${r.fight?`<pre>${r.fight.lines.map(esc).join('\n')}</pre>`:''}<p>${r.success===false?'<span class="err">ไม่สำเร็จ</span> ':''}${esc(r.text||'')}</p>${r.effects&&r.effects.length?`<p class="ok">${r.effects.map(esc).join(' · ')}</p>`:''}<button data-ok="1">ตกลง</button></div>`}
+function traitText(t){return AW.data.shared.traits.map(x=>t[x.id]>=20?x.high:t[x.id]<=-20?x.low:null).filter(Boolean).join(' ')||'กลาง ๆ'}
+function modal(){const E=AW.engine,pp=E.player.get();if(pp.created&&!pp.alive&&!result){const L=E.health.get().lives.slice(-1)[0]||{};
+  return `<div class="card"><b>สิ้นสุดชีวิตของ ${esc(L.name||pp.name)}</b><p>จากไปเมื่ออายุ ${L.ageY} ปี สาเหตุ: ${esc(L.cause||'')}</p><p>${L.class?esc(E.player.className(L.class)):'ไม่ได้ตื่นพลัง'} · แรงก์ ${esc(Object.values(L.ranks||{}).join(' ')||'-')} · เลเวล ${L.level} · กรรม ${L.karma} · ทรัพย์สิน ${L.assets?L.assets.money:0}</p><p>คนสำคัญ: ${(L.people||[]).slice(0,5).map(x=>esc(x.name)+' ('+esc(E.rels.typeName(x.type))+')').join(', ')||'-'}</p><p>ครอบครัว: ${L.family?L.family.members.map(m=>esc(m.name||'')+' '+esc(E.family.roleName(m.role))+(m.alive?'':' (จากไปแล้ว)')).join(', '):'-'}</p><p><small>ประวัติชีวิตถูกบันทึกไว้แล้ว (ยังไม่มีการเล่นต่อเป็นรุ่นลูก)</small></p><button id="new2">เริ่มชีวิตใหม่</button></div>`}
+ if(result){const r=result;return `<div class="card"><b>${esc(r.title)}</b><p>${esc(r.choice?'› '+r.choice:'')}</p>${r.fight?`<pre>${r.fight.lines.map(esc).join('\n')}</pre>`:''}<p>${r.success===false?'<span class="err">ไม่สำเร็จ</span> ':''}${esc(r.text||'')}</p>${r.effects&&r.effects.length?`<p class="ok">${r.effects.map(esc).join(' · ')}</p>`:''}<button data-ok="1">ตกลง</button></div>`}
  const p=E.events.pending();if(!p)return '';
  return `<div class="card"><b>${esc(p.def.title)}</b><p>${esc(E.events.fmt(p.def.text))}</p>${E.events.choices().map(c=>`<button data-choice="${c.i}" ${c.ok?'':'disabled'}>${esc(c.text)}${c.chance<1?` (${Math.round(c.chance*100)}%)`:''}${c.ok?'':' · '+esc(c.lockText||'เลือกไม่ได้')}</button>`).join('')}</div>`}
 function locs(){const E=AW.engine,p=E.player.get(),c=p.created&&E.worlds.ctx(p.location.world);if(!c)return '';
  return 'ไปที่: '+[...c.locations.values()].map(l=>`<button data-loc="${l.id}" ${l.id===p.location.loc||!E.player.canEnter(l.id)||E.events.get().pending?'disabled':''} title="${esc(l.desc||'')}">${esc(l.name)}</button>`).join('')}
 function acts(){const E=AW.engine;if(!E.player.get().created)return '';const a=E.events.actions();return a.length?'ทำ: '+a.map(x=>`<button data-act="${x.id}" ${x.ok?'':'disabled'}>${esc(x.title)}${x.ap?` (AP ${x.ap})`:''}</button>`).join(''):''}
 function miss(){const E=AW.engine;if(!E.player.get().created)return '';const m=E.missions.available();return m.length?'<div class="row">ภารกิจ: '+m.map(x=>`<button data-mis="${x.id}" ${x.ok?'':'disabled'} title="${esc(x.why)}">[${x.rank}] ${esc(x.name)} · ${esc(x.enemy)} (${Math.round(x.chance*100)}%)${x.ok?'':' · '+esc(x.why)}</button>`).join('')+'</div>':''}
+function people(){const E=AW.engine,p=E.player.get();if(!p.created||!p.alive)return '';const here=E.npcs.at(p.location.world,p.location.loc);if(!here.length)return '';
+ return '<div class="panel"><b>คนที่อยู่ที่นี่</b> <small>('+({morning:'เช้า',day:'กลางวัน',evening:'เย็น',night:'กลางคืน'})[E.npcs.clock(p.location.world).slot]+')</small><br>'+here.map(n=>{const x=E.rels.edge(n.id,'player'),t=E.rels.type(n.id,'player');
+  return `<div>${esc(n.name)} <small>${esc(n.role||n.occupationName||((E.worlds.ctx(n.world).list('jobs').get(n.occupation)||{}).name)||'')} · ${E.npcs.ageY(n.id)} ปี · ${t?esc(E.rels.typeName(t))+' '+x.aff:'ยังไม่รู้จัก'}</small> `+E.rels.actions(n.id).map(a=>`<button data-npc="${n.id}" data-ia="${a.id}" ${a.why?'disabled':''} title="${esc(a.why)}">${esc(a.name)}${a.why?' · '+esc(a.why):''}</button>`).join('')+'</div>'}).join('')+'</div>'}
+function lifePanel(){const E=AW.engine,p=E.player.get();if(!p.created||!p.alive)return '';const j=E.life.jobsHere(),h=E.life.housingHere();if(!j.length&&!h.length)return '';
+ return '<div class="row">'+j.map(x=>x.current?`<button data-quit="1">ลาออกจาก${esc(x.name)}</button>`:`<button data-job="${x.id}" ${x.ok?'':'disabled'}>สมัครงาน${esc(x.name)} (${x.salary}/เดือน, AP ${x.ap})</button>`).join('')
+  +h.filter(x=>!x.current).map(x=>(x.rent!==undefined?`<button data-home="${x.id}" data-mode="rent" ${x.ok&&p.money>=x.rent?'':'disabled'}>เช่า${esc(x.name)} (${x.rent}/เดือน)</button>`:'')+(x.price!==undefined?`<button data-home="${x.id}" data-mode="own" ${x.ok&&p.money>=x.price?'':'disabled'}>ซื้อ${esc(x.name)} (${x.price})</button>`:'')).join('')+'</div>'}
+function pgates(){const E=AW.engine,l=E.gates.list();return l.length?'Gate: '+l.map(g=>`<button data-pgate="${g.id}" ${g.why?'disabled':''} title="${esc(g.why)}">${esc(g.name)}${g.months?` (${g.months} เดือน)`:''}${g.why?' · '+esc(g.why):''}</button>`).join(''):''}
+function famPanel(){const E=AW.engine,f=E.family.get();if(!f.members.length)return '';const bg=E.family.background();
+ return `<b>ครอบครัว</b> ${bg?esc(bg.name):''}<br>`+f.members.map(m=>{const n=E.npcs.get(m.npc);return n?`<small>${esc(E.family.roleName(m.role))}: ${esc(n.name)} ${n.alive?E.npcs.ageY(n.id)+' ปี':'(จากไปแล้ว)'}${n.ill?' · ป่วย':''}</small>`:''}).join(' · ')+(f.history.length?'<br><small>'+f.history.slice(0,3).map(h=>esc(h.t)).join(' · ')+'</small>':'')}
 function journal(){const E=AW.engine;return '<b>บันทึก</b><br>'+E.events.get().log.slice(0,8).map(l=>`<small>เดือน ${l.m}: ${esc(l.t)}</small>`).join('<br>')}
 function createForm(){const p=AW.engine.player.get();return p.created?'':`<div class="card"><b>เริ่มชีวิตใหม่ในโลกฮันเตอร์</b><p>อายุ 15 ปี นักเรียน ม.4</p><input id="pname" maxlength="24" placeholder="ชื่อตัวละคร" value="ซอนอู"> <select id="pgender"><option value="m">ชาย</option><option value="f">หญิง</option></select> <button id="pcreate">เริ่ม</button></div>`}
-function gates(){const E=AW.engine;return E.worlds.gatesHere().map(g=>`<button data-gate="${g.id}">${esc(g.name)}</button>`).join('')||(E.worlds.current&&!E.worlds.has(E.worlds.current)?E.worlds.ids().map(id=>`<button data-go="${id}">กลับไป ${id}</button>`).join(''):'')}
+// Debug: เดินทางตรงผ่าน worlds.travelVia ไม่ตรวจเงื่อนไขเกมเพลย์ (ใช้ทดสอบโลก Fantasy)
+function gates(){const E=AW.engine;return 'Debug: '+E.worlds.gatesHere().map(g=>`<button data-gate="${g.id}">${esc(g.name)}</button>`).join('')||(E.worlds.current&&!E.worlds.has(E.worlds.current)?E.worlds.ids().map(id=>`<button data-go="${id}">กลับไป ${id}</button>`).join(''):'')}
 function info(){const E=AW.engine,r=E.assets.report();return `<p>ภาพ: จริง ${r.real} · placeholder ${r.placeholder} · โลกที่ลงทะเบียน ${E.registries.world.all().length} · เซฟเกมเดิมที่พบ (ไม่แตะ) ${E.save.legacyKeys().length}</p>
  <p>เซฟใหม่: ${E.save.list().map(s=>esc(s.key)+(s.broken?' (เสีย)':` v${s.v} เดือน ${s.meta&&s.meta.month}`)).join(' · ')||'ยังไม่มี'}</p>
  <details id="dbg" ${window.__dbgOpen?'open':''}><summary>Debug</summary><p class="err">${E.debug.errors.map(esc).join('<br>')||'ไม่มี error'}</p><pre>${esc(JSON.stringify(E.state.snapshot(),null,1))}</pre><pre>${E.debug.lines.slice(-12).map(l=>esc(l.lvl+' '+l.msg)).join('\n')}</pre></details>`}
 const set=(sel,html)=>{const el=$(sel);if(el&&el.__h!==html){el.innerHTML=html;el.__h=html}};
 function update(force){const E=AW.engine;if(!$('#status'))return;$('#status').textContent=statusLine();$('#world').textContent=worldLine();
  const now=Date.now();if(!force&&E.loop.speed&&now-_last<300)return;_last=now;
- set('#create',createForm());set('#player',playerPanel());set('#modal',modal());set('#locs',locs());set('#acts',acts());set('#miss',miss());set('#journal',journal());set('#gates',gates());
+ set('#create',createForm());set('#player',playerPanel());set('#modal',modal());set('#locs',locs());set('#acts',acts());set('#miss',miss());set('#people',people());set('#lifep',lifePanel());set('#pgates',pgates());set('#famp',famPanel());set('#journal',journal());set('#gates',gates());
  set('#info',info());const d=$('#dbg');if(d)d.ontoggle=e=>window.__dbgOpen=e.target.open}
 // ผลที่ต้องแสดง: คำตอบเหตุการณ์ (มี choice) หรือรายงานภารกิจ (มี name+fight) · ถ้ามีเหตุการณ์ใหม่ค้าง modal จะแสดงต่อหลังกดตกลง
 function act(fn){const E=AW.engine;try{const r=fn();if(r&&r.name&&r.fight)result={title:'ภารกิจ: '+r.name,success:r.win,text:r.win?'ภารกิจสำเร็จ':'ภารกิจล้มเหลว',fight:r.fight,effects:r.effects};else if(r&&r.choice!==undefined)result=r}
@@ -1182,7 +2025,13 @@ function wire(){const E=AW.engine;
   else if(d.act)act(()=>E.events.doAction(d.act));
   else if(d.mis)act(()=>E.missions.start(d.mis));
   else if(d.gate)act(()=>{E.worlds.travelVia(d.gate)});
-  else if(d.go)act(()=>{E.worlds.travel(d.go)})});
+  else if(d.go)act(()=>{E.worlds.travel(d.go)})
+  else if(d.ia)act(()=>E.rels.interact(d.npc,d.ia));
+  else if(d.job)act(()=>{E.life.takeJob(d.job)});
+  else if(d.quit)act(()=>{E.life.quitJob()});
+  else if(d.home)act(()=>{E.life.moveIn(d.home,d.mode)});
+  else if(d.pgate)act(()=>{E.gates.travel(d.pgate)});
+  else if(b.id==='new2'){newGame(String(Date.now()));update(true)}});
  draw()}
 AW.ui.boot=boot;
 })(globalThis.AW);

@@ -24,11 +24,14 @@ class CombatSystem{
   if(!p.class)power=(p.stats.str+p.stats.agi+p.stats.vit)*0.6;
   else{const cls=P.cls(p.class),w=p.equipment.weapon&&P.item(p.equipment.weapon),r=rs&&p.ranks[rs.id]?rs.order.indexOf(p.ranks[rs.id]):0;
    power=p.stats[cls.main]*1.5+STATS.reduce((a,k)=>a+p.stats[k],0)*0.4+p.level*3+r*40+p.mana*0.8+(w?w.power||0:0)+p.skills.reduce((a,q)=>a+((P.skill(q)||{}).power||0),0)}
-  power=Math.round(power*(1-0.15*Math.min(p.injury,3)));
+  power=Math.round(power*(1-0.15*Math.min(p.injury,3))*(this.E.health?this.E.health.powerFactor():1));
   return{name:p.name,power,maxHp:P.maxHp(),hp:p.hp,luk:p.stats.luk,skills:p.skills.map(q=>P.skillName(q))}}
- enemy(worldId,id){const c=this.E.worlds.ctx(worldId),e=c&&c.list('enemies').get(id);if(!e)throw new Error('ไม่มีศัตรู '+worldId+'.'+id);return e}
- resolve({worldId,enemy,mode='auto'}){const fn=this.modes.get(mode);if(!fn)throw new Error('ไม่มีโหมดต่อสู้ '+mode);
-  return fn({profile:this.profile(worldId),enemy:this.enemy(worldId,enemy),worldId},this.E.rng)}
+ // ศัตรูแบบอิงแรงก์ (powerByRank) ใช้แทนสูตรเดิม GATE_DIFF[P.rank]*mult: พลัง = ตารางตามแรงก์ปัจจุบันของผู้เล่น x mult
+ enemy(worldId,id,mult=1){const c=this.E.worlds.ctx(worldId),e=c&&c.list('enemies').get(id);if(!e)throw new Error('ไม่มีศัตรู '+worldId+'.'+id);
+  if(!e.powerByRank)return mult===1?e:Object.assign({},e,{power:Math.round(e.power*mult)});const rs=c.config.rankSystem,r=this.E.player.get().ranks[rs&&rs.id];
+  return Object.assign({},e,{power:Math.round((e.powerByRank[r]||e.powerByRank._||e.power)*mult)})}
+ resolve({worldId,enemy,mode='auto',mult=1}){const fn=this.modes.get(mode);if(!fn)throw new Error('ไม่มีโหมดต่อสู้ '+mode);
+  return fn({profile:this.profile(worldId),enemy:this.enemy(worldId,enemy,mult),worldId},this.E.rng)}
  apply(rep){const P=this.E.player;P.addHp(rep.hpAfter-P.get().hp);if(rep.injury)P.injure(rep.injury);this.E.bus.emit('combat:done',rep);return rep}
  fight(o){return this.apply(this.resolve(o))}
 }

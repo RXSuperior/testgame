@@ -22,7 +22,7 @@ class MissionSystem{
  // ภารกิจที่สถานที่ปัจจุบัน พร้อมเหตุผลถ้ายังรับไม่ได้ (ภารกิจที่เงื่อนไขไม่ผ่านจะไม่แสดง)
  available(){const p=this.E.player.get(),w=p.location.world,c=w&&this.E.worlds.ctx(w);if(!c)return[];const v=this.E.view(w);
   return[...c.list('missions').values()].filter(m=>(!m.at||m.at===p.location.loc)&&R().check(m.when,v)).map(m=>{const q=w+'.'+m.id;
-   const why=this.E.events&&this.E.events.get().pending?'มีเหตุการณ์ค้าง':p.injury>=2?'บาดเจ็บหนัก ต้องพักก่อน':p.ap<1?'แรงไม่พอเดือนนี้ (AP)':'';
+   const why=!p.alive?'เสียชีวิตแล้ว':this.E.events&&this.E.events.get().pending?'มีเหตุการณ์ค้าง':p.injury>=2?'บาดเจ็บหนัก ต้องพักก่อน':this.E.health&&this.E.health.severity()>=2?'ป่วยหนัก ต้องรักษาก่อน':p.ap<1?'แรงไม่พอเดือนนี้ (AP)':'';
    const pr=this.E.combat.profile(w),en=this.E.combat.enemy(w,m.enemy),ratio=pr.power/en.power;
    return{id:q,name:m.name,rank:m.rank,enemy:en.name,ok:!why,why,chance:Math.round(Math.max(0.02,Math.min(0.98,1/(1+Math.pow(1/ratio,3))+pr.luk*0.002))*100)/100}})}
  start(q){const m=this.def(q);if(!m)throw new Error('ไม่มีภารกิจ '+q);const a=this.available().find(x=>x.id===q);
@@ -43,5 +43,5 @@ class MissionSystem{
 AW.systems.MissionSystem=MissionSystem;AW.systems.validateMissions=validateMissions;
 AW.systems.MissionsModule={id:'missions',deps:['events'],install(e){e.missions=new MissionSystem(e)}};
 // ติดตั้งระบบเกมเพลย์ทั้งชุดตามลำดับ deps
-AW.systems.installGameplay=e=>{for(const m of['WorldsModule','PlayerModule','RanksModule','CombatModule','EventsModule','MissionsModule'])e.use(AW.systems[m]);return e};
+AW.systems.installGameplay=e=>{for(const m of['WorldsModule','PlayerModule','RanksModule','CombatModule','EventsModule','MissionsModule','NpcsModule','RelationsModule','FamilyModule','HealthModule','LifeModule','GatesModule'])e.use(AW.systems[m]);return e};
 })(globalThis.AW);

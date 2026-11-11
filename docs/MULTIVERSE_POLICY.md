@@ -10,3 +10,11 @@
 | Player events only run in the world the player is in | The Event System checks `player.location.world`. Other worlds run only their `update` hook (world state), never player events. |
 | Normal gate is instant; special gate takes real global months | Unchanged from Phase 2 (see MULTIVERSE_TIME_DESIGN.md). Age goes up by the trip length. |
 | Location is always `{world, loc}` and must exist | `Player.setLocation` checks both. On load, a bad `loc` in an installed world is moved to that world's entry point. A world that is not installed is left as is. |
+
+## Added in Phase 4
+| Rule | How it works in code |
+|---|---|
+| NPC age uses the NPC's own world time | `bornAt` is in local months. The player's age stays on global time. |
+| NPCs in the world the player is in run every month; other installed worlds run as a batch every 12 local months | NpcSystem.simulate (LOD). Uninstalled worlds do not run (unchanged). |
+| Gameplay travel goes through the Gate System (discover/open/conditions/cost) | `engine.gates.travel`. `engine.worlds.travel*` is Debug/system access and skips gameplay conditions. |
+| The player's life history is never deleted | `health.lives` is append-only. Death stops time with reason `dead`, and the save still loads. |
