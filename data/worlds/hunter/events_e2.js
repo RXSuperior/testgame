@@ -158,11 +158,11 @@ ev('disciple',163,{title:'ศิษย์คนแรก',when:{all:[{rank:{min:
  {text:'บอกว่าทีมเต็มแล้ว',ok:{text:'{who}ยิ้ม แล้ววางเปลือกไม้ไว้บนโต๊ะก่อนเดินออกไป "...โอเค"',effects:[{rel:{npc:'$who',n:-30}},{trait:{loyal:-15}}]}}]},
 {id:'e2_bf_promise2_maker',title:'ทวงคำสัญญา',trigger:'enter',at:'association',priority:30,once:true,src:'events2.js:197 (กรณีเพื่อนไม่ได้ตื่นพลัง)',when:{all:[{flag:'promise_bf'},{rank:{min:'D'}},{npcFlag:{npc:'best_friend',flag:'hunter',is:false}},{notDone:'e2_bf_promise2_hunter'}]},who:{npc:'best_friend'},
  text:'{who}ไม่ได้ตื่นพลัง แต่เรียนจบด้านวิศวกรรมอุปกรณ์ฮันเตอร์ แล้วเดินมาหาพร้อมเปลือกไม้ที่สลักชื่อสองคน "ข้าเป็นฮันเตอร์ไม่ได้ แต่สร้างอาวุธให้แกได้"',choices:[
- {text:'รักษาคำสัญญา',ok:{text:'{who}ตีอาวุธเล่มใหม่ให้ท่านโดยไม่คิดเงิน "รู้อยู่แล้วว่าแกไม่ลืม"',effects:[{rel:{npc:'$who',n:25}},{karma:4},{item:{id:'crystal_blade_c'}},{equip:'crystal_blade_c'}]}},
+ {text:'รักษาคำสัญญา',ok:{text:'{who}ตีอาวุธเล่มใหม่ให้ท่านโดยไม่คิดเงิน "รู้อยู่แล้วว่าแกไม่ลืม"',effects:[{rel:{npc:'$who',n:25}},{karma:4},{item:{id:'crystal_blade_c'}}]}},
  {text:'บอกว่าไม่ต้องหรอก',ok:{text:'{who}ยิ้ม แล้ววางเปลือกไม้ไว้บนโต๊ะก่อนเดินออกไป',effects:[{rel:{npc:'$who',n:-30}},{trait:{loyal:-15}}]}}]},
 {id:'e2_oldman_coin',title:'เหรียญทองแดงของชายชรา',trigger:'month',weight:2,once:true,src:'events2.js:201,206',when:{all:[{flag:'coin_old'},{rank:{min:'E'}}]},
  text:'เหรียญทองแดงที่ชายชรามือเหล็กให้ไว้เริ่มร้อนในกระเป๋า แล้วชี้ทางไปยังตรอกเล็กที่ท่านไม่เคยเห็นมาก่อน',choices:[
- {text:'ตามเหรียญไป',check:{stat:'luk',dc:'mid'},ok:{text:'ปลายตรอกคือร้านซ่อมแขนกลของชายชรา เขายิ้มแล้วมอบเกราะที่เขาเคยใช้ให้ท่าน',effects:[{stat:{str:4,vit:4}},{item:{id:'light_armor_d'}},{equip:'light_armor_d'}]},fail:{text:'ตรอกพาไปทางตัน เหรียญเย็นลง',effects:[{stat:{luk:1}}]}},
+ {text:'ตามเหรียญไป',check:{stat:'luk',dc:'mid'},ok:{text:'ปลายตรอกคือร้านซ่อมแขนกลของชายชรา เขายิ้มแล้วมอบเกราะที่เขาเคยใช้ให้ท่าน',effects:[{stat:{str:4,vit:4}},{item:{id:'light_armor_d'}}]},fail:{text:'ตรอกพาไปทางตัน เหรียญเย็นลง',effects:[{stat:{luk:1}}]}},
  {text:'เก็บเหรียญไว้',ok:{text:'เหรียญเย็นลงเหมือนผิดหวัง',effects:[]}}]},
 ]);
 // ---------- เรื่องสั้นบรรทัดเดียว (PASSIVE ใน events2.js:168-189) ----------

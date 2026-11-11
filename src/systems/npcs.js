@@ -45,7 +45,7 @@ class NpcSystem{
   return{id,name:def.name,world:w,gender:def.gender||null,species:def.species||'human',role:def.role||'',faction:def.faction||null,
    home:loc(def.home||c.def.entry),work:loc(def.work||(def.occupation&&(c.list('jobs').get(def.occupation)||{}).at)||null),occupation:def.occupation||null,occupationName:def.occupationName||null,status:def.status||'common',
    schedule:def.schedule||null,override:null,bornAt:this.E.time.month(w)-Math.round((def.age??20)*12),traits:tr,temper:def.temper||'cheerful',
-   tags:(def.tags||[]).slice(),flags,memory:[],alive:true,death:null,ill:null,origin}}
+   tags:(def.tags||[]).slice(),flags,memory:[],alive:true,death:null,ill:null,origin,combat:def.combat||null}}
  _seedStr(){return String(this.E.state.get('meta').seed)}
  // ใส่ NPC จากข้อมูลโลกที่ยังไม่มี (ไม่ซ้ำ: ตรวจจาก id) และความสัมพันธ์เริ่มต้นระหว่าง NPC
  seed(w){const c=this.E.worlds.ctx(w);if(!c)return 0;const add=[];for(const d of c.list('npcs').values())if(!this._st(w).list[w+'.'+d.id])add.push(this._make(w,d,'data'));

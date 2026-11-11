@@ -26,5 +26,7 @@ AW.data.shared.illnesses=[
  {id:'flu',name:'ไข้หวัดใหญ่',months:2,severity:2,weight:3},
  {id:'pneumonia',name:'ปอดอักเสบ',months:3,severity:3,deadly:true,weight:1},
  {id:'back_pain',name:'ปวดหลังเรื้อรัง',months:4,severity:1,minAge:35,weight:2},
- {id:'heart',name:'โรคหัวใจ',months:6,severity:3,deadly:true,minAge:50,weight:1}];
+ {id:'heart',name:'โรคหัวใจ',months:6,severity:3,deadly:true,minAge:50,weight:1},
+ // อาการวิกฤตจากการต่อสู้ (Phase 5) ไม่เกิดแบบสุ่ม (weight 0) และไม่ทำให้ตายเอง
+ {id:'critical',name:'อาการวิกฤตจากการต่อสู้',months:3,severity:3,weight:0}];
 })(globalThis.AW);

@@ -5,7 +5,7 @@
 // slice 'events' เจ้าของ 'events' เก็บ pending, done, last, unlocked, log · ดู docs/phase3/STORY_EVENT_SYSTEM.md
 (function(AW){
 'use strict';
-const OWNER='events',R=()=>AW.systems.Rules,TRIGGERS=['auto','month','enter','action','passive'],WHO_KEYS=['npc','rel','role','tag','alive','here','died','minAff','maxAff','minAge'],DC={easy:10,mid:22,hard:36,ext:55},STATS=['str','agi','int','vit','cha','luk'];
+const OWNER='events',R=()=>AW.systems.Rules,TRIGGERS=['auto','month','enter','action','passive','dungeon','tower'],WHO_KEYS=['npc','rel','role','tag','alive','here','died','minAff','maxAff','minAge','party','injured'],DC={easy:10,mid:22,hard:36,ext:55},STATS=['str','agi','int','vit','cha','luk'];
 const isObj=v=>v&&typeof v==='object'&&!Array.isArray(v);
 // ตรวจข้อมูลเหตุการณ์ทั้งโลก (เรียกโดย WorldSystem ก่อนลงทะเบียน)
 function validateEvents(def){const d=def.data||{},ev=d.events||[],npcs=new Set((d.npcs||[]).map(n=>n.id)),ids=new Set(ev.map(e=>e.id)),locs=new Set((d.locations||[]).map(l=>l.id)),en=new Set((d.enemies||[]).map(x=>x.id)),e=[];
@@ -68,7 +68,8 @@ class EventSystem{
   if(wh.rel)c=c.filter(n=>[].concat(wh.rel).includes(Rl.type(n.id,'player')));
   const aff=n=>{const e=Rl.edge(n.id,'player');return e?e.aff:0};
   if(wh.minAff!==undefined)c=c.filter(n=>aff(n)>=wh.minAff);if(wh.maxAff!==undefined)c=c.filter(n=>aff(n)<=wh.maxAff);
-  if(wh.here)c=c.filter(n=>N.where(n)===P.location.loc);if(wh.minAge!==undefined)c=c.filter(n=>N.ageY(n.id)>=wh.minAge);
+  if(wh.here)c=c.filter(n=>N.where(n)===P.location.loc);if(wh.party)c=c.filter(n=>this.E.party&&this.E.party.isMember(n.id));
+  if(wh.injured)c=c.filter(n=>this.E.party&&(this.E.party.get().members.find(m=>m.npc===n.id)||{}).injury>0);if(wh.minAge!==undefined)c=c.filter(n=>N.ageY(n.id)>=wh.minAge);
   // oncePerWho: เหตุการณ์เกิดได้ครั้งเดียวต่อคน (เช่น งานศพของแต่ละคน)
   if(x.oncePerWho){const d=this.get().done;c=c.filter(n=>!d[q+'@'+n.id])}
   c.sort((a,b)=>aff(b)-aff(a)||(a.id<b.id?-1:1));return c.length?c[0].id:null}
@@ -91,7 +92,7 @@ class EventSystem{
  // ตัวเลือกที่แสดง: ทุกข้อ พร้อมสถานะเลือกได้/ไม่ได้ และโอกาสสำเร็จ
  choices(){const p=this.pending();if(!p)return[];const w=p.id.split('.')[0],v=this._v(w,p.who);
   return p.def.choices.map((c,i)=>({i,text:c.text,ok:R().check(c.when,v)&&R().affordable(c.ok&&c.ok.effects,v),lockText:c.lockText||'',chance:this.chance(c,w)}))}
- chance(c,w){if(c.fight){const pr=this.E.combat.profile(w),en=this.E.combat.enemy(w,c.fight.enemy,c.fight.mult||1),ratio=pr.power/Math.max(1,en.power);return Math.round(Math.max(0.02,Math.min(0.98,1/(1+Math.pow(1/ratio,3))+pr.luk*0.002))*100)/100}
+ chance(c,w){if(c.fight)return this.E.combat.chance(w,c.fight.enemy,c.fight.mult||1);
   if(!c.check)return 1;const p=this.E.player.get(),rs=this.E.worlds.ctx(w).config.rankSystem,r=rs&&p.ranks[rs.id];
   // สูตรเดิม logic4.js:144: หลังตื่นพลังเกณฑ์ยากขึ้นตามแรงก์ เพราะค่าสถานะโตเร็ว
   // นิสัยช่วยหรือขัด: check.trait บวกโอกาส trait/200 (นิสัยติดลบก็ลดโอกาส)

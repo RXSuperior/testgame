@@ -1,5 +1,13 @@
 # Changelog
 
+## Phase 5 — Combat, Party, Dungeon & Progression (2026-11-11)
+- Combat: Auto Resolve and manual turn-based combat share one report shape. Results change the player only through `claim(id)`, once per fight. Fights are seeded and can be saved mid-fight. Risk levels normal/high/lethal with a confirm step, retreat and call-for-help.
+- Death policy: normal fights never kill; high = Critical Condition (Health); lethal only in marked manual events. NPC members are injured, never killed by combat.
+- New systems: Party (existing NPCs, roles, synergy, shares, injuries, conflict), Dungeon (seeded floors, checkpoint, mid-run save), Tower (20 floors, floors 11–20 from a data module, puzzle/choice floors, best floor), Underground (access, reputation, heat, investigation).
+- Player v3: accessory slot, gear rank requirements, upgrades, skill levels. Phase 2/3/4 saves load.
+- Content: skills, gear, 14 new enemies, rank B prep, 5 missions, 4 dungeons, tower events, party events, dark market. The last 6 events2.js events moved (twin event kept as an unresolved hook; contract kill reworked with consequences).
+- No changes to src/core.
+
 ## Phase 4 — Character & Life System (2026-11-11)
 - New systems: NPC (data + seeded generation, schedules, LOD simulation), Relationships (directed, 9 types, NPC↔NPC), Family (parents, marriage, children, lineage groundwork), Health (illness, treatment, old age, death, life records), Life (housing, jobs, salary, costs, arrears, social status), Gates (discover/open/travel with cost; Debug travel kept separate).
 - Player v2: karma, traits, alive/death; relationships migrate from Player v1.

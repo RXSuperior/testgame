@@ -31,6 +31,8 @@ class HealthSystem{
  // ผลต่อกิจกรรม: ป่วยระดับ 2 ขึ้นไป AP ลด 1 และรับภารกิจไม่ได้ · พลังต่อสู้ลด 10% ต่อระดับ
  powerFactor(){return 1-0.1*this.severity()}
  makeIll(id){const d=this.illDef(id);if(!d)throw new Error('ไม่มีโรค '+id);this._m(s=>{s.ill={id,months:d.months,severity:d.severity,treated:false}});this.E.bus.emit('health:ill',{id})}
+ // อาการวิกฤตจากการต่อสู้เสี่ยงสูง: ป่วยระดับ 3 นาน 3 เดือน (ไม่ทำให้ตายเอง) ต้องรักษาเพื่อหายเร็วขึ้น
+ critical(){this._m(s=>{s.ill={id:'critical',months:3,severity:3,treated:false}});this.E.bus.emit('health:critical',{});this.E.events&&this.E.events.log('อาการวิกฤต (Critical Condition) ต้องพักรักษาตัว')}
  treat(){if(!this.get().ill)return false;this._m(s=>{s.ill.treated=true;s.ill.months=Math.ceil(s.ill.months/2)});return true}
  addLifeMod(n){this._m(s=>{s.lifeMod+=n})}
  _month(){const P=this.E.player,p=P.get();if(!p.created||!p.alive)return;
