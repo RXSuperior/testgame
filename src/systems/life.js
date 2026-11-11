@@ -11,7 +11,9 @@ function validateLife(def){const d=def.data||{},e=[],locs=new Set((d.locations||
  for(const h of d.housing||[]){const p='housing '+h.id+': ';if(!locs.has(h.loc))e.push(p+'ไม่มีสถานที่ '+h.loc);for(const k of['rent','price','upkeep','comfort'])if(h[k]!==undefined&&!(Number.isInteger(h[k])&&h[k]>=0))e.push(p+k+' ต้องเป็นจำนวนเต็ม >= 0');
   if(h.rent===undefined&&h.price===undefined&&!h.family&&!h.shelter)e.push(p+'ต้องมี rent หรือ price');e.push(...R().validateCond(h.when).map(x=>p+x))}
  for(const j of d.jobs||[]){const p='job '+j.id+': ';if(!locs.has(j.at))e.push(p+'ไม่มีสถานที่ '+j.at);if(!(Number.isInteger(j.salary)&&j.salary>=0))e.push(p+'salary ต้องเป็นจำนวนเต็ม >= 0');
-  if(j.ap!==undefined&&![0,1,2].includes(j.ap))e.push(p+'ap ต้องเป็น 0-2');e.push(...R().validateCond(j.when).map(x=>p+x),...R().validateEffects(j.monthly).map(x=>p+'monthly: '+x))}
+  if(j.ap!==undefined&&![0,1,2].includes(j.ap))e.push(p+'ap ต้องเป็น 0-2');
+  for(const f of['raise','raiseMax'])if(j[f]!==undefined&&!(typeof j[f]==='number'&&j[f]>=0&&j[f]<=1))e.push(p+f+' ต้องเป็น 0..1');
+  if(j.perks!==undefined&&!(j.perks&&typeof j.perks==='object'&&Object.keys(j.perks).every(k=>(AW.systems.ECON_PERKS||{})[k])))e.push(p+'perks ไม่รู้จัก');e.push(...R().validateCond(j.when).map(x=>p+x),...R().validateEffects(j.monthly).map(x=>p+'monthly: '+x))}
  return e}
 class LifeSystem{
  constructor(E){this.E=E;E.state.register(OWNER,OWNER,()=>({_v:VERSION,home:null,job:null,arrears:0,ledger:[],worked:0}));E.worlds.addValidator(validateLife);
@@ -27,16 +29,19 @@ class LifeSystem{
  _start(){const w=this.E.player.get().location.world,h=this._familyHome(w);if(h&&!this.get().home)this._m(s=>{s.home={world:w,id:h.id,loc:h.loc,mode:'family'}})}
  // ---- งาน ----
  jobsHere(){const p=this.E.player.get(),c=this._ctx();if(!c||!p.alive)return[];const v=this.E.view(c.id),cur=this.get().job;
-  return[...c.list('jobs').values()].filter(j=>j.at===p.location.loc&&!j.npcOnly).map(j=>({id:j.id,name:j.name,salary:j.salary,ap:j.ap??1,current:!!(cur&&cur.id===j.id&&cur.world===c.id),ok:R().check(j.when,v)}))}
+  return[...c.list('jobs').values()].filter(j=>j.at===p.location.loc&&!j.npcOnly).map(j=>({id:j.id,name:j.name,salary:cur&&cur.id===j.id&&cur.world===c.id?this.salary():j.salary,ap:j.ap??1,current:!!(cur&&cur.id===j.id&&cur.world===c.id),ok:R().check(j.when,v)}))}
  takeJob(id,{force=false}={}){const c=this._ctx(),j=c&&c.list('jobs').get(id);if(!j)throw new Error('ไม่มีงาน '+id);if(!force&&!R().check(j.when,this.E.view(c.id)))throw new Error('ยังไม่ผ่านเงื่อนไขของงานนี้');
   this._m(s=>{s.job={world:c.id,id,since:this.E.loop.month}});this.E.events&&this.E.events.log(`เริ่มงาน${j.name}`)}
+ // อายุงาน (ปี) และเงินเดือนตามอายุงาน: ขึ้น raise ต่อปี (ค่าเริ่ม 5%) สูงสุด raiseMax (40%) · ลาออกแล้วนับใหม่
+ tenure(j=this.get().job){return j?Math.floor((this.E.loop.month-(j.since||0))/12):0}
+ salary(){const j=this.jobDef();if(!j)return 0;const r=j.raise??0.05,mx=j.raiseMax??0.4;return Math.round(j.salary*(1+Math.min(mx,r*this.tenure())))}
  quitJob(){const j=this.jobDef();if(!j)return false;this._m(s=>{s.job=null});this.E.events&&this.E.events.log(`ลาออกจากงาน${j.name}`);return true}
  // ---- บ้าน ----
  housingHere(){const p=this.E.player.get(),c=this._ctx();if(!c||!p.alive)return[];const v=this.E.view(c.id),cur=this.get().home;
   return[...c.list('housing').values()].filter(h=>h.agent===p.location.loc||h.loc===p.location.loc).map(h=>({id:h.id,name:h.name,rent:h.rent,price:h.price,comfort:h.comfort||0,current:!!(cur&&cur.id===h.id),ok:R().check(h.when,v)}))}
  moveIn(id,mode){const c=this._ctx(),h=c&&c.list('housing').get(id);if(!h)throw new Error('ไม่มีที่พัก '+id);if(!R().check(h.when,this.E.view(c.id)))throw new Error('ยังไม่ผ่านเงื่อนไข');
-  const P=this.E.player;if(mode==='own'){if(h.price===undefined)throw new Error('ที่นี่ไม่ขาย');P.addMoney(-h.price)}
-  else if(mode==='rent'){if(h.rent===undefined)throw new Error('ที่นี่ไม่ให้เช่า');P.addMoney(-h.rent)}
+  const P=this.E.player;if(mode==='own'){if(h.price===undefined)throw new Error('ที่นี่ไม่ขาย');P.addMoney(-h.price,'housing')}
+  else if(mode==='rent'){if(h.rent===undefined)throw new Error('ที่นี่ไม่ให้เช่า');P.addMoney(-h.rent,'housing')}
   else if(!(mode==='family'&&h.family)&&!(mode==='shelter'&&h.shelter))throw new Error('รูปแบบไม่ถูกต้อง');
   this._m(s=>{s.home={world:c.id,id,loc:h.loc,mode};if(mode!=='rent')s.arrears=0});this.E.events&&this.E.events.log(`ย้ายไปอยู่${h.name}`)}
  // ---- รายเดือน ----
@@ -45,9 +50,9 @@ class LifeSystem{
   return{rent:s.home.mode==='rent'?h.rent||0:0,upkeep:s.home.mode==='own'?h.upkeep||0:0,living:s.home.mode==='family'||s.home.mode==='shelter'?0:lc}}
  _month(){const P=this.E.player,p=P.get();if(!p.created||!p.alive)return;const s=this.get(),j=this.jobDef(),m=this.E.loop.month;let income=0,note=[];
   if(j&&s.job.world===p.location.world){const ill=this.E.health?this.E.health.severity():0,cal=(this._ctx(s.job.world).config.calendar||{}),off=(cal.holidayMonths||[]).includes(this.E.time.month(s.job.world)%12);
-   const ap=off?0:(j.ap??1);if(p.injury>=2||ill>=2){note.push('ลาป่วย ไม่ได้เงินเดือน')}else if(p.ap<ap){note.push('แรงไม่พอไปทำงาน')}else{if(ap)P.spendAp(ap);income=j.salary;P.addMoney(income);
+   const ap=off?0:(j.ap??1);if(p.injury>=2||ill>=2){note.push('ลาป่วย ไม่ได้เงินเดือน')}else if(p.ap<ap){note.push('แรงไม่พอไปทำงาน')}else{if(ap)P.spendAp(ap);income=this.salary();P.addMoney(income,'salary');
     if(j.monthly)R().apply(j.monthly,this.E.view(s.job.world));note.push(off?'วันหยุดยาว ได้เงินเดือนตามปกติ':'ทำงาน '+j.name)}}
-  const d=this.dues(),due=d.rent+d.upkeep+d.living+s.arrears,pay=Math.min(due,P.get().money);if(pay)P.addMoney(-pay);const left=due-pay;
+  const d=this.dues(),due=d.rent+d.upkeep+d.living+s.arrears,pay=Math.min(due,P.get().money);if(pay)P.addMoney(-pay,'living');const left=due-pay;
   this._m(x=>{x.arrears=left;x.ledger.unshift({m,income,expense:pay,owed:left,note:note.join(', ')});if(x.ledger.length>12)x.ledger.length=12});
   if(left>0&&d.rent&&left>d.rent*3)this._evict()}
  _evict(){const s=this.get(),w=s.home.world,h=this._familyHome(w),parents=this.E.family?this.E.family.members().filter(m=>/mother|father/.test(m.role)&&(this.E.npcs.get(m.npc)||{}).alive):[];
@@ -59,6 +64,8 @@ class LifeSystem{
  status(){const v=this.statusScore();let n=STATUS[0][1];for(const[t,name]of STATUS)if(v>=t)n=name;return n}
  _afterLoad(){const p=this.E.player.get();if(p.created&&!this.get().home)this._start()}
 }
+AW.systems.Rules.COND.jobTenure={ok:(c,v)=>{const L=v.E.life,j=L&&L.get().job;if(!j)return false;if(c.job&&AW.systems.Rules.qid(c.job,v.worldId)!==j.world+'.'+j.id)return false;const t=L.tenure();return(c.min===undefined||t>=c.min)&&(c.max===undefined||t<=c.max)},
+ val:c=>c&&typeof c==='object'&&(c.min!==undefined||c.max!==undefined)?[]:['jobTenure ต้องเป็น {job,min,max} (ปี)']};
 AW.systems.LifeSystem=LifeSystem;AW.systems.validateLife=validateLife;
 AW.systems.LifeModule={id:'life',deps:['player'],install(e){e.life=new LifeSystem(e)}};
 })(globalThis.AW);

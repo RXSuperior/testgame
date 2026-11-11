@@ -1,5 +1,14 @@
 # Changelog
 
+## Phase 6 — Economy, B-Rank Content & Playstyle Balance (2026-11-11)
+- Economy system: services (once/repeat/plan) priced by rank, gear wear and repair, B upgrades to +5, home upgrades, lifestyle, insurance, guild investment and sponsorship, monthly ledger. No debt: unpaid fees pause the service, safety cash floor.
+- Missions v2: Association merit with tiers and decay, repeat-mission pay cut, solo EXP bonus, party member abilities.
+- B content: 10 enemies (armor, shield, summon, drain, swarm), 11 missions incl. team raid and solo bounty, 2 dungeons (1 hidden), gear, skills, events.
+- Dungeon discoveries and explorer level. Jobs: pay rises with tenure, senior jobs.
+- Tower readiness check and NPC climbing AI (cadence, teams, rest).
+- Added the skill/item data validator that Phase 5 docs described but the code did not have.
+- Phase 2–5 saves load. No changes to src/core.
+
 ## Phase 5 — Combat, Party, Dungeon & Progression (2026-11-11)
 - Combat: Auto Resolve and manual turn-based combat share one report shape. Results change the player only through `claim(id)`, once per fight. Fights are seeded and can be saved mid-fight. Risk levels normal/high/lethal with a confirm step, retreat and call-for-help.
 - Death policy: normal fights never kill; high = Critical Condition (Health); lethal only in marked manual events. NPC members are injured, never killed by combat.

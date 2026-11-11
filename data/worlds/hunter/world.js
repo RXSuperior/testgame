@@ -8,8 +8,8 @@ AW.data.worlds.push({
  timeRate:1,entry:'home',assetNs:'hunter',storyNs:'hunter',stateVersion:2,
  config:{currency:'วอน',startAge:15,eventChance:0.45,passiveChance:0.3,rankSystem:H.rankSystem,rules:{ranks:H.rankSystem.order},
   namePool:H.namePool,familyBackgrounds:H.familyBackgrounds,homeLocs:['city'],defaultSchedule:'worker',livingCost:30,
-  calendar:{holidayMonths:[0,6]},population:{count:12,jobs:['student','teacher','shopkeeper','npc_hunter','trainer','doctor',null]}},
- data:{locations:H.locations,npcs:H.npcs,schedules:H.schedules,jobs:H.jobs,housing:H.housing,dungeons:H.dungeons,towers:H.towers,towerFloors:H.towerFloors,classes:H.classes,skills:H.skills,items:H.items,enemies:H.enemies,events:H.events,missions:H.missions,
+  calendar:{holidayMonths:[0,6]},economy:H.economyConfig,missions:H.missionConfig,party:H.partyConfig,tower:H.towerConfig,population:{count:12,jobs:['student','teacher','shopkeeper','npc_hunter','trainer','doctor',null]}},
+ data:{locations:H.locations,npcs:H.npcs,schedules:H.schedules,jobs:H.jobs,housing:H.housing,dungeons:H.dungeons,towers:H.towers,towerFloors:H.towerFloors,services:H.services,guilds:H.guilds,classes:H.classes,skills:H.skills,items:H.items,enemies:H.enemies,events:H.events,missions:H.missions,
   quests:[{id:'reach_rank_c',name:'เป็นฮันเตอร์แรงก์ C',src:'new'}],
   // Gate (Phase 4): ต้องค้นพบและเปิดตามเนื้อเรื่อง · ปุ่ม Debug ในหน้าทดสอบยังเรียก worlds.travelVia ได้ตรง ๆ
   gates:[{id:'rift_fantasy',name:'รอยแยกสีน้ำเงิน',to:'fantasy',months:0,discover:{all:[{rank:{min:'D'}},{location:'gate_zone'}]},openBy:'event'},

@@ -103,7 +103,8 @@ class EventSystem{
   let success=true,fight=null;
   if(c.check)success=this.E.rng.next()<this.chance(c,w);
   if(c.fight){fight=this.E.combat.fight({worldId:w,enemy:c.fight.enemy,mode:c.fight.mode||'auto',mult:c.fight.mult||1});success=fight.win}
-  const out=success?c.ok:c.fail,lines=R().apply(out.effects,v);
+  // Phase 6: หมวดเงิน (cat ของเหตุการณ์/กิจกรรม) และส่วนลดจากบริการ/งาน เช่น ประกันลดค่ารักษา
+  const out=success?c.ok:c.fail,cat=p.def.cat||(p.def.trigger==='action'?'action':'event'),EC=this.E.economy,fx=EC?EC.adjust(p.def.cat,out.effects):out.effects,lines=EC?EC.as(cat,()=>R().apply(fx,v)):R().apply(fx,v);
   if(p.who&&this.E.npcs.get(p.who))this.E.npcs.remember(p.who,`${p.def.title}: ${c.text}`,p.id);
   const text=this.fmt(out.text,v.who),res={id:p.id,title:this.fmt(p.def.title,v.who),choice:c.text,success,text,effects:lines,fight};
   this._m(s=>{s.pending=null;s.done[p.id]=(s.done[p.id]||0)+1;s.last[p.id]=this.E.loop.month;if(p.who)s.done[p.id+'@'+p.who]=1});

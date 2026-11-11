@@ -14,8 +14,22 @@ const blank=()=>({_v:VERSION,created:false,id:'p1',name:'',species:'human',gende
 // v2->v3 (Phase 5): ช่อง accessory, ระดับอัปเกรดอุปกรณ์ (upgrades), ระดับสกิล (skillLv)
 const MIGRATIONS={1:(s,sys)=>{sys.legacyRelations=s.relations||{};delete s.relations;s.karma=0;s.traits={brave:0,kind:0,dili:0,loyal:0};s.alive=true;s.death=null},
  2:s=>{s.equipment.accessory=s.equipment.accessory||null;s.upgrades={};s.skillLv={};for(const q of s.skills)s.skillLv[q]={lv:1,xp:0}}};
+// ตรวจข้อมูลสกิลและอุปกรณ์ตอนลงทะเบียนโลก (Phase 6: เพิ่มตัวตรวจที่ Phase 5 ยังขาด)
+const SKILL_TYPES=['active','passive','support'],SKILL_ACTS=['damage','heal','guard','stun'],RANKS_ALL=['E','D','C','B','A','S'];
+function validateProgression(def){const d=def.data||{},e=[],R=AW.systems.Rules,num=(x,a,b)=>typeof x==='number'&&x>=a&&x<=b;
+ for(const k of d.skills||[]){const p='skill '+k.id+': ';if(typeof k.name!=='string')e.push(p+'ต้องมี name');if(k.type!==undefined&&!SKILL_TYPES.includes(k.type))e.push(p+'type ต้องเป็น '+SKILL_TYPES.join('|'));
+  if(k.act!==undefined&&!SKILL_ACTS.includes(k.act))e.push(p+'act ไม่รู้จัก '+k.act);if(k.type&&k.type!=='passive'&&!k.act)e.push(p+'สกิลที่ไม่ใช่ passive ต้องมี act');
+  for(const f of['mp','cd'])if(k[f]!==undefined&&!(Number.isInteger(k[f])&&k[f]>=0))e.push(p+f+' ต้องเป็นจำนวนเต็ม >= 0');for(const f of['mult','power'])if(k[f]!==undefined&&!num(k[f],0,500))e.push(p+f+' ต้องเป็นตัวเลข >= 0');
+  if(k.maxLv!==undefined&&!(Number.isInteger(k.maxLv)&&k.maxLv>=1&&k.maxLv<=10))e.push(p+'maxLv ต้องเป็น 1..10');if(k.pct!==undefined&&!num(k.pct,0,0.5))e.push(p+'pct ต้องเป็น 0..0.5');
+  if(k.target!==undefined&&!['one','all'].includes(k.target))e.push(p+'target ต้องเป็น one|all');if(k.rank!==undefined&&!RANKS_ALL.includes(k.rank))e.push(p+'rank ไม่รู้จัก');
+  e.push(...R.validateCond(k.unlock).map(x=>p+'unlock: '+x))}
+ for(const it of d.items||[]){const p='item '+it.id+': ';if(typeof it.name!=='string')e.push(p+'ต้องมี name');if(it.slot!==undefined&&!SLOTS.includes(it.slot))e.push(p+'slot ต้องเป็น '+SLOTS.join('|'));
+  if(it.rank!==undefined&&!RANKS_ALL.includes(it.rank))e.push(p+'rank ไม่รู้จัก');if(it.price!==undefined&&!(Number.isInteger(it.price)&&it.price>=0))e.push(p+'price ต้องเป็นจำนวนเต็ม >= 0');
+  const u=it.upgrade;if(u!==undefined){if(!(u&&Number.isInteger(u.max)&&u.max>=1&&u.max<=10&&Number.isInteger(u.cost)&&u.cost>0))e.push(p+'upgrade ต้องมี max 1..10 และ cost > 0');if(u&&u.grow!==undefined&&!num(u.grow,1,3))e.push(p+'upgrade.grow ต้องเป็น 1..3');if(u&&!it.slot)e.push(p+'อัปเกรดได้เฉพาะของที่สวมใส่')}
+  e.push(...R.validateCond(it.req).map(x=>p+'req: '+x))}
+ return e}
 class PlayerSystem{
- constructor(E){this.E=E;E.state.register('player',OWNER,blank);
+ constructor(E){this.E=E;E.state.register('player',OWNER,blank);if(E.worlds)E.worlds.addValidator(validateProgression);
   E.bus.on('month',()=>this._month(),{prio:40,owner:OWNER});
   E.bus.on('world:enter',({world})=>{const c=E.worlds.ctx(world);if(this.get().created&&c)this.setLocation(world,c.def.entry)},{prio:50,owner:OWNER});
   E.bus.on('game:loaded',()=>this._afterLoad(),{prio:90,owner:OWNER})}
@@ -36,12 +50,12 @@ class PlayerSystem{
  maxHp(p=this.get()){return 50+p.stats.vit*5+p.level*5+this.gear('hp',p)}
  // ค่าจากอุปกรณ์ที่สวม: ค่าพื้น (power/hp/mp หรือ stats.x) + โบนัสต่อระดับอัปเกรด (upgrade.per.x)
  gear(stat,p=this.get()){let t=0;for(const sl of SLOTS){const q=p.equipment[sl],d=q&&this.item(q);if(!d)continue;const lv=(p.upgrades||{})[q]||0;
-  t+=(d[stat]||0)+((d.stats||{})[stat]||0)+lv*(((d.upgrade||{}).per||{})[stat]||0)}return t}
+  const f=this.E.economy?this.E.economy.condFactor(q):1;t+=((d[stat]||0)+((d.stats||{})[stat]||0)+lv*(((d.upgrade||{}).per||{})[stat]||0))*f}return Math.round(t)}
  maxMp(p=this.get()){return 20+p.mana*2+this.gear('mp',p)}
  skillLevel(q,p=this.get()){return((p.skillLv||{})[q]||{lv:1}).lv}
  expNeed(level=this.get().level){return Math.floor(60*Math.pow(level,1.45))}
  // ---- เปลี่ยนค่า (ทุกอย่างผ่าน mutate ของเจ้าของ) ----
- addMoney(n){if(this.get().money+n<0)throw new Error('เงินไม่พอ');this._m(p=>{p.money+=n})}
+ addMoney(n,cat){if(this.get().money+n<0)throw new Error('เงินไม่พอ');if(!n)return;this._m(p=>{p.money+=n});this.E.bus.emit('money:changed',{n,cat:cat||(this.E.economy&&this.E.economy.cat)||null})}
  addRep(n){this._m(p=>{p.reputation+=n})}
  addMana(n){this._m(p=>{p.mana=Math.max(0,p.mana+n)})}
  addStats(d){for(const k of Object.keys(d))if(!STATS.includes(k))throw new Error('ไม่มีค่าสถานะ '+k);this._m(p=>{for(const k of Object.keys(d))p.stats[k]=Math.max(0,p.stats[k]+d[k])});this._clampHp()}
@@ -60,9 +74,9 @@ class PlayerSystem{
   if(d.req&&!AW.systems.Rules.check(d.req,this.E.view(q.split('.')[0])))return'ยังไม่ผ่านเงื่อนไขของอุปกรณ์';return''}
  equip(q){const why=this.canEquip(q);if(why)throw new Error(why+': '+q);const d=this.item(q);this._m(p=>{p.equipment[d.slot]=q});this._clampHp()}
  // อัปเกรด: จ่ายครบก่อนแล้วค่อยเพิ่มระดับในการเขียนเดียวกัน (โหลดเซฟไม่ทำให้ได้ซ้ำ)
- upgradeCost(q){const d=this.item(q),u=d&&d.upgrade;if(!u)return null;const lv=(this.get().upgrades||{})[q]||0;if(lv>=u.max)return null;return{money:u.cost*(lv+1),lv:lv+1}}
+ upgradeCost(q){const d=this.item(q),u=d&&d.upgrade;if(!u)return null;const lv=(this.get().upgrades||{})[q]||0;if(lv>=u.max)return null;return{money:Math.round(u.cost*Math.pow(lv+1,u.grow||1)),lv:lv+1}}
  upgrade(q){if(!this.get().inventory[q])throw new Error('ไม่มีของชิ้นนี้');const c=this.upgradeCost(q);if(!c)throw new Error('อัปเกรดไม่ได้แล้ว');if(this.get().money<c.money)throw new Error('เงินไม่พอ');
-  this._m(p=>{p.money-=c.money;p.upgrades[q]=c.lv});this._clampHp();return c.lv}
+  this._m(p=>{p.money-=c.money;p.upgrades[q]=c.lv});this.E.bus.emit('money:changed',{n:-c.money,cat:'upgrade'});this._clampHp();return c.lv}
  unequip(slot){this._m(p=>{p.equipment[slot]=null});this._clampHp()}
  setClass(q){const c=this.cls(q);if(!c)throw new Error('ไม่มีอาชีพ '+q);if(this.get().class)throw new Error('มีอาชีพแล้ว');
   this._m(p=>{p.class=q;for(const k of Object.keys(c.bonus||{}))p.stats[k]+=c.bonus[k];if(c.skill&&!p.skills.includes(c.skill)){p.skills.push(c.skill);p.skillLv[c.skill]={lv:1,xp:0}}});const p=this.get();this._m(s=>{s.hp=this.maxHp(p)})}
@@ -102,6 +116,6 @@ class PlayerSystem{
   const w=p.location.world||cur;
   if(p.created&&w&&E.worlds.has(w)&&!this.validLocation(w,p.location.loc)){const c=E.worlds.ctx(w);E.debug&&E.debug.log(`ตำแหน่ง ${w}/${p.location.loc} ไม่มีอยู่ ย้ายไปจุดเริ่ม ${c.def.entry}`);this._m(s=>{s.location={world:w,loc:c.def.entry}})}}
 }
-AW.systems.PlayerSystem=PlayerSystem;AW.systems.TRAITS=TRAITS;AW.systems.EQUIP_SLOTS=SLOTS;
+AW.systems.PlayerSystem=PlayerSystem;AW.systems.TRAITS=TRAITS;AW.systems.validateProgression=validateProgression;AW.systems.EQUIP_SLOTS=SLOTS;
 AW.systems.PlayerModule={id:'player',deps:['worlds'],install(e){e.player=new PlayerSystem(e)}};
 })(globalThis.AW);

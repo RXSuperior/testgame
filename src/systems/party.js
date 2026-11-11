@@ -20,7 +20,12 @@ class PartySystem{
  // ความสามารถต่อสู้ของ NPC (null = ต่อสู้ไม่ได้) · npc_hunter ที่ไม่ได้กำหนดบทบาท ใช้ hash ของ id เลือกบทบาท (คงที่)
  combatOf(q){const n=this.E.npcs.get(q);if(!n)return null;const c=this.E.worlds.ctx(n.world);if(!c)return null;const def=c.list('npcs').get(q.split('.')[1]),job=n.occupation&&c.list('jobs').get(n.occupation);
   const cb=n.combat||(def&&def.combat)||(job&&job.combat)||(n.flags.hunter&&(c.list('jobs').get('npc_hunter')||{}).combat)||null;if(!cb)return null;
-  return{role:cb.role||ROLES[Math.floor(AW.systems.h01(q+'|role')*3)],base:cb.base||50,share:cb.share??0.15}}
+  const role=cb.role||ROLES[Math.floor(AW.systems.h01(q+'|role')*3)],ra=((c.config.party||{}).roleAbilities||{})[role]||null;
+  return{role,base:cb.base||50,share:cb.share??0.15,ability:cb.ability||ra}}
+ // Phase 6: ความสามารถของสมาชิก (จากข้อมูล npc.combat.ability หรือค่าเริ่มของบทบาท config.party.roleAbilities)
+ // kind: moneyPct expPct injuryGuard healAfter skillXp scout · นับเฉพาะสมาชิกที่พร้อม (ไม่บาดเจ็บ) และอยู่โลกเดียวกัน
+ perk(kind,w=this.E.player.get().location.world){let t=0;for(const m of this.get().members){if(m.injury>0)continue;const n=this.E.npcs.get(m.npc);if(!n||!n.alive||n.world!==w)continue;const a=(this.combatOf(m.npc)||{}).ability;if(a&&a.kind===kind)t+=a.value||0}return Math.round(t*100)/100}
+ abilities(){return this.get().members.map(m=>({npc:m.npc,ability:(this.combatOf(m.npc)||{}).ability||null,ready:!m.injury}))}
  // พลังสมาชิก: ฐาน x ประสบการณ์ในทีม x ช่วงอายุ x ขวัญกำลังใจ (ความชอบต่อผู้เล่น)
  power(q){const cb=this.combatOf(q),n=this.E.npcs.get(q),mem=this.get().members.find(m=>m.npc===q);if(!cb||!n)return 0;const a=this.E.npcs.ageY(q),e=this.E.rels.edge(q,'player');
   const ageF=a<20?0.8:a<=40?1:a<=55?0.9:0.7,morale=0.8+Math.max(0,Math.min(100,e?e.aff:0))/250,exp=1+0.05*Math.min(40,mem?mem.missions:0);return Math.round(cb.base*exp*ageF*morale)}
@@ -45,7 +50,7 @@ class PartySystem{
   for(const q of Object.keys(inj))if(inj[q]>=2&&this.E.npcs.get(q))this.E.npcs.remember(q,`บาดเจ็บหนักในการต่อสู้กับ${rep.enemyName}`,'injury')}
  // แบ่งรางวัลเงินตามสัดส่วนของแต่ละคน (ไม่ทำให้เงินผู้เล่นติดลบ) · ได้ส่วนแบ่ง = ชอบผู้เล่นขึ้นเล็กน้อย
  payShares(gain,label){const P=this.E.player,team=this.get().members.filter(m=>m.injury<=0);let paid=0;
-  for(const m of team){const cb=this.combatOf(m.npc);if(!cb)continue;const amt=Math.min(Math.round(gain*cb.share),P.get().money);if(amt<=0)continue;P.addMoney(-amt);paid+=amt;
+  for(const m of team){const cb=this.combatOf(m.npc);if(!cb)continue;const amt=Math.min(Math.round(gain*cb.share),P.get().money);if(amt<=0)continue;P.addMoney(-amt,'party');paid+=amt;
    this._m(s=>{const x=s.members.find(y=>y.npc===m.npc);x.earned+=amt});this.E.rels.change(m.npc,'player',{aff:1,trust:1},`ได้ส่วนแบ่งจาก${label}`)}return paid}
  _month(){const s=this.get();if(!s.members.length)return;const leave=[];
   this._m(x=>{for(const m of x.members)if(m.injury>0)m.injury--});

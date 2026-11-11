@@ -5,7 +5,7 @@
 // เซฟ/โหลดกลางดันเจี้ยนได้ (run อยู่ใน slice 'dungeon') · ดู docs/phase5/DUNGEON_SYSTEM_DESIGN.md
 (function(AW){
 'use strict';
-const OWNER='dungeon',VERSION=1,KINDS=['fight','event','rest','treasure'],R=()=>AW.systems.Rules;
+const OWNER='dungeon',VERSION=2,KINDS=['fight','event','rest','treasure'],R=()=>AW.systems.Rules;
 function validateDungeons(def){const d=def.data||{},e=[],en=new Set((d.enemies||[]).map(x=>x.id)),ev=new Map((d.events||[]).map(x=>[x.id,x])),locs=new Set((d.locations||[]).map(l=>l.id));
  for(const g of d.dungeons||[]){const p='dungeon '+g.id+': ';if(typeof g.name!=='string')e.push(p+'ต้องมี name');if(!locs.has(g.at))e.push(p+'ไม่มีสถานที่ '+g.at);
   const fl=g.floors;if(!(Number.isInteger(fl)&&fl>=1&&fl<=20))e.push(p+'floors ต้องเป็น 1-20');if(!Array.isArray(g.groups)||!g.groups.length)e.push(p+'ต้องมี groups');
@@ -13,6 +13,8 @@ function validateDungeons(def){const d=def.data||{},e=[],en=new Set((d.enemies||
   for(const x of g.events||[]){const v=ev.get(x);if(!v)e.push(p+'ไม่มีเหตุการณ์ '+x);else if(v.trigger!=='dungeon')e.push(p+'เหตุการณ์ '+x+' ต้องเป็น trigger dungeon')}
   if(g.boss&&!en.has(g.boss.enemy))e.push(p+'ไม่มีบอส '+g.boss.enemy);if(g.boss&&g.boss.risk&&!AW.systems.COMBAT_RISKS.includes(g.boss.risk))e.push(p+'risk ไม่รู้จัก');
   for(const k of Object.keys(g.roomWeights||{}))if(!KINDS.includes(k))e.push(p+'ชนิดห้องไม่รู้จัก '+k);
+  const fid=new Set();for(const f of g.finds||[]){const fp=p+'find '+f.id+': ';if(!f.id||fid.has(f.id))e.push(fp+'id ว่างหรือซ้ำ');fid.add(f.id);if(typeof f.name!=='string')e.push(fp+'ต้องมี name');
+   if(!(typeof f.chance==='number'&&f.chance>0&&f.chance<=1))e.push(fp+'chance ต้องเป็น 0..1');if(f.minFloor!==undefined&&!(Number.isInteger(f.minFloor)&&f.minFloor>=0))e.push(fp+'minFloor ต้องเป็นจำนวนเต็ม');e.push(...R().validateEffects(f.effects).map(x=>fp+x))}
   for(const k of['room','treasure','floor','clear'])e.push(...R().validateEffects((g.rewards||{})[k]).map(x=>p+'rewards.'+k+': '+x));e.push(...R().validateCond(g.when).map(x=>p+x))}
  return e}
 // สร้างผังด้วย seed (ฟังก์ชันบริสุทธิ์ ทดสอบซ้ำได้)
@@ -27,12 +29,21 @@ function generate(g,seed,startFloor=0){const r=new AW.core.Rng(seed),w=Object.as
 class DungeonSystem{
  constructor(E){this.E=E;E.state.register(OWNER,OWNER,()=>({_v:VERSION,run:null,seq:0,records:{},claimed:[]}));E.worlds.addValidator(validateDungeons);
   E.bus.on('combat:ended',({id,source})=>{if(source&&source.kind==='dungeon')this._bossDone(id)},{prio:0,owner:OWNER});
+  E.bus.on('game:loaded',()=>this._afterLoad(),{prio:62,owner:OWNER});
   E.bus.on('event:answered',r=>{const run=this.run();if(run&&run.waiting&&run.waiting.kind==='event'&&run.waiting.id===r.id)this._m(s=>{s.run.waiting=null;s.run.room++;s.run.log.push(`เหตุการณ์: ${r.title}`)})},{prio:0,owner:OWNER})}
  get(){return this.E.state.get(OWNER)}
  _m(fn){return this.E.state.mutate(OWNER,OWNER,fn)}
  run(){return this.get().run}
  def(q){const[w,id]=q.split('.'),c=this.E.worlds.ctx(w);return c?c.list('dungeons').get(id)||null:null}
- record(q){return this.get().records[q]||{clears:0,runs:0,deepest:0,checkpoint:0}}
+ record(q){return this.get().records[q]||{clears:0,runs:0,deepest:0,checkpoint:0,found:[]}}
+ // Phase 6: การค้นพบ (finds) ต่อดันเจี้ยน ได้ครั้งเดียวต่อรายการ · ระดับนักสำรวจ = ค้นพบรวม / 3 (เพิ่มเงินจากดันเจี้ยนและส่วนที่เก็บได้เมื่อพลาด)
+ discoveries(){return Object.values(this.get().records).reduce((a,r)=>a+(r.found||[]).length,0)}
+ explorerLevel(){return Math.min(5,Math.floor(this.discoveries()/3))}
+ _discover(r,g,w,floor){const rec=this.get().records[r.dungeon],have=new Set(rec.found||[]),cand=(g.finds||[]).filter(f=>!have.has(f.id)&&(f.minFloor||0)<=floor);if(!cand.length)return null;
+  const bonus=1+(this.E.party?this.E.party.perk('scout',w):0)+this.explorerLevel()*0.1;const rng=new AW.core.Rng(r.seed+'|find|'+r.fi+'|'+r.room);for(const f of cand){if(rng.next()<Math.min(0.9,f.chance*bonus)){
+   this._m(s=>{const x=s.records[r.dungeon];x.found=(x.found||[]).concat(f.id);s.run.log.push(`ค้นพบ: ${f.name}`)});const lines=f.effects?(this.E.economy?this.E.economy.as('dungeon',()=>R().apply(f.effects,this.E.view(w))):R().apply(f.effects,this.E.view(w))):[];
+   this.E.events&&this.E.events.log(`ค้นพบในดันเจี้ยน: ${f.name}`+(lines.length?` (${lines.join(', ')})`:''));this.E.bus.emit('dungeon:found',{dungeon:r.dungeon,id:f.id});return f.id}}return null}
+ _afterLoad(){const s=this.get();if((s._v||1)<VERSION)this._m(x=>{x._v=VERSION;for(const r of Object.values(x.records))r.found=r.found||[]})}
  // ดันเจี้ยนที่สถานที่ปัจจุบัน
  here(){const p=this.E.player.get(),w=p.location.world,c=w&&this.E.worlds.ctx(w);if(!c||!p.alive)return[];const v=this.E.view(w);
   return[...c.list('dungeons').values()].filter(g=>g.at===p.location.loc).map(g=>{const q=w+'.'+g.id,rec=this.record(q);
@@ -51,14 +62,14 @@ class DungeonSystem{
  advance(){const r=this.run();if(!r||r.status!=='active')throw new Error('ไม่ได้อยู่ในดันเจี้ยน');if(r.waiting)throw new Error('ต้องจัดการห้องปัจจุบันก่อน');
   const g=this.def(r.dungeon),w=r.dungeon.split('.')[0],cur=this.current();
   if(!cur.room){// จบชั้น
-   const f=cur.floor;this._add(this._loot((g.rewards||{}).floor,w));this._m(s=>{s.run.fi++;s.run.room=0;s.run.log.push(`ผ่านชั้น ${f+1}`);const rec=s.records[r.dungeon];rec.deepest=Math.max(rec.deepest,f+1);rec.checkpoint=Math.max(rec.checkpoint,f+1)});
+   const f=cur.floor;this._add(this._loot((g.rewards||{}).floor,w));this._discover(r,g,w,f);this._m(s=>{s.run.fi++;s.run.room=0;s.run.log.push(`ผ่านชั้น ${f+1}`);const rec=s.records[r.dungeon];rec.deepest=Math.max(rec.deepest,f+1);rec.checkpoint=Math.max(rec.checkpoint,f+1)});
    if(this.run().fi>=this.run().layout.length)return this._finish('cleared');return{kind:'floor',floor:f+1}}
   const room=cur.room;
   if(room.kind==='fight'){const gr=g.groups.find(x=>x.id===room.group),base=this.E.combat.enemy(w,gr.enemies[0].enemy),total=gr.enemies.reduce((a,x)=>a+this.E.combat.enemy(w,x.enemy,x.mult||1).power,0);
    const rep=this.E.combat.fight({worldId:w,enemy:base.id,mult:total/base.power*r.mult,risk:'normal'});this._m(s=>{s.run.log.push(`ต่อสู้: ${({win:'ชนะ',retreat:'ถอนตัว',lose:'แพ้'})[rep.outcome]} ${rep.enemyName}`)});
    if(rep.outcome!=='win')return Object.assign(this._finish(rep.outcome==='retreat'?'retreated':'failed'),{fight:rep});this._add(this._loot((g.rewards||{}).room,w));this._m(s=>{s.run.room++});return{kind:'fight',fight:rep}}
   if(room.kind==='rest'){this.E.player.addHp(Math.round(this.E.player.maxHp()*0.3));this._m(s=>{s.run.room++;s.run.log.push('พักฟื้นในห้องปลอดภัย')});return{kind:'rest'}}
-  if(room.kind==='treasure'){this._add(this._loot((g.rewards||{}).treasure||(g.rewards||{}).room,w));this._m(s=>{s.run.room++;s.run.log.push('พบหีบสมบัติ')});return{kind:'treasure'}}
+  if(room.kind==='treasure'){this._add(this._loot((g.rewards||{}).treasure||(g.rewards||{}).room,w));this._m(s=>{s.run.room++;s.run.log.push('พบหีบสมบัติ')});const found=this._discover(r,g,w,cur.floor);return{kind:'treasure',found}}
   if(room.kind==='event'){const q=w+'.'+room.event;this._m(s=>{s.run.waiting={kind:'event',id:q}});this.E.events.present(q);return{kind:'event',event:q}}
   if(room.kind==='boss'){const b=g.boss,s=this.E.combat.start({worldId:w,foes:[{enemy:b.enemy,mult:(b.mult||1)*r.mult}],risk:b.risk||'normal',acceptRisk:true,source:{kind:'dungeon',ref:r.id},help:b.help||null});
    this._m(x=>{x.run.waiting={kind:'combat',session:s.id}});return{kind:'boss',session:s.id}}}
@@ -69,15 +80,18 @@ class DungeonSystem{
  leave(){const r=this.run();if(!r||r.status!=='active')throw new Error('ไม่ได้อยู่ในดันเจี้ยน');if(r.waiting)throw new Error('ต้องจัดการห้องปัจจุบันก่อน');return this._finish('left')}
  // จบ run: ใส่ของให้ผู้เล่นครั้งเดียว (run id อยู่ใน claimed) แล้วเก็บ run ไว้ดูผล
  _finish(status){const r=this.run(),g=this.def(r.dungeon),w=r.dungeon.split('.')[0];if(this.get().claimed.includes(r.id))throw new Error('ใส่ของจากการสำรวจนี้ไปแล้ว');
-  const keep=status==='cleared'||status==='left'?1:(g.rules&&g.rules.keepOnFail!==undefined?g.rules.keepOnFail:0.5),L=r.loot,P=this.E.player,got=[];
-  const money=Math.floor(L.money*keep),exp=Math.floor(L.exp*keep);if(P.get().alive){if(money)P.addMoney(money);if(exp)P.addExp(exp);for(const k of Object.keys(L.items)){const n=Math.floor(L.items[k]*keep);if(n>0&&P.item(k)){P.addItem(k,n);got.push(`${P.itemName(k)} x${n}`)}}}
-  let clearFx=[];if(status==='cleared'&&P.get().alive)clearFx=R().apply((g.rewards||{}).clear,this.E.view(w));
+  const ex=this.explorerLevel(),keep=status==='cleared'||status==='left'?1:Math.min(1,(g.rules&&g.rules.keepOnFail!==undefined?g.rules.keepOnFail:0.5)+ex*0.05),L=r.loot,P=this.E.player,got=[];
+  const money=Math.floor(L.money*keep*(1+ex*0.05)),exp=Math.floor(L.exp*keep);if(P.get().alive){if(money)P.addMoney(money,'dungeon');if(exp)P.addExp(exp);for(const k of Object.keys(L.items)){const n=Math.floor(L.items[k]*keep);if(n>0&&P.item(k)){P.addItem(k,n);got.push(`${P.itemName(k)} x${n}`)}}}
+  let clearFx=[];if(status==='cleared'&&P.get().alive){const run=()=>R().apply((g.rewards||{}).clear,this.E.view(w));clearFx=this.E.economy?this.E.economy.as('dungeon',run):run()}
   this._m(s=>{s.run.status=status;s.run.committed=true;s.claimed.push(r.id);if(s.claimed.length>50)s.claimed.shift();if(status==='cleared')s.records[r.dungeon].clears++});
   if(status==='cleared'&&g.tags&&this.E.missions)this.E.missions.addTags(g.tags);
   const sum={status,money,exp,items:got,clear:clearFx};this.E.events&&this.E.events.log(`${g.name}: ${({cleared:'เคลียร์',left:'ออกจากดันเจี้ยน',retreated:'ถอนตัว',failed:'ล้มเหลว'})[status]} (เงิน ${money}, EXP ${exp}${got.length?', '+got.join(', '):''})`);
   this.E.bus.emit('dungeon:finished',{id:r.id,dungeon:r.dungeon,...sum});return sum}
  close(){const r=this.run();if(r&&r.status==='active')throw new Error('ยังสำรวจอยู่');this._m(s=>{s.run=null})}
 }
+{const RL=AW.systems.Rules,inR=(v,c)=>(c.min===undefined||v>=c.min)&&(c.max===undefined||v<=c.max);
+ RL.COND.discoveries={ok:(c,v)=>inR(v.E.dungeon?v.E.dungeon.discoveries():0,c),val:c=>c&&typeof c==='object'&&(c.min!==undefined||c.max!==undefined)?[]:['discoveries ต้องเป็น {min,max}']};
+ RL.COND.found={ok:(c,v)=>!!(v.E.dungeon&&(v.E.dungeon.record(RL.qid(c.dungeon,v.worldId)).found||[]).includes(c.id)),val:c=>c&&typeof c.dungeon==='string'&&typeof c.id==='string'?[]:['found ต้องเป็น {dungeon,id}']}}
 AW.systems.DungeonSystem=DungeonSystem;AW.systems.validateDungeons=validateDungeons;AW.systems.generateDungeon=generate;
 AW.systems.DungeonModule={id:'dungeon',deps:['party','events'],install(e){e.dungeon=new DungeonSystem(e)}};
 })(globalThis.AW);
