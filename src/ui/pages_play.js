@@ -32,7 +32,8 @@ function lifeHere(E){const p=E.player.get(),j=E.life.jobsHere(),h=E.life.housing
   +h.filter(x=>!x.current).map(x=>(x.rent!==undefined?`<button class="sm" data-home="${x.id}" data-mode="rent" ${x.ok&&p.money>=x.rent?'':'disabled'}>เช่า${esc(x.name)} (${U.n(x.rent)}/เดือน)</button>`:'')+(x.price!==undefined?`<button class="sm gold" data-home="${x.id}" data-mode="own" ${x.ok&&p.money>=x.price?'':'disabled'}>ซื้อ${esc(x.name)} (${U.n(x.price)})</button>`:'')).join('')+'</div>'}
 page('dashboard',{title:'หน้าหลัก',render(E){if(!alive(E))return E.player.get().created?U.empty('ตัวละครเสียชีวิตแล้ว ดูประวัติชีวิตด้านบน หรือโหลดเซฟ'):'';
  const ac=acts(E),ms=miss(E),pg=AW.ui.screens.gates(E);
- return AW.ui.scene.html(E)+
+ const loc=E.player.get().location,ar=E.sv&&E.sv.area(loc.world,loc.loc);
+ return AW.ui.scene.html(E)+(ar?`<div class="actions" id="svgo"><button class="pri" data-a="explore" title="เดิน กระโดด คุย และต่อสู้แบบเรียลไทม์ (เวลาเกมหยุดระหว่างสำรวจ)">🚶 เดินสำรวจ: ${esc(ar.name)}</button></div>`:'')+
   sec('ไปที่',`<div class="actions" id="locs">${locs(E)}</div>`)+
   (ac?sec('กิจกรรมที่นี่',`<div class="actions" id="acts">${ac}</div>`):'<div id="acts"></div>')+
   sec('ภารกิจที่นี่',ms,'miss')+sec('ดันเจี้ยน / หอคอย',advList(E),'advlist')+sec('บริการ',services(E),'ecop')+sec('งานและที่พัก',lifeHere(E),'lifep')+

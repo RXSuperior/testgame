@@ -2,6 +2,11 @@
 
 Approved style: **Premium Korean Manhwa RPG**. Mood: realistic, serious, cinematic.
 
+Phase 7B.3 update: two styles, each with its own job.
+- Korean Manhwa: cinematic cutscenes, character portraits, location key art. Sections 1 to 12 apply.
+- Pixel art: all side-view gameplay (characters, monsters, tilesets) and the pixel RPG HUD. Section 14 applies.
+Nothing below was removed.
+
 This book is the rule set for every image in the game. Prompts, reviews and replacements all point back here. Asset sizes and files follow ASSET_PIPELINE.md.
 
 ## 1. Main art style
@@ -182,3 +187,48 @@ They stay in the registry as P3 placeholders, nothing is deleted. Options for la
 3. drop them
 
 Nothing is drawn for these until you choose.
+
+Phase 7B.3 note: the side-view slice now uses pixel art for gameplay (section 14). The old 80x64 and 128px sheets can be used again only after their license is confirmed, through their own frame metadata. Until then they stay P3 placeholders.
+
+## 14. Pixel gameplay (Phase 7B.3)
+Used for everything the player controls or fights in side-view. Portraits and cutscenes stay manhwa.
+
+### Display
+- Virtual screen 576x324 (16:9), scaled by whole or fractional factors with `image-rendering: pixelated`. No smoothing.
+- One pixel scale for the whole scene. Never mix sprites drawn at different scales in one view.
+
+### Character sprites
+- Frame: 64x64 px. Foot anchor at (32,63): the bottom-centre pixel sits on the ground line.
+- Collision box is separate from the image: default bbox x22 y20 w20 h44 inside the frame. Gameplay uses the bbox, never the image size.
+- Sheet layout: one row per animation, frames left to right, 6 columns x 7 rows.
+
+| Animation | Row | Frames | fps | Loop |
+|---|---|---|---|---|
+| idle | 0 | 4 | 6 | yes |
+| walk | 1 | 6 | 10 | yes |
+| jump | 2 | 2 | 8 | no |
+| fall | 3 | 2 | 8 | yes |
+| attack | 4 | 5 | 16 | no (hit frames 2-3) |
+| hurt | 5 | 2 | 10 | no |
+| death | 6 | 5 | 8 | no |
+
+- Sheets with other frame sizes (80x64, 128x128) are allowed. Each asset declares its own `frame`, `anchor`, `bbox` and `anims` in metadata, so code never assumes 64.
+- Facing: draw facing right; the engine mirrors for left. Keep weapons and hair readable when mirrored.
+
+### Pixel style
+- Limited palette per character (about 16 colours plus outline). 1 px dark outline, no anti-aliased edges, no semi-transparent pixels except effects.
+- Light from upper left, matching section 7.
+- Readable silhouettes at 1x: head about 12-14 px tall for a 44 px body.
+- Monsters keep the section 4 identity (goblins: green-grey skin, scrap armour), drawn in pixel form.
+
+### Tilesets
+- Tile 16x16. Ground tiles tile seamlessly left-right. Top edge 2 px lighter.
+- Hunter: `hunter.tile.street` (school, city), `hunter.tile.gate` (gate zone).
+
+### Pixel RPG HUD
+- Top-left framed panel: area name, time slot, HP bar, AP diamonds. 2 px border, hard drop shadow, no blur.
+- Prompts (`[E] ...`) centred above the ground. Touch buttons round, semi-transparent, bottom corners.
+
+### Licensing
+- Same rule as section 10: no file goes in without a confirmed license. Unlicensed or missing files show placeholders, never the real file.
+- Replacing a placeholder = add `src` and `license` to the asset entry. No code change.

@@ -18,7 +18,7 @@ async def main():
         pg=await b.new_page(viewport={'width':1280,'height':800});errs=[];pg.on('pageerror',lambda e:errs.append(str(e)))
         await pg.goto(URL);await pg.wait_for_timeout(300)
         r=await pg.evaluate("AW.ui.assets.report()")
-        check('ตอนนี้ทุกภาพเป็น placeholder (93) ไม่มีไฟล์หาย/ผิด',r['placeholder']==93 and not r['missing'] and not r['invalid'])
+        check('ตอนนี้ทุกภาพเป็น placeholder (100: 93 เดิม + 7 side-view) ไม่มีไฟล์หาย/ผิด',r['placeholder']==100 and not r['missing'] and not r['invalid'])
         await pg.fill('#pname','ทดสอบ');await pg.click('#pcreate');await pg.wait_for_timeout(200)
         check('ฉากแสดง placeholder ตามธีมเมื่อยังไม่มีภาพ',await pg.evaluate("document.querySelector('#scene').dataset.asset.startsWith('hunter.bg.')&&AW.ui.assets.status(document.querySelector('#scene').dataset.asset)==='placeholder'"))
         cur=await pg.evaluate("document.querySelector('#scene').dataset.asset")

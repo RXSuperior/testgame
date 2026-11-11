@@ -1,5 +1,13 @@
 # Changelog
 
+## Phase 7B.3 — Side-view vertical slice (2026-11-12)
+- Playable side-view for school street, city street and gate zone: walk, jump, one-way platforms, collision, camera follow, doors through `player.moveTo`.
+- NPCs from the real schedule, talk with E (relations actions and area events), real-time combat with one goblin type through `combat.apply`, reward once per spawn per month.
+- HUD (HP, AP, time slot), in-scene save of area and position, Esc back to Dashboard, touch controls.
+- Pixel gameplay standard in the Art Bible (64x64 frame, foot anchor, separate bbox, 7 animations); 7 new placeholder assets. No game3/a images.
+- School and gate zone are not directly connected: their existing entry rules exclude each other, so the route goes through the city.
+- No changes to src/core, the combat contract, the mission validator or the save format.
+
 ## Phase 7B.1 — Art Bible & asset pipeline preparation (2026-11-12)
 - Art Bible (Premium Korean Manhwa RPG), asset standards, inventory generated from code (93 assets), pilot plan with prompts for 10 images, list of art still needed.
 - Asset metadata on the existing registry entries, browser loader (missing/dimension checks, fallback, preload, lazy loading), `tools/assets.js` check and inventory tool, and the build copies referenced files.

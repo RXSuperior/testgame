@@ -8,7 +8,7 @@ const st=AW.ui.state={page:ss.get('mvh-ui-page')||'dashboard',override:false,rig
 let _last=0,_modalWas='';
 AW.ui.dev=()=>/[?&]debug=1/.test(location.search)||ss.get('mvh-ui-dev')==='1';
 function boot(){const make=src=>{const i=new Image();i.decoding='async';i.src=src;return i};const E=new AW.core.Engine({assets:{imageFactory:src=>AW.ui.assets.factory(make)(src),canvasFactory:(w,h)=>{const c=document.createElement('canvas');c.width=w;c.height=h;return c}}});
- E.assets.registerAll(AW.data.assets);AW.ui.assets.attach(E);AW.systems.installGameplay(E);const wr=E.worlds.registerAll(AW.data.worlds);if(wr.bad.length)wr.bad.forEach(m=>E.debug.error(m));
+ E.assets.registerAll(AW.data.assets);AW.ui.assets.attach(E);AW.systems.installGameplay(E);AW.sv.install(E);const wr=E.worlds.registerAll(AW.data.worlds);if(wr.bad.length)wr.bad.forEach(m=>E.debug.error(m));
  window.addEventListener('error',e=>E.debug.error('window: '+e.message));
  E.bus.on('month',({month})=>E.debug.log('เดือน '+month),{owner:'shell'});
  AW.engine=E;newGame('demo');AW.ui.assets.preload();if(!AW.ui.pages.some(p=>p.id===st.page))st.page='dashboard';render();setInterval(AW.ui.scene.draw,200);
@@ -57,7 +57,7 @@ function wire(){const E=AW.engine,app=$('#app');
   if(d.s!==undefined){E.loop.setSpeed(+d.s);update(true);return}
   if(b.id==='step'){E.loop.step(1);update(true);return}
   if(b.id==='menu'){E.loop.reasons.has('menu')?E.loop.resume('menu'):E.loop.pause('menu');update(true);return}
-  if(d.save!==undefined){act(()=>{E.saveTo(+d.save)},'เซฟช่อง '+d.save+' แล้ว');return}
+  if(d.save!==undefined){act(()=>{AW.ui.sv.sync();E.saveTo(+d.save)},'เซฟช่อง '+d.save+' แล้ว');return}
   if(d.load!==undefined){try{E.loadFrom(+d.load);if(!E.worlds.current)E.worlds.start('hunter');U.toast('โหลดช่อง '+d.load+' แล้ว','good')}catch(err){E.debug.error(err.message);U.toast('โหลดไม่ได้: '+err.message,'bad')}st.result=null;st.dlg=null;update(true);return}
   if(b.id==='new'){newGame(String(Date.now()));update(true);return}
   if(b.id==='new2'){newGame(String(Date.now()));go('dashboard');return}
@@ -65,6 +65,7 @@ function wire(){const E=AW.engine,app=$('#app');
   if(d.a==='newgame'){U.confirm('เริ่มเกมใหม่?','ความคืบหน้าที่ยังไม่ได้เซฟจะหายไป เซฟที่มีอยู่ไม่ถูกลบ',()=>{newGame(String(Date.now()));go('dashboard')},{yes:'เริ่มใหม่',danger:true});return}
   if(d.a==='toggleRight'){st.right=!st.right;ss.set('mvh-ui-right',st.right?'1':'0');update(true);return}
   if(d.a==='toggleDev'){ss.set('mvh-ui-dev',AW.ui.dev()&&ss.get('mvh-ui-dev')==='1'?'0':'1');update(true);return}
+  if(d.a==='explore'){AW.ui.sv.open();return}
   if(d.a==='backFocus'){st.override=false;update(true);return}
   if(d.dlg){st.dlg=d.dlg;update(true);return}
   if(d.ok){st.result=null;update(true);return}

@@ -13,8 +13,11 @@ const STD={
  skill_fx:{ratio:'1:1',w:1024,h:1024,format:'png',alpha:true,maxKB:600,folder:'fx'},
  // ชุดภาพเคลื่อนไหวแบบ pixel จากระบบเดิม: ไม่เข้ากับแนว manhwa ต้องตัดสินใจก่อนทำ (ไม่ลบ)
  sprite_sheet:{ratio:'sheet',w:null,h:null,format:'png',alpha:true,maxKB:600,folder:'sprite',decision:true},
- ui:{ratio:'-',w:null,h:null,format:'-',alpha:true,maxKB:0,folder:'ui',decision:true}};
-const KIND_TYPE={bg:'location',mon:'monster',item:'item',char:'sprite_sheet',outfit:'sprite_sheet',wep:'sprite_sheet',fx:'sprite_sheet',ui:'ui',portrait:'portrait',skill:'skill_icon'};
+ ui:{ratio:'-',w:null,h:null,format:'-',alpha:true,maxKB:0,folder:'ui',decision:true},
+ // Phase 7B.3 gameplay pixel art (ART_BIBLE §Pixel gameplay): เฟรมตัวละคร 64x64 · ขนาดไฟล์แผ่นตาม metadata ของ asset (frame x จำนวนเฟรม)
+ sprite:{ratio:'sheet',w:null,h:null,frame:64,format:'png',alpha:true,maxKB:200,folder:'sv',pixel:true},
+ tileset:{ratio:'sheet',w:null,h:null,tile:16,format:'png',alpha:true,maxKB:120,folder:'tile',pixel:true}};
+const KIND_TYPE={bg:'location',mon:'monster',item:'item',char:'sprite_sheet',outfit:'sprite_sheet',wep:'sprite_sheet',fx:'sprite_sheet',ui:'ui',portrait:'portrait',skill:'skill_icon',sv:'sprite',tile:'tileset'};
 // P0 = ชุดนำร่อง · P1 = UI แสดงอยู่แล้ว · P2 = ข้อมูลอ้างแต่ UI ยังไม่แสดง · P3 = ต้องตัดสินใจ/ยังไม่มีโลก
 const PILOT=['hunter.bg.apartment','hunter.bg.city_day','hunter.bg.association_hall','hunter.bg.school','hunter.bg.dungeon_cave','hunter.bg.gate_blue','fantasy.bg.forest','murim.bg.mountain_sect','shared.portrait.player_m','hunter.portrait.best_friend'];
 const UI_NOW=new Set(['hunter.bg.city_night','hunter.bg.training_center','hunter.bg.market','hunter.bg.hunter_hospital','hunter.bg.gov_base','hunter.bg.industrial','hunter.bg.dungeon_ruins','hunter.bg.gate_red','fantasy.bg.town','fantasy.bg.castle']);
@@ -24,6 +27,18 @@ AW.data.assets.push(
  {id:'shared.portrait.player_m',world:'shared',kind:'portrait',w:240,h:320,src:null,license:null,note:'ภาพอ้างอิงตัวเอกชาย ค่าเริ่มต้น (ระบบยังไม่มีการปรับรูปลักษณ์)'},
  {id:'shared.portrait.player_f',world:'shared',kind:'portrait',w:240,h:320,src:null,license:null,note:'ภาพอ้างอิงตัวเอกหญิง ค่าเริ่มต้น'},
  {id:'hunter.portrait.best_friend',world:'hunter',kind:'portrait',w:240,h:320,src:null,license:null,note:'ฮาจุน · รูปลักษณ์ยังไม่ได้กำหนดในข้อมูล ต้องอนุมัติก่อนสร้าง'});
+// Phase 7B.3 side-view: sprite/tileset ใหม่ เป็น placeholder (ยังไม่ยืนยันสิทธิ์ภาพ game3/a จึงไม่ใช้) · เปลี่ยนเป็นไฟล์จริงได้ด้วยการใส่ src/license เท่านั้น
+// frame = ขนาดเฟรมในไฟล์ · anchor = จุดเท้า (วางตรงพื้น) · bbox = กล่องชนในเฟรม (แยกจากขนาดภาพ) · anims: แถวในแผ่น จำนวนเฟรม fps วนซ้ำ
+// ภาพเก่า 80x64 / 128px ใส่ได้ด้วย frame/anchor/bbox ของมันเอง เมื่อยืนยัน license แล้วเท่านั้น
+const ANIMS={idle:{row:0,frames:4,fps:6,loop:true},walk:{row:1,frames:6,fps:10,loop:true},jump:{row:2,frames:2,fps:8,loop:false},fall:{row:3,frames:2,fps:8,loop:true},
+ attack:{row:4,frames:5,fps:16,loop:false,hit:[2,3]},hurt:{row:5,frames:2,fps:10,loop:false},death:{row:6,frames:5,fps:8,loop:false}};
+const SV=(id,world,note,o={})=>Object.assign({id,world,kind:'sv',w:64,h:64,src:null,license:null,note,frame:{w:64,h:64},anchor:{x:32,y:63},bbox:{x:22,y:20,w:20,h:44},anims:ANIMS,sheet:{cols:6,rows:7}},o);
+AW.data.assets.push(
+ SV('shared.sv.player_m','shared','ตัวเอกชาย side-view'),SV('shared.sv.player_f','shared','ตัวเอกหญิง side-view'),
+ SV('hunter.sv.npc_m','hunter','NPC ชายทั่วไป (รวมฮาจุนจนกว่าจะมีรูปลักษณ์อนุมัติ)'),SV('hunter.sv.npc_f','hunter','NPC หญิงทั่วไป'),
+ SV('hunter.sv.goblin','hunter','ก๊อบลิน side-view (ศัตรู hunter.goblins)',{bbox:{x:17,y:34,w:30,h:30},anims:Object.assign({},ANIMS,{jump:undefined,fall:undefined})}),
+ {id:'hunter.tile.street',world:'hunter',kind:'tile',w:16,h:16,src:null,license:null,note:'ถนน/ทางเท้า โรงเรียนและเมือง',tile:{w:16,h:16},cols:8},
+ {id:'hunter.tile.gate',world:'hunter',kind:'tile',w:16,h:16,src:null,license:null,note:'พื้นหินแตกในย่านเกต',tile:{w:16,h:16},cols:8});
 for(const d of AW.data.assets){const type=KIND_TYPE[d.kind]||'ui',std=STD[type],name=d.id.split('.').slice(2).join('.');
  Object.assign(d,{type,std,priority:PILOT.includes(d.id)?'P0':UI_NOW.has(d.id)?'P1':std.decision||d.world==='murim'?'P3':'P2',
   status:d.src?'real':PILOT.includes(d.id)?'planned':'placeholder',version:0,
