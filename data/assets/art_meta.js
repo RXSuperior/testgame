@@ -29,16 +29,19 @@ AW.data.assets.push(
  {id:'hunter.portrait.best_friend',world:'hunter',kind:'portrait',w:240,h:320,src:null,license:null,note:'ฮาจุน · รูปลักษณ์ยังไม่ได้กำหนดในข้อมูล ต้องอนุมัติก่อนสร้าง'});
 // Phase 7B.3 side-view: sprite/tileset ใหม่ เป็น placeholder (ยังไม่ยืนยันสิทธิ์ภาพ game3/a จึงไม่ใช้) · เปลี่ยนเป็นไฟล์จริงได้ด้วยการใส่ src/license เท่านั้น
 // frame = ขนาดเฟรมในไฟล์ · anchor = จุดเท้า (วางตรงพื้น) · bbox = กล่องชนในเฟรม (แยกจากขนาดภาพ) · anims: แถวในแผ่น จำนวนเฟรม fps วนซ้ำ
+// ทุกค่าถูกใช้จริง: runtime ใช้ bbox.w,h เป็นกล่องชน และ anims.attack (frames/fps, hit) เป็นจังหวะโจมตี · view ใช้ frame/anchor/anims(row,frames,fps,loop) ตัดเฟรม · sheet ใช้ตรวจขนาดไฟล์
 // ภาพเก่า 80x64 / 128px ใส่ได้ด้วย frame/anchor/bbox ของมันเอง เมื่อยืนยัน license แล้วเท่านั้น
 const ANIMS={idle:{row:0,frames:4,fps:6,loop:true},walk:{row:1,frames:6,fps:10,loop:true},jump:{row:2,frames:2,fps:8,loop:false},fall:{row:3,frames:2,fps:8,loop:true},
  attack:{row:4,frames:5,fps:16,loop:false,hit:[2,3]},hurt:{row:5,frames:2,fps:10,loop:false},death:{row:6,frames:5,fps:8,loop:false}};
+const {jump:_j,fall:_f,...GROUND_ANIMS}=ANIMS;// ศัตรูเดินพื้น: ไม่มีท่ากระโดด/ตก (view ใช้ idle แทน)
 const SV=(id,world,note,o={})=>Object.assign({id,world,kind:'sv',w:64,h:64,src:null,license:null,note,frame:{w:64,h:64},anchor:{x:32,y:63},bbox:{x:22,y:20,w:20,h:44},anims:ANIMS,sheet:{cols:6,rows:7}},o);
+// tileset: แผ่น cols x rows ช่อง · tiles = หมายเลขช่อง (นับซ้ายไปขวา บนลงล่าง) ที่ view ใช้จริง: top = ผิวบนของพื้น · fill = เนื้อพื้นใต้ผิว · platform = แผ่นทางเดียว
+const TILE=(id,note)=>({id,world:'hunter',kind:'tile',w:16,h:16,src:null,license:null,note,tile:{w:16,h:16},sheet:{cols:8,rows:2},tiles:{top:0,fill:8,platform:1}});
 AW.data.assets.push(
  SV('shared.sv.player_m','shared','ตัวเอกชาย side-view'),SV('shared.sv.player_f','shared','ตัวเอกหญิง side-view'),
  SV('hunter.sv.npc_m','hunter','NPC ชายทั่วไป (รวมฮาจุนจนกว่าจะมีรูปลักษณ์อนุมัติ)'),SV('hunter.sv.npc_f','hunter','NPC หญิงทั่วไป'),
- SV('hunter.sv.goblin','hunter','ก๊อบลิน side-view (ศัตรู hunter.goblins)',{bbox:{x:17,y:34,w:30,h:30},anims:Object.assign({},ANIMS,{jump:undefined,fall:undefined})}),
- {id:'hunter.tile.street',world:'hunter',kind:'tile',w:16,h:16,src:null,license:null,note:'ถนน/ทางเท้า โรงเรียนและเมือง',tile:{w:16,h:16},cols:8},
- {id:'hunter.tile.gate',world:'hunter',kind:'tile',w:16,h:16,src:null,license:null,note:'พื้นหินแตกในย่านเกต',tile:{w:16,h:16},cols:8});
+ SV('hunter.sv.goblin','hunter','ก๊อบลิน side-view (ศัตรู hunter.goblins)',{bbox:{x:17,y:34,w:30,h:30},anims:GROUND_ANIMS}),
+ TILE('hunter.tile.street','ถนน/ทางเท้า โรงเรียนและเมือง'),TILE('hunter.tile.gate','พื้นหินแตกในย่านเกต'));
 for(const d of AW.data.assets){const type=KIND_TYPE[d.kind]||'ui',std=STD[type],name=d.id.split('.').slice(2).join('.');
  Object.assign(d,{type,std,priority:PILOT.includes(d.id)?'P0':UI_NOW.has(d.id)?'P1':std.decision||d.world==='murim'?'P3':'P2',
   status:d.src?'real':PILOT.includes(d.id)?'planned':'placeholder',version:0,

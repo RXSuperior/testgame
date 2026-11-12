@@ -14,10 +14,18 @@ function dims(buf){
  if(buf.length>4&&buf[0]===0xff&&buf[1]===0xd8){let i=2;while(i<buf.length-9){if(buf[i]!==0xff){i++;continue}const m=buf[i+1],len=buf.readUInt16BE(i+2);if(m>=0xc0&&m<=0xcf&&![0xc4,0xc8,0xcc].includes(m))return{fmt:'jpg',h:buf.readUInt16BE(i+5),w:buf.readUInt16BE(i+7)};i+=2+len}}
  return null}
 const ratioOf=r=>{const m=/^(\d+):(\d+)$/.exec(r||'');return m?+m[1]/+m[2]:null};
-function checkDims(def,d){const s=def.std;if(!s||!s.w)return '';const r=ratioOf(s.ratio);if(r&&Math.abs(d.w/d.h-r)/r>0.01)return `สัดส่วน ${d.w}x${d.h} ไม่ตรง ${s.ratio}`;if(d.w<s.w*0.5||d.h<s.h*0.5)return `เล็กเกินไป ${d.w}x${d.h}`;return ''}
+function checkDims(def,d){const s=def.std,sh=def.sheet,cell=def.frame||def.tile;
+ // แผ่น sprite/tileset (7B.3): ขนาดไฟล์ต้องเท่ากับ ช่อง x จำนวนคอลัมน์/แถว ใน metadata พอดี
+ if(sh&&cell)return d.w===cell.w*sh.cols&&d.h===cell.h*sh.rows?'':`ขนาดแผ่น ${d.w}x${d.h} ไม่ตรง metadata ${cell.w*sh.cols}x${cell.h*sh.rows} (${sh.cols}x${sh.rows} ช่อง ช่องละ ${cell.w}x${cell.h})`;
+ if(!s||!s.w)return '';const r=ratioOf(s.ratio);if(r&&Math.abs(d.w/d.h-r)/r>0.01)return `สัดส่วน ${d.w}x${d.h} ไม่ตรง ${s.ratio}`;if(d.w<s.w*0.5||d.h<s.h*0.5)return `เล็กเกินไป ${d.w}x${d.h}`;return ''}
 // ---- การใช้งาน: ข้อมูลโลก + โค้ด UI ----
 function usage(AW){const use=new Map(),add=(id,w)=>{if(!use.has(id))use.set(id,new Set());use.get(id).add(w)};
- for(const w of AW.data.worlds){const d=w.data||{};for(const[k,arr]of Object.entries(d)){if(!Array.isArray(arr))continue;for(const x of arr)for(const f of['bg','asset','icon','portrait'])if(x&&typeof x[f]==='string')add(w.assetNs+'.'+x[f],`${w.id} ${k}.${x.id}.${f}`)}}
+ for(const w of AW.data.worlds){const d=w.data||{};
+  // side-view areas (7B.3): ฉากหลัง tileset และ sprite ของศัตรู/NPC/ผู้เล่นที่ runtime ใช้
+  for(const a of d.areas||[]){const at=`${w.id} areas.${a.id}`;for(const k of a.layers||[])add(w.assetNs+'.'+k,at+'.layers');if(a.tileset)add(w.assetNs+'.'+a.tileset,at+'.tileset');
+   for(const s of a.spawns||[])if(s.sprite)add(w.assetNs+'.'+s.sprite,at+'.spawns.'+s.id);
+   for(const g of['m','f']){add(AW.sv.SPRITE.player(g),at+'.player');if((a.npcSpots||[]).length)add(AW.sv.SPRITE.npc(w.assetNs,g),at+'.npc')}}
+  for(const[k,arr]of Object.entries(d)){if(!Array.isArray(arr))continue;for(const x of arr)for(const f of['bg','asset','icon','portrait'])if(x&&typeof x[f]==='string')add(w.assetNs+'.'+x[f],`${w.id} ${k}.${x.id}.${f}`)}}
  const ui=fs.readdirSync(path.join(R,'src/ui')).filter(f=>f.endsWith('.js'));const ids=new Set(AW.data.assets.map(a=>a.id));
  for(const f of ui){const t=fs.readFileSync(path.join(R,'src/ui',f),'utf8');for(const id of ids){const short=id.split('.').slice(1).join('.');if(t.includes("'"+id+"'")||t.includes("'"+short+"'"))add(id,'UI '+f)}}
  return use}

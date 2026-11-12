@@ -189,28 +189,55 @@ h2,h3,h4{margin:0 0 8px;font-weight:700;letter-spacing:.2px} h2{font-size:20px} 
 }
 
 /* ===== Phase 7B.3: Side-view explore overlay (pixel gameplay) ===== */
-#sv{position:fixed;inset:0;z-index:60;background:#05070d;display:flex;align-items:center;justify-content:center}
+#sv{position:fixed;inset:0;z-index:60;background:#05070d;display:grid;place-items:center}
 #sv[hidden]{display:none}
 body.sv-on{overflow:hidden}
-.sv-wrap{position:relative;width:min(100vw,calc(100vh*16/9));aspect-ratio:16/9;max-height:100vh}
+/* เวที: ภาพเกม (c) · แผงปุ่มซ้าย/ขวา (l,r) อยู่คนละช่อง ปุ่มจึงไม่ทับภาพเกม
+   HUD ปุ่มเซฟ/ออก และข้อความ เป็นช่องของ grid: เดสก์ท็อป/แนวนอนซ้อนบนภาพเกม (ช่อง c) · แนวตั้งแยกเป็นแถวของตัวเอง */
+.sv-stage{display:grid;grid-template-areas:"c";align-items:center;justify-items:center}
+.sv-wrap{grid-area:c;position:relative;width:min(100vw,calc(100vh*16/9));aspect-ratio:16/9;outline:none}
 #svc{width:100%;height:100%;display:block;image-rendering:pixelated;image-rendering:crisp-edges;background:#000}
-.sv-hud{position:absolute;left:8px;top:8px;background:rgba(8,12,24,.82);border:2px solid #34427a;border-radius:4px;padding:6px 8px;min-width:190px;font-size:13px;box-shadow:0 2px 0 #000}
+.sv-hud{grid-area:c;align-self:start;justify-self:start;margin:8px;z-index:1;background:rgba(8,12,24,.82);border:2px solid #34427a;border-radius:4px;padding:6px 8px;min-width:190px;font-size:13px;box-shadow:0 2px 0 #000}
 .sv-hud .sv-name{font-weight:700;margin-bottom:4px}
 .sv-bars{display:grid;grid-template-columns:auto 1fr;gap:4px 8px;align-items:center}
 .sv-bars .bar{height:8px;border-radius:0}
 .sv-ap{color:var(--gold);letter-spacing:2px}
-.sv-top{position:absolute;right:8px;top:8px;display:flex;gap:6px}
-.sv-prompt{position:absolute;left:50%;bottom:22%;transform:translateX(-50%);background:rgba(8,12,24,.85);border:2px solid var(--blue);padding:4px 10px;border-radius:4px;font-size:13px;pointer-events:none}
+.sv-warn{margin-top:4px;color:var(--red);font-size:12px}
+.sv-top{grid-area:c;align-self:start;justify-self:end;margin:8px;z-index:1;display:flex;gap:6px}
+.sv-msg{grid-area:c;align-self:stretch;justify-self:stretch;position:relative;pointer-events:none;z-index:1}
+.sv-prompt{position:absolute;left:50%;bottom:22%;transform:translateX(-50%);background:rgba(8,12,24,.85);border:2px solid var(--blue);padding:4px 10px;border-radius:4px;font-size:13px;white-space:nowrap}
 .sv-prompt:empty,.sv-log:empty{display:none}
-.sv-log{position:absolute;left:8px;bottom:8px;max-width:60%;background:rgba(8,12,24,.7);padding:4px 8px;border-radius:4px;font-size:12px;color:var(--muted);pointer-events:none}
-.sv-panel{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none}
+.sv-log{position:absolute;left:8px;bottom:8px;max-width:60%;background:rgba(8,12,24,.7);padding:4px 8px;border-radius:4px;font-size:12px;color:var(--muted)}
+/* หน้าต่างคุย/เหตุการณ์: เริ่มใต้ HUD และปุ่มเซฟเสมอ (--svtop ตั้งจาก JS) จึงไม่ทับข้อมูลบนสุด */
+.sv-panel{position:absolute;left:0;right:0;bottom:0;top:var(--svtop,0px);display:flex;align-items:center;justify-content:center;padding:0 12px 12px;pointer-events:none}
 .sv-panel:empty{display:none}
-.sv-dlg{pointer-events:auto;max-width:min(520px,92%);max-height:90%;overflow:auto;border-radius:6px;border:2px solid var(--line2);box-shadow:0 4px 0 #000}
+.sv-dlg{pointer-events:auto;max-width:min(520px,100%);max-height:100%;overflow:auto;border-radius:6px;border:2px solid var(--line2);box-shadow:0 4px 0 #000}
 .sv-dlg .actions{display:flex;flex-wrap:wrap;gap:6px}
 .sv-dlg p.bad{color:var(--red)}
-.sv-touch{display:none;position:absolute;left:0;right:0;bottom:8px;justify-content:space-between;padding:0 10px;pointer-events:none}
-.sv-touch .pad{display:flex;gap:8px;pointer-events:auto}
+.sv-touch{display:none;gap:8px}
+.sv-touch.l{grid-area:l}.sv-touch.r{grid-area:r}
 .sv-touch button{width:56px;height:56px;border-radius:50%;font-size:20px;background:rgba(26,35,64,.75);touch-action:none;user-select:none;-webkit-user-select:none}
 .sv-touch button.on{background:rgba(76,195,255,.45);border-color:var(--blue)}
-@media (hover:none),(pointer:coarse),(max-width:900px){.sv-touch{display:flex}.sv-log{bottom:76px}}
-@media (max-width:520px){.sv-hud{font-size:11px;min-width:150px;padding:4px 6px}.sv-touch button{width:48px;height:48px}}
+@media (hover:none),(pointer:coarse),(max-width:900px){
+ .sv-touch{display:flex}
+ /* แนวนอน: ปุ่มเรียงแนวตั้งในขอบซ้าย/ขวา ภาพเกมหดเท่าที่ต้องเว้นให้ปุ่ม */
+ @media (orientation:landscape){.sv-stage{grid-template-areas:"l c r";column-gap:8px}.sv-touch{flex-direction:column}.sv-wrap{width:min(calc(100vw - 144px),calc(100vh*16/9))}}
+}
+@media (max-width:520px){.sv-hud{font-size:11px;min-width:150px;padding:4px 6px}.sv-touch button{width:52px;height:52px}}
+@media (max-width:380px){.sv-touch button{width:46px;height:46px}}
+/* แนวตั้งบนจอสัมผัส (class ตั้งจาก JS ตามเงื่อนไขเดียวกับขนาดภาพ): แถวบน HUD + เซฟ/ออก · ภาพเกม (ขนาดจาก JS) · ข้อความ · ปุ่ม
+   ไม่มีอะไรซ้อนบนภาพเกม ขอบบน/ล่างเว้นตาม safe area ของเครื่อง */
+#sv.sv-portrait{padding:env(safe-area-inset-top,0px) 0 env(safe-area-inset-bottom,0px)}
+.sv-portrait .sv-stage{width:100%;grid-template-areas:"h t" "c c" "m m" "l r";grid-template-columns:1fr auto;row-gap:8px}
+.sv-portrait .sv-wrap{aspect-ratio:auto}
+.sv-portrait .sv-hud{grid-area:h;margin:0 0 0 8px;align-self:stretch;justify-self:stretch;min-width:0;min-height:62px;box-sizing:border-box}
+.sv-portrait .sv-hud .sv-name{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sv-portrait .sv-top{grid-area:t;margin:0 8px 0 0;align-self:start}
+.sv-portrait .sv-msg{grid-area:m;position:static;display:flex;flex-direction:column;align-items:center;gap:4px;min-height:52px;width:100%;padding:0 8px;box-sizing:border-box}
+.sv-portrait .sv-prompt,.sv-portrait .sv-log{position:static;transform:none;max-width:100%}
+.sv-portrait .sv-log{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sv-portrait .sv-touch.l{justify-self:start;margin-left:10px}.sv-portrait .sv-touch.r{justify-self:end;margin-right:10px}
+/* หน้าต่างแนวตั้ง: แผ่นเต็มความกว้างชิดล่าง ปุ่มสูง 44px ขึ้นไปสำหรับนิ้ว */
+.sv-portrait .sv-panel{align-items:flex-end;padding:0 8px max(8px,env(safe-area-inset-bottom,0px))}
+.sv-portrait .sv-dlg{width:100%;max-width:100%;box-sizing:border-box;font-size:15px}
+.sv-portrait .sv-dlg button{min-height:44px;flex:1 1 auto}

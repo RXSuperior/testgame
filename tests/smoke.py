@@ -1,8 +1,9 @@
 """ทดสอบในเบราว์เซอร์จริง (Chromium): python3 tests/smoke.py"""
-import asyncio,os,hashlib,sys
+import asyncio,os,sys
 from playwright.async_api import async_playwright
 R=os.path.dirname(os.path.dirname(os.path.abspath(__file__)));URL='file://'+R+'/dist/index.html?debug=1'
-OLD='/home/claude/game4/index.html';h0=hashlib.sha256(open(OLD,'rb').read()).hexdigest()
+sys.path.insert(0,os.path.dirname(os.path.abspath(__file__)));from original_game import Original,report,summary
+ORIG=Original()
 res=[]
 FIXTURE=open(os.path.join(R,'tests/fixtures/phase2_save.json')).read()
 FIX3=open(os.path.join(R,'tests/fixtures/phase3_save.json')).read()
@@ -198,5 +199,4 @@ async def main():
         pm=await b.new_page(viewport={'width':390,'height':800});await pm.goto(URL);await pm.wait_for_timeout(300);check('หน้าจอมือถือ 390px ไม่ล้น',await pm.evaluate("document.documentElement.scrollWidth<=390"))
         check('ไม่มี pageerror ตลอดการทดสอบ',not errs);await b.close()
 asyncio.run(main())
-check('ไฟล์เกมเดิมไม่เปลี่ยน (sha256)',hashlib.sha256(open(OLD,'rb').read()).hexdigest()==h0)
-print('\n'.join(res));f=sum(r.startswith('FAIL') for r in res);print(f'\n{len(res)-f} ผ่าน · {f} ไม่ผ่าน');sys.exit(1 if f else 0)
+sk=report(res,ORIG);line,f=summary(res,sk);print('\n'.join(res));print(line);raise SystemExit(1 if f else 0)

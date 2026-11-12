@@ -566,7 +566,7 @@ T('p6 perf: NPC 500 คน + หอคอย AI + เศรษฐกิจ 12 �
 
 
 // ===== Phase 7B.3: Side-view vertical slice =====
-{const SV=ctx.AW.sv,PH=SV,K=SV.K;
+{const SV=ctx.AW.sv,PH=SV,K=SV.K,AW_overlap=SV.overlap;
 const flat={width:1000,height:324,solids:[{x:0,y:296,w:1000,h:28},{x:600,y:200,w:40,h:96}],platforms:[{x:200,y:236,w:120}]};
 const body=(x,y)=>({x,y,w:20,h:44,vx:0,vy:0,ground:false,facing:1});
 const run=(b,inp,n,w=flat)=>{for(let i=0;i<n;i++)b=PH.step(b,typeof inp==='function'?inp(i):inp,w);return b};
@@ -584,21 +584,22 @@ T('p7b3 physics: coyote time และ jump buffer',()=>{let b=settle(body(240,0
 T('p7b3 camera: ตามผู้เล่นมี dead-zone และไม่เลยขอบพื้นที่',()=>{const W={width:1600};let c={x:0};c=PH.camera(c,{x:100,w:20},W);ok(c.x===0);c=PH.camera(c,{x:700,w:20},W);ok(c.x>0&&700+10-c.x<=288+60+1);const c2=PH.camera(c,{x:700+30,w:20},W);ok(c2.x-c.x<=30);ok(PH.camera(c,{x:1590,w:20},W).x===1600-576)});
 const mkSV=(st=new Mem())=>{const E=mk(st);E.assets.registerAll(ctx.AW.data.assets);S.installGameplay(E);SV.install(E);const r=E.worlds.registerAll(ctx.AW.data.worlds);if(r.bad.length)throw new Error(r.bad.join(' | '));return E};
 const playSV=(seed='sv',st)=>{const E=mkSV(st);E.newGame({seed});E.worlds.start('hunter');E.player.create({name:'ทดสอบ',stats:{str:10,agi:10,int:10,vit:10,cha:10,luk:10},money:100});clearEv(E);return E};
-const hunterSV=(seed='svh')=>{const E=register(awaken(playSV(seed)));E.state.mutate('player','player',p=>{p.stats.str+=60;p.stats.vit+=30;p.level=10});E.player.addHp(9999);clearEv(E);return E};
+const hunterSV=(seed='svh')=>{const E=register(awaken(playSV(seed)));E.state.mutate('player','player',p=>{p.stats.str+=60;p.stats.vit+=30;p.level=10;p.ap=2});E.player.addHp(9999);clearEv(E);return E};
 const go=(E,loc)=>{E.player.moveTo(loc);clearEv(E)};
 const workday=E=>{let g=0;while(E.npcs.clock('hunter').dayType!=='work'&&g++<12)adv(E,1);E.state.mutate('player','player',p=>{p.ap=2});return E};
 const walkTo=(rt,x)=>{for(let i=0;i<900;i++){const cx=rt.me.x+rt.me.w/2;if(Math.abs(cx-x)<6){for(let j=0;j<30;j++)rt.step({});return}const st=rt.me.ground&&rt.me.vx===0&&i>0;rt.step({right:cx<x,left:cx>x,jump:true,jumpPressed:st})}throw new Error('เดินไม่ถึง '+x+' อยู่ '+rt.me.x)};
 T('p7b3 area: ข้อมูล areas จริงผ่านตัวตรวจ และตัวตรวจจับข้อมูลเสีย',()=>{const E=mkSV(),c=E.worlds.ctx('hunter');ok(c.list('areas').size===3&&E.sv.area('hunter','school').id==='school');
- const def=ctx.AW.data.worlds.find(w=>w.id==='hunter'),bad=JSON.parse(JSON.stringify(def));bad.data.areas[0].doors[0].to='nowhere';bad.data.areas[1].spawns=[{id:'x',enemy:'ghost',x1:5,x2:1,reward:[{bogus:1}]}];bad.data.areas[2].talkEvents=['hunter.nope'];bad.data.areas[0].solids=[{x:'a'}];bad.data.areas[1].tileset='tile.nope';
- const e=SV.validateAreas(bad,E.assets).join('|');for(const k of['nowhere','ghost','x1<x2','bogus','hunter.nope','solid','hunter.tile.nope'])ok(e.includes(k),k+' :: '+e)});
+ const def=ctx.AW.data.worlds.find(w=>w.id==='hunter'),bad=JSON.parse(JSON.stringify(def));bad.data.areas[0].doors[0].to='nowhere';bad.data.areas[1].spawns=[{id:'x',enemy:'ghost',x1:5,x2:1,reward:[{bogus:1}]}];bad.data.areas[2].talkEvents=[{npc:'nobody',event:'hunter.nope'}];bad.data.areas[0].solids=[{x:'a'}];bad.data.areas[1].tileset='tile.nope';
+ bad.data.areas[1].doors[0].to='home';bad.data.areas[0].talkEvents=['hunter.friend_gate_clip'];bad.data.areas[2].doors[0].arrive='from_moon';
+ const e=SV.validateAreas(bad,E.assets).join('|');for(const k of['nowhere','ghost','x1<x2','bogus','hunter.nope','solid','hunter.tile.nope','ไม่มี NPC nobody','home ซึ่งยังไม่มี area','spawn ต้องระบุ sprite','talkEvents: ไม่มี NPC undefined','ไม่มีจุดมาถึง from_moon'])ok(e.includes(k),k+' :: '+e)});
 T('p7b3 runtime: เข้าฉากได้เฉพาะสถานที่ที่มี area · หยุดเวลาระหว่างสำรวจ · ออกแล้วเดินต่อ',()=>{const E=playSV();throws(()=>new SV.Explore(E).enter(),/side-view/);go(E,'school');const rt=new SV.Explore(E).enter();
  ok(E.loop.reasons.has('explore')&&rt.a.id==='school'&&rt.me.ground===false||rt.me.y===296-44);rt.exit();ok(!E.loop.reasons.has('explore')&&E.sv.runtime===null&&E.sv.get().area==='school')});
 T('p7b3 runtime: ไม่เขียน GameState ทุกเฟรม (เขียนเฉพาะ flush)',()=>{const E=playSV();go(E,'school');const rt=new SV.Explore(E).enter();let n=0;E.bus.on('state:changed',x=>{if(x.name==='scene')n++});
  for(let i=0;i<300;i++)rt.step({right:i<200});ok(n===0,'writes '+n);ok(rt.flush()&&n===1);ok(!rt.flush()&&n===1);rt.exit();ok(E.sv.get().x===Math.round(rt.me.x))});
 T('p7b3 NPC: ใครยืนในฉากมาจากตารางเวลาจริง (ฮาจุนอยู่โรงเรียนเช้าวันทำงาน) และอัปเดตเมื่อช่วงเวลาเปลี่ยน',()=>{const E=workday(playSV('npc'));go(E,'school');E.state.mutate('player','player',p=>{p.ap=2});
- const rt=new SV.Explore(E).enter(),ids=rt.npcs.map(n=>n.id),want=E.npcs.at('hunter','school').filter(n=>n.alive).map(n=>n.id).slice(0,3);ok(JSON.stringify(ids)===JSON.stringify(want),ids+' vs '+want);
+ const srt=a=>a.slice().sort().join(),rt=new SV.Explore(E).enter(),ids=rt.npcs.map(n=>n.id),want=E.npcs.at('hunter','school').filter(n=>n.alive).map(n=>n.id);ok(want.length>=3&&srt(ids)===srt(want),ids+' vs '+want);
  ok(E.npcs.clock('hunter').dayType==='work'&&ids.includes('hunter.best_friend'),'ฮาจุนควรอยู่ '+ids);
- E.state.mutate('player','player',p=>{p.ap=0});rt.step({});const ev=E.npcs.at('hunter','school').filter(n=>n.alive).map(n=>n.id).slice(0,3);ok(JSON.stringify(rt.npcs.map(n=>n.id))===JSON.stringify(ev)&&!ev.includes('hunter.best_friend'),'evening '+ev)});
+ E.state.mutate('player','player',p=>{p.ap=0});rt.step({});const ev=E.npcs.at('hunter','school').filter(n=>n.alive).map(n=>n.id);ok(srt(rt.npcs.map(n=>n.id))===srt(ev)&&!ev.includes('hunter.best_friend'),'evening '+ev)});
 T('p7b3 คุย: กด E ใกล้ฮาจุน เลือกคุย ผลมาจาก rels.interact และเลือกตอบเหตุการณ์ได้',()=>{const E=workday(playSV('talk'));go(E,'school');E.state.mutate('player','player',p=>{p.ap=2});const rt=new SV.Explore(E).enter(),h=rt.npcs.find(n=>n.id==='hunter.best_friend');ok(h,'no hajun');
  ok(rt.step({interactPressed:true})==='none');walkTo(rt,h.x+h.w/2);ok(rt.nearby().kind==='npc'&&rt.nearby().npc===h.id);ok(rt.step({interactPressed:true})==='talk'&&rt.talk===h.id);
  const o=rt.talkOptions();ok(o.some(x=>x.kind==='rel'&&x.id==='talk'),JSON.stringify(o));const ev=o.find(x=>x.kind==='event');ok(!!ev===E.events.eligible('hunter.friend_gate_clip'));
@@ -609,7 +610,7 @@ T('p7b3 ประตู: โรงเรียน -> เมือง -> กล�
  walkTo(rt,1840);ok(/^locked/.test(rt.step({interactPressed:true}))&&rt.a.id==='city');walkTo(rt,60);ok(rt.step({interactPressed:true})==='door');clearEv(E);ok(rt.a.id==='school'&&rt.me.x===1480&&rt.cam.x===1600-576,'camera ตามจุดมาถึง '+rt.cam.x);rt.exit()});
 T('p7b3 ประตู: ฮันเตอร์ลงทะเบียนแล้ว เมือง <-> ย่านเกต · โรงเรียนล็อกหลังตื่นพลัง',()=>{const E=hunterSV();go(E,'city');const rt=new SV.Explore(E).enter();walkTo(rt,60);ok(/^locked/.test(rt.step({interactPressed:true})));
  walkTo(rt,1840);ok(rt.step({interactPressed:true})==='door');clearEv(E);ok(rt.a.id==='gate_zone'&&rt.foes.length===2);walkTo(rt,60);ok(rt.step({interactPressed:true})==='door');clearEv(E);ok(rt.a.id==='city')});
-const fightGob=(rt)=>{const f=rt.foes[0],k=f.key;let g=0;while(rt.foes.some(x=>x.key===k&&!x.dead)&&g++<2000){const cx=rt.me.x+rt.me.w/2,fx=f.x+f.w/2;if(Math.abs(cx-fx)>36){const st=rt.me.ground&&rt.me.vx===0&&g>1;rt.step({right:cx<fx,left:cx>fx,jump:true,jumpPressed:st})}else{rt.me.facing=fx>cx?1:-1;rt.step({attackPressed:g%3===0})}}return k};
+const fightGob=(rt)=>{const f=rt.foes[0],k=f.key;let g=0;while(rt.foes.some(x=>x.key===k&&!x.dead)&&g++<2000){const cx=rt.me.x+rt.me.w/2,fx=f.x+f.w/2;if(Math.abs(cx-fx)>36){const st=rt.me.ground&&rt.me.vx===0&&g>1;rt.step({right:cx<fx,left:cx>fx,jump:true,jumpPressed:st})}else rt.step({right:fx>cx&&rt.me.facing<0,left:fx<cx&&rt.me.facing>0,attackPressed:g%3===0})}return k};
 T('p7b3 ต่อสู้: ฟันก๊อบลินแบบ real-time ชนะแล้ว combat.apply ครั้งเดียว รางวัลครั้งเดียว',()=>{const E=hunterSV('fight');go(E,'city');go(E,'gate_zone');const rt=new SV.Explore(E).enter(),reps=[];E.bus.on('combat:done',r=>reps.push(r));const xp=E.player.get().exp,lv=E.player.get().level;
  const k=fightGob(rt);ok(reps.length===1&&reps[0].mode==='action'&&reps[0].win&&reps[0].source.key===k,JSON.stringify(reps.map(r=>r.outcome)));ok(E.sv.get().resolved.includes(k));ok(E.player.get().exp!==xp||E.player.get().level>lv,'exp');
  const xp2=E.player.get().exp;rt.load();ok(!rt.foes.some(f=>f.key===k)&&rt.foes.length===1);for(let i=0;i<60;i++)rt.step({});ok(reps.length===1&&E.player.get().exp===xp2);
@@ -626,6 +627,132 @@ T('p7b3 save: เซฟใหม่ที่มี scene โหลดในเ�
 T('p7b3 save: area ในเซฟไม่ตรงสถานที่ผู้เล่น = ล้างตำแหน่ง ใช้จุดเกิด',()=>{const st=new Mem();const E=playSV('fix',st);E.save.st=st;go(E,'school');const rt=new SV.Explore(E).enter();walkTo(rt,900);rt.exit();go(E,'home');E.saveTo(0);
  const F=mkSV(st);F.loadFrom(0);ok(F.sv.get().area===null);F.player.moveTo('school');clearEv(F);ok(new SV.Explore(F).enter().me.x===F.sv.area('hunter','school').spawn.x)});
 T('p7b3 perf: 600 เฟรม (10 วินาทีเกม) พร้อมก๊อบลิน < 100ms',()=>{const E=hunterSV('perf');go(E,'city');go(E,'gate_zone');const rt=new SV.Explore(E).enter();const t=Date.now();for(let i=0;i<600;i++)rt.step({right:i%120<80,jumpPressed:i%50===0,jump:i%50<10,attackPressed:i%20===0});const ms=Date.now()-t;ok(ms<100,'ms '+ms)});
+// ----- Phase 7B.3 Bug Fix: regression tests (หนึ่งข้อต่อหนึ่ง bug จาก Code Audit) -----
+const HJ='hunter.best_friend',EVT='hunter.friend_gate_clip';
+const schoolSV=(seed,st)=>{const E=workday(playSV(seed,st));go(E,'school');E.state.mutate('player','player',p=>{p.ap=2});return E};
+const gateSV=(seed,ap=2)=>{const E=hunterSV(seed);go(E,'city');go(E,'gate_zone');E.state.mutate('player','player',p=>{p.ap=ap});return E};
+const beside=(rt,f)=>{rt.me.x=f.x+(f.dir>0?f.w+2:-rt.me.w-2);rt.me.y=f.y+f.h-rt.me.h;rt.me.vx=0;rt.me.vy=0};
+const swingAt=(rt,f,n)=>{for(let i=0;i<n&&!f.dead;i++){const cx=rt.me.x+rt.me.w/2,fx=f.x+f.w/2;rt.step({right:fx>cx&&rt.me.facing<0,left:fx<cx&&rt.me.facing>0,attackPressed:i%3===0})}};
+const watch=E=>{const reps=[];E.bus.on('combat:done',r=>reps.push(r));return reps};
+T('p7b3fix HP: เหตุการณ์ในฉากลด HP แล้วออกจากฉาก HP ไม่ถูกเขียนทับ และไม่มี combat:done',()=>{let found=false;for(const sd of'abcdefghijkl'){const E=schoolSV('hp'+sd),rt=new SV.Explore(E).enter(),reps=watch(E),hp0=E.player.get().hp;
+  rt.choose({kind:'event',id:EVT},HJ);E.events.answer(0);const hp1=E.player.get().hp;if(hp1===hp0){rt.exit();continue}found=true;
+  ok(rt.hp===hp1&&rt.dmg===0,'runtime ต้องเห็น HP ใหม่ทันที');rt.exit();ok(E.player.get().hp===hp1,'HP '+E.player.get().hp+' ควรเป็น '+hp1);ok(reps.length===0,'มี combat:done ทั้งที่ไม่ได้สู้');break}
+ ok(found,'ไม่มี seed ที่เหตุการณ์ลด HP')});
+T('p7b3fix HP: แหล่งความจริงคือ player.hp · ความเสียหายค้าง + HP เปลี่ยนจากภายนอก รวมกันถูก ปิดยอดครั้งเดียว',()=>{const E=gateSV('hpsrc'),rt=new SV.Explore(E).enter(),reps=watch(E),hp0=E.player.get().hp;
+ rt.hp=hp0-20;ok(rt.dmg===20&&E.player.get().hp===hp0,'ความเสียหายในฉากยังไม่แตะ GameState');E.player.addHp(-30);ok(rt.hp===hp0-50,'HP ที่แสดง = HP จริง - ค้าง');
+ ok(rt.exit()===true);ok(E.player.get().hp===hp0-50&&reps.length===1&&reps[0].outcome==='retreat'&&reps[0].hpAfter===hp0-50);ok(rt.exit()===false&&reps.length===1&&rt.settle()===false)});
+T('p7b3fix HP: เลเวลอัปในฉาก maxHp ตามผู้เล่น และ HP ไม่เกิน max',()=>{const E=gateSV('lvl');E.state.mutate('player','player',p=>{p.exp=E.player.expNeed()-5});const rt=new SV.Explore(E).enter(),lv=E.player.get().level,mx0=rt.maxHp;
+ fightGob(rt);const p=E.player.get();ok(p.level===lv+1,'ควรเลเวลอัป');ok(rt.maxHp===E.player.maxHp()&&rt.maxHp>mx0,'maxHp '+rt.maxHp+' vs '+E.player.maxHp());ok(rt.hp===p.hp&&rt.hp<=rt.maxHp,'hp '+rt.hp+'/'+rt.maxHp)});
+T('p7b3fix HP: ผู้เล่นตายระหว่างอยู่ในฉาก ออกแล้วไม่ settle ไม่มี combat:done HP ไม่ถูกแก้',()=>{const E=gateSV('dead'),rt=new SV.Explore(E).enter(),reps=watch(E);rt.hp=E.player.get().hp-9;E.health.die('ทดสอบ');const hp=E.player.get().hp,snap=JSON.stringify(E.state.get('player'));
+ ok(rt.step({})==='blocked');ok(rt.settle()===false);ok(rt.exit()===true);ok(reps.length===0,'combat:done หลังความตาย');ok(E.player.get().hp===hp&&JSON.stringify(E.state.get('player'))===snap,'ผู้เล่นที่ตายแล้วถูกแก้');
+ ok(!E.loop.reasons.has('explore')&&E.loop.reasons.has('dead')&&E.sv.runtime===null)});
+T('p7b3fix HP: ไม่ได้สู้ = ออกจากฉาก/ผ่านประตู/ปิดยอด ไม่มี combat:done',()=>{const E=schoolSV('nofight'),rt=new SV.Explore(E).enter(),reps=watch(E);ok(rt.settle()===false);walkTo(rt,1520);ok(rt.step({interactPressed:true})==='door');clearEv(E);rt.exit();ok(reps.length===0)});
+T('p7b3fix pause: โหลดเซฟระหว่างอยู่ในฉาก runtime ถูกยกเลิก explore ไม่ค้าง reason อื่นคงอยู่ ไม่เขียน state เพิ่ม',()=>{const st=new Mem(),E=schoolSV('ld',st);E.save.st=st;E.saveTo(0);const rt=new SV.Explore(E).enter(),reps=watch(E);walkTo(rt,700);rt.hp=rt.hp-5;E.loop.pause('menu');
+ ok(E.loadFrom(0));ok(!E.loop.reasons.has('explore'),'explore ค้าง');ok(E.loop.reasons.has('menu'),'reason ของระบบอื่นถูกปล่อย');ok(E.sv.runtime===null&&!rt.active&&rt.dmg===0);
+ ok(rt.exit()===false&&rt.step({right:true})==='blocked'&&reps.length===0);const F=mkSV(st);F.loadFrom(0);ok(JSON.stringify(E.state.snapshot())===JSON.stringify(F.state.snapshot()),'runtime ที่ถูกยกเลิกเขียน state หลังโหลด');
+ E.loop.resume('menu');clearEv(E);const m=E.loop.month;ok(E.loop.tick()===true&&E.loop.month===m+1,'เวลาต้องเดินต่อได้')});
+T('p7b3fix pause: เริ่มเกมใหม่ระหว่างอยู่ในฉาก explore ไม่ค้าง',()=>{const E=schoolSV('ng'),rt=new SV.Explore(E).enter();E.newGame({seed:'again'});ok(!E.loop.reasons.has('explore')&&E.sv.runtime===null&&!rt.active&&rt.exit()===false);
+ E.worlds.start('hunter');E.player.create({name:'ใหม่',stats:{str:10,agi:10,int:10,vit:10,cha:10,luk:10},money:100});clearEv(E);const m=E.loop.month;ok(E.loop.tick()===true&&E.loop.month===m+1)});
+T('p7b3fix pause: exit ซ้ำไม่ resume ซ้ำ และ runtime เก่าไม่ปล่อย pause ของ runtime ใหม่',()=>{const E=schoolSV('own');let off=0;E.bus.on('loop:pause',x=>{if(!x.reasons.includes('explore'))off++});const a=new SV.Explore(E).enter();off=0;ok(a.exit()===true&&off===1);
+ const b=new SV.Explore(E).enter();off=0;ok(a.exit()===false&&a.abort()===false&&off===0,'runtime เก่าปล่อย pause');ok(E.loop.reasons.has('explore')&&E.sv.runtime===b);ok(b.exit()===true&&!E.loop.reasons.has('explore'))});
+T('p7b3fix lifecycle: enter ซ้อนถูกปฏิเสธ · enter ที่ล้มกลางทางปล่อย pause ของตัวเอง',()=>{const E=schoolSV('life'),a=new SV.Explore(E).enter();throws(()=>new SV.Explore(E).enter(),/กำลังสำรวจอยู่แล้ว/);throws(()=>a.enter(),/กำลังสำรวจอยู่แล้ว/);ok(E.sv.runtime===a&&a.active);a.exit();
+ const c=new SV.Explore(E);c.load=()=>{throw new Error('boom')};throws(()=>c.enter(),/boom/);ok(!E.loop.reasons.has('explore')&&E.sv.runtime===null&&!c.active);new SV.Explore(E).enter().exit()});
+T('p7b3fix ประตู: สถานที่ที่ไม่มี area ไปไม่ได้ (ไม่ย้าย ไม่เขียน) · ประตูล็อกไม่ปิดยอดศึก',()=>{const E=schoolSV('door2'),rt=new SV.Explore(E).enter(),reps=watch(E),w=[];E.bus.on('state:changed',x=>w.push(x.name));
+ ok(/^locked:/.test(rt.useDoor({to:'home',label:'บ้าน'}))&&/^locked:/.test(rt.useDoor({to:'nowhere',label:'?'})));ok(E.player.get().location.loc==='school'&&rt.a.id==='school'&&rt.active&&w.length===0,'ย้ายหรือเขียน state '+w);
+ walkTo(rt,1520);rt.step({interactPressed:true});clearEv(E);ok(rt.a.id==='city');rt.hp=rt.hp-5;walkTo(rt,1840);const r=rt.step({interactPressed:true});ok(/^locked:ยังเข้า/.test(r),r);ok(rt.dmg===5&&reps.length===0,'ประตูล็อกไม่ควรปิดยอด')});
+T('p7b3fix NPC event: เหตุการณ์ของฮาจุนขึ้นเฉพาะตอนคุยกับฮาจุน',()=>{const E=schoolSV('own-ev'),rt=new SV.Explore(E).enter(),others=rt.npcs.filter(n=>n.id!==HJ);ok(rt.npcs.some(n=>n.id===HJ)&&others.length>=1);
+ ok(rt.talkOptions(HJ).some(o=>o.kind==='event'&&o.id===EVT),'ฮาจุนต้องมีเหตุการณ์');for(const n of others)ok(!rt.talkOptions(n.id).some(o=>o.kind==='event'),n.name+' ไม่ควรมีเหตุการณ์ของฮาจุน');
+ throws(()=>rt.choose({kind:'event',id:EVT},others[0].id),/ใช้กับคนนี้ไม่ได้/);throws(()=>rt.choose({kind:'event',id:EVT},'hunter.clerk_yoon'),/ไม่ได้อยู่ที่นี่/);ok(!E.events.pending());
+ const p=rt.choose({kind:'event',id:EVT},HJ);ok(p.id===EVT&&E.events.pending().who===HJ);clearEv(E);
+ E.state.mutate('player','player',x=>{x.ap=0});rt.step({});ok(!rt.npcs.some(n=>n.id===HJ));for(const n of rt.npcs)ok(!rt.talkOptions(n.id).some(o=>o.kind==='event'))});
+T('p7b3fix NPC: ทุกคนในสถานที่อยู่ในฉาก เจ้าของเหตุการณ์ได้จุดที่ออกแบบ ไม่ยืนทับประตู กด E ได้คนที่ใกล้สุด',()=>{const E=workday(playSV('crowd'));for(let i=0;i<22;i++)E.npcs.generate('hunter',{occupation:'student'});go(E,'school');E.state.mutate('player','player',p=>{p.ap=2});
+ const rt=new SV.Explore(E).enter(),want=E.npcs.at('hunter','school').filter(n=>n.alive).map(n=>n.id);ok(want.length>=20,'คนน้อยเกินไป '+want.length);ok(rt.npcs.length===want.length&&want.every(id=>rt.npcs.some(n=>n.id===id)),'ในฉาก '+rt.npcs.length+' จริง '+want.length);
+ ok(rt.npcs[0].id===HJ&&rt.npcs[0].x===rt.a.npcSpots[0].x,'ฮาจุนต้องได้จุดแรก');ok(new Set(rt.npcs.map(n=>n.x)).size===rt.npcs.length,'ยืนซ้อนตำแหน่งกัน');
+ for(const n of rt.npcs){ok(n.x>=0&&n.x+n.w<=rt.a.width&&n.y+n.h===296,'นอกพื้นที่ '+n.x);for(const d of rt.a.doors)ok(Math.abs(n.x+n.w/2-d.x)>=44,n.name+' ยืนทับประตู');rt.me.x=n.x;const t=rt.nearby();ok(t&&t.kind==='npc'&&t.npc===n.id,'กด E ที่ '+n.name+' ได้ '+(t&&t.npc))}});
+T('p7b3fix ต่อสู้: ไม่มี AP เริ่มศึกไม่ได้ ก๊อบลินไม่ไล่ ตีไม่เข้า ไม่เสียอะไร ไม่ได้รางวัล',()=>{const E=gateSV('noap',0),rt=new SV.Explore(E).enter(),reps=watch(E),f=rt.foes[0],xp=E.player.get().exp,hp=E.player.get().hp,w=[];E.bus.on('state:changed',x=>w.push(x.name));
+ ok(rt.fightWhy()==='แรงไม่พอเดือนนี้ (AP)');beside(rt,f);for(let i=0;i<10;i++){beside(rt,f);swingAt(rt,f,60)}
+ ok(f.hp===f.max&&!f.dead&&!f.engaged&&f.state==='patrol','ก๊อบลินถูกตี/ไล่ทั้งที่ไม่มี AP');ok(rt.dmg===0&&E.player.get().hp===hp&&E.player.get().exp===xp&&E.player.get().ap===0&&reps.length===0&&w.length===0,'มีผลข้างเคียง '+w);rt.exit();ok(reps.length===0)});
+T('p7b3fix ต่อสู้: บาดเจ็บหนัก (injury >= 2) เริ่มศึกไม่ได้ เหมือนกฎภารกิจ',()=>{const E=gateSV('inj',2);E.player.injure(2);const rt=new SV.Explore(E).enter(),reps=watch(E),f=rt.foes[0];ok(rt.fightWhy()==='บาดเจ็บหนัก ต้องพักก่อน');
+ for(let i=0;i<8;i++){beside(rt,f);swingAt(rt,f,60)}ok(f.hp===f.max&&!f.engaged&&rt.dmg===0&&E.player.get().ap===2&&reps.length===0)});
+T('p7b3fix ต่อสู้: เริ่มศึกจ่าย 1 AP ต่อศัตรูหนึ่งตัวครั้งเดียว · รางวัลครั้งเดียวต่อตัว · AP หมดแล้วตัวถัดไปสู้ไม่ได้',()=>{const E=gateSV('ap',2),rt=new SV.Explore(E).enter(),reps=watch(E),xp=()=>E.player.get().exp,x0=xp(),[a,b]=rt.foes;
+ beside(rt,a);swingAt(rt,a,40);ok(a.engaged&&E.player.get().ap===1,'ตีโดนครั้งแรกต้องจ่าย 1 AP');swingAt(rt,a,600);ok(a.dead&&E.player.get().ap===1&&xp()===x0+50&&reps.length===1,'AP '+E.player.get().ap+' exp '+(xp()-x0));
+ beside(rt,b);swingAt(rt,b,600);ok(b.dead&&E.player.get().ap===0&&xp()===x0+100&&reps.length===2);
+ const E2=gateSV('ap1',1),r2=new SV.Explore(E2).enter(),[c,d]=r2.foes,y0=E2.player.get().exp;beside(r2,c);swingAt(r2,c,600);ok(c.dead&&E2.player.get().ap===0);for(let i=0;i<6;i++){beside(r2,d);swingAt(r2,d,60)}
+ ok(!d.dead&&d.hp===d.max&&!d.engaged&&E2.player.get().exp===y0+50,'ตัวที่สองไม่ควรสู้ได้เมื่อ AP หมด')});
+T('p7b3fix ต่อสู้: ก๊อบลินตีก่อนก็นับเป็นเริ่มศึก (จ่าย AP) · แพ้แล้วศัตรูเลิกสู้ ไม่แพ้วนซ้ำ',()=>{const E=gateSV('first',2),rt=new SV.Explore(E).enter(),reps=watch(E),f=rt.foes[0];let g=0;while(!rt.dmg&&g++<600){beside(rt,f);rt.me.inv=0;rt.step({})}
+ ok(rt.dmg>0&&f.engaged&&E.player.get().ap===1,'โดนตีครั้งแรกต้องจ่าย AP');rt.hp=1;g=0;while(!reps.length&&g++<900){beside(rt,f);rt.me.inv=0;rt.step({})}ok(reps.length===1&&reps[0].outcome==='lose'&&!reps[0].dead);
+ const p=E.player.get();ok(p.alive&&p.hp===1&&p.injury>=3&&rt.foes.every(x=>!x.engaged));for(let i=0;i<900;i++){beside(rt,f);rt.me.inv=0;rt.step({attackPressed:i%20===0})}ok(reps.length===1&&rt.dmg===0&&E.player.get().hp===1,'แพ้ซ้ำ '+reps.length)});
+T('p7b3fix ก๊อบลิน: ชนกล่องตัน ไม่เดินทะลุ และยืนบนพื้น',()=>{const E=gateSV('wall',2),rt=new SV.Explore(E).enter(),f=rt.foes[0],blk=rt.a.solids[1];ok(blk.x===640&&blk.w===40);let minX=1e9,inside=0;
+ for(let i=0;i<900;i++){rt.me.x=blk.x+10;rt.me.y=blk.y-rt.me.h;rt.me.vx=0;rt.me.vy=0;rt.me.inv=9;rt.step({});minX=Math.min(minX,f.x);for(const s of rt.a.solids)if(AW_overlap(f,s))inside++}
+ ok(f.state!=='patrol'||minX<=700,'ก๊อบลินควรไล่มาถึงกล่อง');ok(minX>=blk.x+blk.w,'ทะลุกล่องตัน x='+minX);ok(inside===0,'ซ้อนกับกล่องตัน '+inside+' เฟรม');ok(f.y+f.h===296&&f.ground,'ไม่ได้ยืนบนพื้น')});
+T('p7b3fix state: ระหว่างเฟรมไม่มีการเขียน slice ใดเลย ยกเว้นจ่าย AP ตอนเริ่มศึกหนึ่งครั้ง',()=>{const E=gateSV('writes',2),rt=new SV.Explore(E).enter(),w={},f=rt.foes[0];E.bus.on('state:changed',x=>{w[x.name]=(w[x.name]||0)+1});
+ for(let i=0;i<600;i++){beside(rt,f);rt.step({jumpPressed:i%90===0})}ok(rt.dmg>0,'ควรโดนตี');ok(JSON.stringify(w)==='{"player":1}','เขียน '+JSON.stringify(w))});
+T('p7b3fix metadata: sprite จริงผ่านตัวตรวจ · ค่าที่ runtime/view ใช้ขาดหรือขัดกันถูกจับ',()=>{const E=mkSV(),get=id=>E.assets.defs.get(id),cl=(id,fn)=>{const d=JSON.parse(JSON.stringify(get(id)));fn(d);return d},N=SV.NEED,P='shared.sv.player_m',G='hunter.sv.goblin';
+ ok(SV.validateSprite(get(P),N.player,P).length===0&&SV.validateSprite(get(G),N.foe,G).length===0&&SV.validateSprite(get('hunter.sv.npc_f'),N.npc,'x').length===0);ok(!('jump' in get(G).anims));
+ const bad=[[d=>{delete d.bbox},'bbox x,y,w,h'],[d=>{d.anchor={x:10,y:63}},'anchor ไม่ตรง'],[d=>{d.bbox.h=60},'bbox อยู่นอกเฟรม'],[d=>{delete d.anims.attack},'ขาดท่า attack'],[d=>{delete d.anims.attack.hit},'attack ต้องมี hit'],[d=>{d.anims.death.row=9},'นอกจำนวนแถว'],[d=>{d.anims.walk.frames=9},'เกินจำนวนคอลัมน์'],[d=>{delete d.frame},'frame.w,h']];
+ for(const[fn,msg]of bad){const e=SV.validateSprite(cl(P,fn),N.player,P).join('|');ok(e.includes(msg),msg+' :: '+e)}ok(SV.validateSprite(undefined,N.foe,'x.y')[0].includes('ไม่มีใน Asset Registry'));
+ const def=ctx.AW.data.worlds.find(w=>w.id==='hunter'),fake=fn=>{const m=new Map(E.assets.defs);fn(m);return{defs:m}};ok(SV.validateAreas(def,E.assets).length===0);
+ ok(SV.validateAreas(def,fake(m=>m.set(G,cl(G,d=>{delete d.anims.hurt})))).join('|').includes('ขาดท่า hurt'));ok(SV.validateAreas(def,fake(m=>m.set('hunter.tile.gate',cl('hunter.tile.gate',d=>{delete d.tiles})))).join('|').includes('tiles.top,fill,platform'));
+ ok(SV.validateAreas(def,fake(m=>m.delete('hunter.sv.npc_m'))).join('|').includes('hunter.sv.npc_m: ไม่มีใน Asset Registry'))});
+T('p7b3fix metadata: กล่องชนและจังหวะโจมตีของ runtime มาจาก metadata ของ sprite',()=>{const E=gateSV('meta',2),P=E.assets.defs.get('shared.sv.player_m'),G=E.assets.defs.get('hunter.sv.goblin');let rt=new SV.Explore(E).enter();
+ ok(rt.me.w===P.bbox.w&&rt.me.h===P.bbox.h&&rt.me.sprite==='shared.sv.player_m');ok(rt.foes.every(f=>f.w===G.bbox.w&&f.h===G.bbox.h&&f.sprite==='hunter.sv.goblin'));ok(rt.npcs.every(n=>/^hunter\.sv\.npc_[mf]$/.test(n.sprite)));
+ const a=P.anims.attack;ok(rt.atk.dur===a.frames/a.fps&&rt.atk.t0===a.hit[0]/a.fps&&rt.atk.t1===(a.hit[1]+1)/a.fps);rt.step({attackPressed:true});let first=-1,last=-1;for(let i=1;i<30;i++){rt.step({});if(rt.swinging()){if(first<0)first=i;last=i}}
+ ok(first===Math.ceil(a.hit[0]/a.fps*60)&&last===Math.ceil((a.hit[1]+1)/a.fps*60)-1,'ช่วงโดน '+first+'..'+last);rt.exit();
+ G.bbox={x:12,y:24,w:40,h:40};P.anims=Object.assign({},P.anims,{attack:Object.assign({},a,{frames:8,fps:8,hit:[4,5]})});rt=new SV.Explore(E).enter();ok(rt.foes[0].w===40&&rt.foes[0].h===40&&rt.foes[0].y===296-40);ok(rt.atk.dur===1&&rt.atk.t0===0.5&&rt.atk.t1===0.75)});
+T('p7b3fix tool: ตรวจขนาดแผ่น sprite/tileset กับ metadata และเห็นการอ้างภาพจาก areas',()=>{const AT2=require(path.join(R,'tools/assets.js')),sp={sheet:{cols:6,rows:7},frame:{w:64,h:64}},tl={sheet:{cols:8,rows:2},tile:{w:16,h:16}};
+ ok(AT2.checkDims(sp,{w:384,h:448})===''&&AT2.checkDims(tl,{w:128,h:32})==='');ok(/ไม่ตรง metadata 384x448/.test(AT2.checkDims(sp,{w:320,h:448}))&&/ไม่ตรง metadata 128x32/.test(AT2.checkDims(tl,{w:128,h:16})));
+ const r=AT2.inventory(),u=id=>r.rows.find(x=>x.id===id).usage.join(';');ok(r.errors.length===0,r.errors.join('|'));ok(u('hunter.tile.street').includes('areas.school.tileset')&&u('hunter.tile.gate').includes('areas.gate_zone.tileset')&&u('hunter.bg.school').includes('areas.school.layers'));
+ ok(u('hunter.sv.goblin').includes('areas.gate_zone.spawns.gob_a')&&u('shared.sv.player_f').includes('player')&&u('hunter.sv.npc_m').includes('npc'))});
+T('p7b3fix save: เซฟ Phase 2-6 ทุกไฟล์ โหลดได้ slice เดิมตรงกับ build ที่ไม่ติดตั้ง side-view เล่นต่อ 6 เดือนยังตรงกัน',()=>{for(const f of['phase2_save.json','phase3_save.json','phase4_save.json','phase5_save.json','phase6_save.json']){const st=new Mem();st.setItem('mvh1:slot0',fs.readFileSync(path.join(__dirname,'fixtures/'+f),'utf8'));
+  const A=mkGP(st),B=mkSV(st);ok(A.loadFrom(0)&&B.loadFrom(0),f);const strip=E=>{const d=E.state.snapshot().data;delete d.scene;return JSON.stringify(d)};ok(strip(A)===strip(B),f+' slice เดิมต่างกัน');
+  const s=B.sv.get();ok(s._v===1&&s.area===null&&s.x===null&&s.resolved.length===0,f);B.saveTo(1);const C=mkSV(st);C.loadFrom(1);ok(JSON.stringify(C.state.snapshot())===JSON.stringify(B.state.snapshot()),f+' roundtrip');
+  for(const E of[A,B])adv(E,6);ok(strip(A)===strip(B),f+' เล่นต่อแล้วต่างกัน')}});
+T('p7b3fix view: มุมกล้องแคบ (มือถือแนวตั้ง) กล้องตามผู้เล่น ไม่เลยขอบ และกลับเป็น 576 ได้',()=>{const E=schoolSV('view'),rt=new SV.Explore(E).enter();ok(rt.view.w===576);rt.setView(216);
+ const inView=()=>rt.me.x>=rt.cam.x&&rt.me.x+rt.me.w<=rt.cam.x+216;ok(inView()&&Math.abs(rt.cam.x+108-(rt.me.x+rt.me.w/2))<=1,'จัดกลางเมื่อเปลี่ยนมุม');
+ for(let i=0;i<900;i++){rt.step({right:true});ok(inView()&&rt.cam.x>=0&&rt.cam.x<=rt.a.width-216,'หลุดมุม '+rt.cam.x+' '+rt.me.x)}ok(rt.cam.x===rt.a.width-216,'ชนขอบขวา '+rt.cam.x);
+ rt.setView(576);ok(rt.cam.x===rt.a.width-576&&rt.me.x>=rt.cam.x&&rt.me.x+rt.me.w<=rt.cam.x+576);for(let i=0;i<600;i++)rt.step({left:true});ok(rt.cam.x===0);rt.exit()});
+// ----- Phase 7B.3 balance: ก๊อบลินในฉาก 50 EXP ต่อตัว ต่อ 1 AP (ไม่มีเงิน/ไอเทม) · ภารกิจล่าก๊อบลินคงเดิม -----
+const GOB_EXP=50,totXP=E=>{const p=E.player.get();let t=p.exp;for(let l=1;l<p.level;l++)t+=E.player.expNeed(l);return t};// EXP สะสมรวมทุกเลเวล (ไม่หลงเมื่อเลเวลอัป)
+const bag=E=>JSON.stringify(E.player.get().inventory);
+const firstHit=(rt,f)=>{let g=0;while(!f.engaged&&g++<300){beside(rt,f);swingAt(rt,f,1)}ok(f.engaged&&!f.dead,'ต้องเริ่มศึกโดยยังไม่ตาย')};// ตีโดนครั้งแรก (เริ่มศึก) แล้วหยุด
+T('p7b3bal 1: ข้อมูล spawn ทุกจุดให้ 50 EXP อย่างเดียว (ไม่มีเงิน ไม่มีไอเทม)',()=>{const E=mkSV(),sp=E.sv.area('hunter','gate_zone').spawns;ok(sp.length===2);for(const s of sp)ok(JSON.stringify(s.reward)==='[{"exp":50}]',JSON.stringify(s.reward))});
+T('p7b3bal 1: เริ่มศึก จ่าย 1 AP แล้วชนะ ได้ 50 EXP พอดี ไม่ได้เงินหรือไอเทม',()=>{const E=gateSV('b1',2),rt=new SV.Explore(E).enter(),reps=watch(E),f=rt.foes[0],x0=totXP(E),m0=E.player.get().money,i0=bag(E);
+ firstHit(rt,f);ok(E.player.get().ap===1&&totXP(E)===x0,'จ่าย AP ตอนเริ่มศึก ยังไม่ได้ EXP');swingAt(rt,f,600);
+ ok(f.dead&&reps.length===1&&reps[0].win,'ต้องชนะ');ok(totXP(E)===x0+GOB_EXP,'EXP +'+(totXP(E)-x0));ok(E.player.get().ap===1&&E.player.get().money===m0&&bag(E)===i0,'เงิน/ไอเทมเปลี่ยน');ok(rt.msg.some(m=>m.includes('EXP +50')),rt.msg.slice(-3))});
+T('p7b3bal 2: spawn เดิมไม่ให้ EXP ซ้ำในเดือนเดียวกัน: เปิด-ปิดฉาก · ผ่านประตูกลับมา · เซฟ/โหลด · runtime ใหม่',()=>{const st=new Mem(),E=gateSV('b2',2);E.save.st=st;let rt=new SV.Explore(E).enter();const f=rt.foes[0],k=f.key,reps=watch(E);
+ beside(rt,f);swingAt(rt,f,600);const x1=totXP(E),ap1=E.player.get().ap;ok(f.dead&&reps.length===1);const back=()=>ok(!rt.foes.some(g=>g.key===k)&&totXP(E)===x1&&reps.length===1&&E.player.get().ap===ap1,'ได้ซ้ำ/ศัตรูกลับมา');
+ rt.exit();rt=new SV.Explore(E).enter();back();rt.load();back();walkTo(rt,60);rt.step({interactPressed:true});clearEv(E);walkTo(rt,1840);rt.step({interactPressed:true});clearEv(E);ok(rt.a.id==='gate_zone');back();
+ rt.exit();E.saveTo(0);E.loadFrom(0);rt=new SV.Explore(E).enter();back();const F=mkSV(st);F.loadFrom(0);const r2=new SV.Explore(F).enter();ok(!r2.foes.some(g=>g.key===k)&&totXP(F)===x1);
+ // ฆ่าซ้ำตรง ๆ ก็ไม่ได้: ศัตรูที่ตายแล้วตีไม่ได้ และถูกลบจากฉาก
+ rt.foes.forEach(g=>{if(g.key===k)throw new Error('ไม่ควรมี')});ok(E.sv.get().resolved.filter(x=>x===k).length===1)});
+T('p7b3bal 3: ก๊อบลินที่ยังไม่ได้เริ่มศึกไม่ให้ EXP และไม่เสีย AP (เดินผ่าน/ออกจากฉาก)',()=>{const E=gateSV('b3',2),rt=new SV.Explore(E).enter(),reps=watch(E),x0=totXP(E);
+ for(let i=0;i<120;i++)rt.step({right:true});walkTo(rt,60);rt.exit();ok(totXP(E)===x0&&E.player.get().ap===2&&reps.length===0&&E.sv.get().resolved.length===0,'มีผลทั้งที่ไม่ได้สู้')});
+T('p7b3bal 4: ไม่มี AP หรือบาดเจ็บหนัก ตีกี่ครั้งก็ไม่ได้ EXP',()=>{for(const[seed,ap,inj]of[['b4a',0,0],['b4b',2,2]]){const E=gateSV(seed,ap);if(inj)E.player.injure(inj);const rt=new SV.Explore(E).enter(),reps=watch(E),x0=totXP(E);
+  for(const f of rt.foes)for(let i=0;i<10;i++){beside(rt,f);swingAt(rt,f,60)}for(let i=0;i<20;i++)for(const f of rt.foes)rt.hitFoe(f);
+  ok(totXP(E)===x0&&rt.foes.every(f=>!f.dead&&!f.engaged&&f.hp===f.max)&&reps.length===0&&E.player.get().ap===ap,seed+' ได้ EXP/เริ่มศึกได้')}});
+T('p7b3bal 5: ถอยหนีและแพ้ไม่ให้ EXP และไม่คืน AP · สู้ใหม่หลังแพ้จ่าย AP ใหม่ ชนะแล้วได้ครั้งเดียว',()=>{
+ {const E=gateSV('b5r',2),rt=new SV.Explore(E).enter(),reps=watch(E),f=rt.foes[0],x0=totXP(E);firstHit(rt,f);ok(E.player.get().ap===1);rt.hp=rt.hp-5;
+  walkTo(rt,60);rt.step({interactPressed:true});clearEv(E);ok(reps.length===1&&reps[0].outcome==='retreat'&&totXP(E)===x0&&E.player.get().ap===1,'ถอยหนี: ได้ EXP หรือคืน AP')}
+ {const E=gateSV('b5l',2),rt=new SV.Explore(E).enter(),reps=watch(E),f=rt.foes[0],x0=totXP(E);let g=0;while(!rt.dmg&&g++<600){beside(rt,f);rt.me.inv=0;rt.step({})}ok(f.engaged&&E.player.get().ap===1);rt.hp=1;g=0;
+  while(!reps.length&&g++<900){beside(rt,f);rt.me.inv=0;rt.step({})}ok(reps[0].outcome==='lose'&&totXP(E)===x0&&E.player.get().ap===1,'แพ้: ได้ EXP หรือคืน AP');
+  E.state.mutate('player','player',p=>{p.injury=0});E.player.addHp(9999);firstHit(rt,f);ok(E.player.get().ap===0,'ศึกใหม่หลังแพ้ต้องจ่าย AP ใหม่');swingAt(rt,f,900);
+  ok(f.dead&&totXP(E)===x0+GOB_EXP&&reps.filter(r=>r.win).length===1,'ชนะศึกใหม่ได้ครั้งเดียว '+(totXP(E)-x0))}});
+T('p7b3bal 6: ขึ้นเดือนใหม่ spawn กลับมา ได้ 50 EXP ต่อตัวอีกครั้งตามกฎเดิม และ key เดือนเก่าถูกตัดทิ้ง',()=>{const E=gateSV('b6',2);let rt=new SV.Explore(E).enter();const m0=E.loop.month,x0=totXP(E),k0=rt.foes.map(f=>f.key);
+ for(const f of rt.foes.slice()){beside(rt,f);swingAt(rt,f,900)}ok(totXP(E)===x0+2*GOB_EXP&&E.player.get().ap===0);rt.exit();ok(new SV.Explore(E).enter().foes.length===0);E.sv.runtime.exit();
+ adv(E,1);ok(E.loop.month===m0+1);if(E.player.get().location.loc!=='gate_zone')go(E,'gate_zone');E.state.mutate('player','player',p=>{p.ap=2;p.injury=0});E.player.addHp(9999);
+ rt=new SV.Explore(E).enter();ok(rt.foes.length===2&&rt.foes.every(f=>!k0.includes(f.key)&&f.key.includes('|'+(m0+1)+'|')),'spawn เดือนใหม่');const x1=totXP(E);
+ const f=rt.foes[0];beside(rt,f);swingAt(rt,f,900);ok(totXP(E)===x1+GOB_EXP&&E.player.get().ap===1);ok(E.sv.get().resolved.length===1&&E.sv.get().resolved[0]===f.key,'key เดือนเก่าต้องถูกตัด '+E.sv.get().resolved);
+ rt.load();ok(rt.foes.length===1&&totXP(E)===x1+GOB_EXP,'เดือนเดียวกันไม่ได้ซ้ำ')});
+T('p7b3bal 7: ภารกิจล่าก๊อบลินคงเดิม: ข้อมูล 100 EXP + เงิน 100 + หินมานา 2 และจ่ายจริงตามตัวคูณ Phase 6',()=>{const E=hunterSV('b7');E.state.mutate('player','player',p=>{p.ranks.hunter='E';p.ap=2;p.injury=0});go(E,'city');go(E,'gate_zone');
+ const def=E.missions.def('hunter.goblin_gate');ok(JSON.stringify(def.win)==='[{"money":100},{"exp":100},{"item":{"id":"mana_stone","n":2}}]',JSON.stringify(def.win));ok(def.enemy==='goblins');
+ const k=E.missions.rewardMult('hunter.goblin_gate'),p0=E.player.get(),x0=totXP(E),m0=p0.money,s0=p0.inventory['hunter.mana_stone']||0;const r=E.missions.start('hunter.goblin_gate');ok(r.win,'ควรชนะ');
+ const p1=E.player.get();ok(totXP(E)-x0===Math.round(100*k.exp),'EXP '+(totXP(E)-x0)+' คาด '+Math.round(100*k.exp));ok(p1.money-m0===Math.round(100*k.money),'เงิน '+(p1.money-m0));ok((p1.inventory['hunter.mana_stone']||0)-s0===2,'หินมานา');
+ ok(k.exp>=1&&Math.round(100*k.exp)>GOB_EXP,'ภารกิจต้องให้มากกว่าก๊อบลินในฉาก')});
+// fixtures/phase6_save.json: สร้างด้วยโค้ดของ tag phase6 เอง (git archive phase6 แล้วรัน tests/sim.js play(ctx,'rev-mission','mission',150) และ E.saveTo) ไม่ได้แก้ด้วยมือ
+T('p7b3fix save: เซฟจริง Phase 6 (แรงก์ B เดือน 150) เข้าฉาก สู้ เซฟ โหลด ได้',()=>{const st=new Mem();st.setItem('mvh1:slot0',fs.readFileSync(path.join(__dirname,'fixtures/phase6_save.json'),'utf8'));const E=mkSV(st);ok(E.loadFrom(0));const p=E.player.get();
+ ok(p.alive&&p.ranks.hunter==='B'&&p.level===35&&E.loop.month===150&&p._v===3&&E.economy.get()._v>=1,JSON.stringify([p.ranks.hunter,p.level,E.loop.month]));clearEv(E);go(E,'city');go(E,'gate_zone');E.state.mutate('player','player',x=>{x.ap=2;x.injury=0});
+ const rt=new SV.Explore(E).enter(),k=fightGob(rt);ok(E.sv.get().resolved.includes(k));walkTo(rt,400);rt.exit();E.saveTo(2);const F=mkSV(st);F.loadFrom(2);ok(JSON.stringify(F.state.snapshot())===JSON.stringify(E.state.snapshot()));
+ const r2=new SV.Explore(F).enter();ok(r2.a.id==='gate_zone'&&r2.me.x===F.sv.get().x&&r2.foes.length===1)});
 }
 
 console.log(results.join('\n'));console.log(`\n${pass} ผ่าน · ${fail} ไม่ผ่าน`);process.exit(fail?1:0);

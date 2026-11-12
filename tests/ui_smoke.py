@@ -1,9 +1,10 @@
 """ทดสอบ UI Phase 7A ในเบราว์เซอร์จริง (Chromium): python3 tests/ui_smoke.py
 ทุกหน้า · ปุ่มกิจกรรม · modal · โหมด focus · responsive 5 ขนาด · เซฟ/โหลด · console error · screenshot desktop/tablet/mobile"""
-import asyncio,os,hashlib
+import asyncio,os,sys
 from playwright.async_api import async_playwright
 R=os.path.dirname(os.path.dirname(os.path.abspath(__file__)));URL='file://'+R+'/dist/index.html'
-OLD='/home/claude/game4/index.html';h0=hashlib.sha256(open(OLD,'rb').read()).hexdigest()
+sys.path.insert(0,os.path.dirname(os.path.abspath(__file__)));from original_game import Original,report,summary
+ORIG=Original()
 PAGES=['dashboard','character','inventory','skills','equipment','party','missions','map','relations','family','economy','association','guild','dungeon','tower','market','settings']
 SHOT=os.path.join(R,'docs/phase7a')
 res=[]
@@ -112,7 +113,6 @@ async def main():
                 check('mobile: เหตุการณ์อ่านได้และกดตัวเลือกได้',await m.is_visible('#modal [data-choice]'))
             await m.close()
         check('localStorage มีเฉพาะเซฟ mvh1: และของเกมเดิม',await pg.evaluate("Object.keys(localStorage).every(k=>k.startsWith('mvh1:')||k.startsWith('hunter-path-'))"))
-        check('ไฟล์เกมเดิมไม่เปลี่ยน (sha256)',hashlib.sha256(open(OLD,'rb').read()).hexdigest()==h0)
         await b.close()
 asyncio.run(main())
-print('\n'.join(res));f=sum(r.startswith('FAIL') for r in res);print(f'\n{len(res)-f} ผ่าน · {f} ไม่ผ่าน');raise SystemExit(1 if f else 0)
+sk=report(res,ORIG);line,f=summary(res,sk);print('\n'.join(res));print(line);raise SystemExit(1 if f else 0)

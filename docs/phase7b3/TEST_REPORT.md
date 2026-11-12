@@ -1,5 +1,7 @@
 # Phase 7B.3 test report
 
+Numbers below are from the first delivery (tag `phase7b.3`). Results after the bug-fix round are in `BUGFIX_REPORT.md`: unit 318, sv_smoke 75, others unchanged.
+
 | Suite | Result |
 |---|---|
 | `node tests/core.test.js` | 295 pass, 0 fail (274 old + 21 new `p7b3`) |

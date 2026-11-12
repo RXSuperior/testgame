@@ -190,31 +190,58 @@ h2,h3,h4{margin:0 0 8px;font-weight:700;letter-spacing:.2px} h2{font-size:20px} 
 }
 
 /* ===== Phase 7B.3: Side-view explore overlay (pixel gameplay) ===== */
-#sv{position:fixed;inset:0;z-index:60;background:#05070d;display:flex;align-items:center;justify-content:center}
+#sv{position:fixed;inset:0;z-index:60;background:#05070d;display:grid;place-items:center}
 #sv[hidden]{display:none}
 body.sv-on{overflow:hidden}
-.sv-wrap{position:relative;width:min(100vw,calc(100vh*16/9));aspect-ratio:16/9;max-height:100vh}
+/* เวที: ภาพเกม (c) · แผงปุ่มซ้าย/ขวา (l,r) อยู่คนละช่อง ปุ่มจึงไม่ทับภาพเกม
+   HUD ปุ่มเซฟ/ออก และข้อความ เป็นช่องของ grid: เดสก์ท็อป/แนวนอนซ้อนบนภาพเกม (ช่อง c) · แนวตั้งแยกเป็นแถวของตัวเอง */
+.sv-stage{display:grid;grid-template-areas:"c";align-items:center;justify-items:center}
+.sv-wrap{grid-area:c;position:relative;width:min(100vw,calc(100vh*16/9));aspect-ratio:16/9;outline:none}
 #svc{width:100%;height:100%;display:block;image-rendering:pixelated;image-rendering:crisp-edges;background:#000}
-.sv-hud{position:absolute;left:8px;top:8px;background:rgba(8,12,24,.82);border:2px solid #34427a;border-radius:4px;padding:6px 8px;min-width:190px;font-size:13px;box-shadow:0 2px 0 #000}
+.sv-hud{grid-area:c;align-self:start;justify-self:start;margin:8px;z-index:1;background:rgba(8,12,24,.82);border:2px solid #34427a;border-radius:4px;padding:6px 8px;min-width:190px;font-size:13px;box-shadow:0 2px 0 #000}
 .sv-hud .sv-name{font-weight:700;margin-bottom:4px}
 .sv-bars{display:grid;grid-template-columns:auto 1fr;gap:4px 8px;align-items:center}
 .sv-bars .bar{height:8px;border-radius:0}
 .sv-ap{color:var(--gold);letter-spacing:2px}
-.sv-top{position:absolute;right:8px;top:8px;display:flex;gap:6px}
-.sv-prompt{position:absolute;left:50%;bottom:22%;transform:translateX(-50%);background:rgba(8,12,24,.85);border:2px solid var(--blue);padding:4px 10px;border-radius:4px;font-size:13px;pointer-events:none}
+.sv-warn{margin-top:4px;color:var(--red);font-size:12px}
+.sv-top{grid-area:c;align-self:start;justify-self:end;margin:8px;z-index:1;display:flex;gap:6px}
+.sv-msg{grid-area:c;align-self:stretch;justify-self:stretch;position:relative;pointer-events:none;z-index:1}
+.sv-prompt{position:absolute;left:50%;bottom:22%;transform:translateX(-50%);background:rgba(8,12,24,.85);border:2px solid var(--blue);padding:4px 10px;border-radius:4px;font-size:13px;white-space:nowrap}
 .sv-prompt:empty,.sv-log:empty{display:none}
-.sv-log{position:absolute;left:8px;bottom:8px;max-width:60%;background:rgba(8,12,24,.7);padding:4px 8px;border-radius:4px;font-size:12px;color:var(--muted);pointer-events:none}
-.sv-panel{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none}
+.sv-log{position:absolute;left:8px;bottom:8px;max-width:60%;background:rgba(8,12,24,.7);padding:4px 8px;border-radius:4px;font-size:12px;color:var(--muted)}
+/* หน้าต่างคุย/เหตุการณ์: เริ่มใต้ HUD และปุ่มเซฟเสมอ (--svtop ตั้งจาก JS) จึงไม่ทับข้อมูลบนสุด */
+.sv-panel{position:absolute;left:0;right:0;bottom:0;top:var(--svtop,0px);display:flex;align-items:center;justify-content:center;padding:0 12px 12px;pointer-events:none}
 .sv-panel:empty{display:none}
-.sv-dlg{pointer-events:auto;max-width:min(520px,92%);max-height:90%;overflow:auto;border-radius:6px;border:2px solid var(--line2);box-shadow:0 4px 0 #000}
+.sv-dlg{pointer-events:auto;max-width:min(520px,100%);max-height:100%;overflow:auto;border-radius:6px;border:2px solid var(--line2);box-shadow:0 4px 0 #000}
 .sv-dlg .actions{display:flex;flex-wrap:wrap;gap:6px}
 .sv-dlg p.bad{color:var(--red)}
-.sv-touch{display:none;position:absolute;left:0;right:0;bottom:8px;justify-content:space-between;padding:0 10px;pointer-events:none}
-.sv-touch .pad{display:flex;gap:8px;pointer-events:auto}
+.sv-touch{display:none;gap:8px}
+.sv-touch.l{grid-area:l}.sv-touch.r{grid-area:r}
 .sv-touch button{width:56px;height:56px;border-radius:50%;font-size:20px;background:rgba(26,35,64,.75);touch-action:none;user-select:none;-webkit-user-select:none}
 .sv-touch button.on{background:rgba(76,195,255,.45);border-color:var(--blue)}
-@media (hover:none),(pointer:coarse),(max-width:900px){.sv-touch{display:flex}.sv-log{bottom:76px}}
-@media (max-width:520px){.sv-hud{font-size:11px;min-width:150px;padding:4px 6px}.sv-touch button{width:48px;height:48px}}
+@media (hover:none),(pointer:coarse),(max-width:900px){
+ .sv-touch{display:flex}
+ /* แนวนอน: ปุ่มเรียงแนวตั้งในขอบซ้าย/ขวา ภาพเกมหดเท่าที่ต้องเว้นให้ปุ่ม */
+ @media (orientation:landscape){.sv-stage{grid-template-areas:"l c r";column-gap:8px}.sv-touch{flex-direction:column}.sv-wrap{width:min(calc(100vw - 144px),calc(100vh*16/9))}}
+}
+@media (max-width:520px){.sv-hud{font-size:11px;min-width:150px;padding:4px 6px}.sv-touch button{width:52px;height:52px}}
+@media (max-width:380px){.sv-touch button{width:46px;height:46px}}
+/* แนวตั้งบนจอสัมผัส (class ตั้งจาก JS ตามเงื่อนไขเดียวกับขนาดภาพ): แถวบน HUD + เซฟ/ออก · ภาพเกม (ขนาดจาก JS) · ข้อความ · ปุ่ม
+   ไม่มีอะไรซ้อนบนภาพเกม ขอบบน/ล่างเว้นตาม safe area ของเครื่อง */
+#sv.sv-portrait{padding:env(safe-area-inset-top,0px) 0 env(safe-area-inset-bottom,0px)}
+.sv-portrait .sv-stage{width:100%;grid-template-areas:"h t" "c c" "m m" "l r";grid-template-columns:1fr auto;row-gap:8px}
+.sv-portrait .sv-wrap{aspect-ratio:auto}
+.sv-portrait .sv-hud{grid-area:h;margin:0 0 0 8px;align-self:stretch;justify-self:stretch;min-width:0;min-height:62px;box-sizing:border-box}
+.sv-portrait .sv-hud .sv-name{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sv-portrait .sv-top{grid-area:t;margin:0 8px 0 0;align-self:start}
+.sv-portrait .sv-msg{grid-area:m;position:static;display:flex;flex-direction:column;align-items:center;gap:4px;min-height:52px;width:100%;padding:0 8px;box-sizing:border-box}
+.sv-portrait .sv-prompt,.sv-portrait .sv-log{position:static;transform:none;max-width:100%}
+.sv-portrait .sv-log{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sv-portrait .sv-touch.l{justify-self:start;margin-left:10px}.sv-portrait .sv-touch.r{justify-self:end;margin-right:10px}
+/* หน้าต่างแนวตั้ง: แผ่นเต็มความกว้างชิดล่าง ปุ่มสูง 44px ขึ้นไปสำหรับนิ้ว */
+.sv-portrait .sv-panel{align-items:flex-end;padding:0 8px max(8px,env(safe-area-inset-bottom,0px))}
+.sv-portrait .sv-dlg{width:100%;max-width:100%;box-sizing:border-box;font-size:15px}
+.sv-portrait .sv-dlg button{min-height:44px;flex:1 1 auto}
 </style></head><body><div id="app" class="app"><div class="loading">กำลังโหลดโลกฮันเตอร์…</div></div>
 <script>// ==== src/core/ns.js ====
 // Namespace กลาง: ทุกโมดูลลงทะเบียนที่ AW ไม่สร้างตัวแปร global อื่น
@@ -2081,106 +2108,169 @@ P.camera=(cam,target,world,view={w:576,h:324},dz=60)=>{const cx=target.x+target.
 
 // ==== src/sideview/sideview.js ====
 // Side-view runtime (Phase 7B.3): สำรวจพื้นที่แบบ real-time บนระบบเดิม · ไม่มี DOM (ทดสอบใน node ได้)
-// สถานะ real-time (ตำแหน่ง ความเร็ว HP ระหว่างสู้ ศัตรู) อยู่ในหน่วยความจำเท่านั้น ไม่เขียน GameState ทุกเฟรม
+// สถานะ real-time (ตำแหน่ง ความเร็ว ศัตรู ความเสียหายที่ยังไม่ปิดยอด) อยู่ในหน่วยความจำเท่านั้น ไม่เขียน GameState ทุกเฟรม
 // slice 'scene' (เจ้าของ 'sideview') เขียนเฉพาะ: เปลี่ยนพื้นที่ · ศัตรูถูกปราบ · ก่อนเซฟ/ออก · เซฟเก่าไม่มี slice นี้ = ค่าเริ่มต้น
-// เชื่อมระบบเดิมผ่าน API สาธารณะเท่านั้น: player.moveTo · npcs.at · rels.actions/interact · events.eligible/present · combat.profile/enemy/apply · Rules.apply
+// เชื่อมระบบเดิมผ่าน API สาธารณะเท่านั้น: player.moveTo/canEnter/spendAp · npcs.at · rels.actions/interact · events.eligible/present · combat.profile/enemy/apply · Rules.apply
+// HP: แหล่งความจริงเดียวคือ player.hp ใน GameState · runtime ไม่เก็บสำเนา HP เก็บเฉพาะ dmg (ความเสียหายจากศึกในฉากที่ยังไม่ส่งเข้า combat.apply)
+// เวลา: runtime หยุดเกมด้วย reason 'explore' ของตัวเองเท่านั้น และปล่อยครั้งเดียว ไม่แตะ reason ของระบบอื่น
 (function(AW){
 'use strict';
-const SV=AW.sv=AW.sv||{},OWNER='sideview',VERSION=1,R=()=>AW.systems.Rules,num=x=>typeof x==='number'&&isFinite(x);
-const BODY={w:20,h:44},ENEMY={w:30,h:30},REACH=44,MAX_RESOLVED=60;
+const SV=AW.sv=AW.sv||{},OWNER='sideview',VERSION=1,PAUSE='explore',R=()=>AW.systems.Rules,num=x=>typeof x==='number'&&isFinite(x);
+const BODY={w:20,h:44},REACH=44,ATTACK={dur:0.32,t0:0.1,t1:0.22},HZ=Math.round(1/SV.K.dt);
+// ฟิสิกส์ของศัตรู: ใช้ step เดียวกับผู้เล่น (ชนกล่องตัน/แพลตฟอร์ม/ขอบโลก) ต่างแค่ความเร็ว
+const FOE_K=Object.assign({},SV.K,{speed:40,accel:900,friction:500}),PATROL=40,CHASE=70;
+// sprite ของผู้เล่น/NPC ตามธรรมเนียมชื่อใน Asset Registry · ของศัตรูระบุใน spawn.sprite
+const SPRITE={player:g=>'shared.sv.player_'+(g==='f'?'f':'m'),npc:(ns,g)=>ns+'.sv.npc_'+(g==='f'?'f':'m')};
+const NEED={player:['idle','walk','jump','fall','attack','hurt','death'],npc:['idle'],foe:['idle','walk','attack','hurt','death']};
+const has=(o,ks)=>!!o&&ks.every(k=>num(o[k]));
+// ---- ตรวจ metadata ของ sprite: สิ่งที่ runtime และ view ใช้จริง (frame, anchor, bbox, anims) ----
+function validateSprite(d,need,id){const p='sprite '+id+': ';if(!d)return[p+'ไม่มีใน Asset Registry'];const e=[],sh=d.sheet||{};
+ if(!has(d.frame,['w','h']))e.push(p+'ต้องมี frame.w,h');if(!has(d.anchor,['x','y']))e.push(p+'ต้องมี anchor.x,y (จุดเท้า)');
+ if(!has(d.bbox,['x','y','w','h']))e.push(p+'ต้องมี bbox x,y,w,h');
+ else if(has(d.frame,['w','h'])&&has(d.anchor,['x','y'])){const b=d.bbox;if(b.x<0||b.y<0||b.x+b.w>d.frame.w||b.y+b.h>d.frame.h)e.push(p+'bbox อยู่นอกเฟรม');
+  // view วางเฟรมด้วย anchor · runtime ชนด้วย bbox: สองอย่างต้องชี้จุดเท้าเดียวกัน ไม่งั้นภาพกับกล่องชนเหลื่อมกัน
+  if(Math.abs(b.x+b.w/2-d.anchor.x)>1||b.y+b.h!==d.anchor.y+1)e.push(p+'anchor ไม่ตรงกับกึ่งกลางล่างของ bbox')}
+ for(const k of need){const a=(d.anims||{})[k];if(!a||!(a.frames>=1&&a.fps>0&&num(a.row))){e.push(p+'ขาดท่า '+k);continue}
+  if(sh.cols&&a.frames>sh.cols)e.push(p+k+' มีเฟรมเกินจำนวนคอลัมน์ของแผ่น');if(sh.rows&&a.row>=sh.rows)e.push(p+k+' อยู่นอกจำนวนแถวของแผ่น');
+  if(k==='attack'&&need===NEED.player&&!(Array.isArray(a.hit)&&a.hit[0]>=0&&a.hit[1]>=a.hit[0]&&a.hit[1]<a.frames))e.push(p+'attack ต้องมี hit [เฟรมเริ่ม,เฟรมจบ]')}
+ return e}
 // ---- ตรวจข้อมูล areas ตอนลงทะเบียนโลก ----
-function validateAreas(def,assets){const d=def.data||{},e=[],locs=new Set((d.locations||[]).map(l=>l.id)),en=new Set((d.enemies||[]).map(x=>x.id)),ev=new Set((d.events||[]).map(x=>def.id+'.'+x.id)),seen=new Set();
- const rect=(r,p,need=['x','y','w','h'])=>{if(!need.every(k=>num(r[k])))e.push(p+'ต้องมี '+need.join(',')+' เป็นตัวเลข')};
+function validateAreas(def,assets){const d=def.data||{},e=[],ns=def.assetNs,locs=new Set((d.locations||[]).map(l=>l.id)),en=new Set((d.enemies||[]).map(x=>x.id)),ev=new Set((d.events||[]).map(x=>def.id+'.'+x.id)),
+  np=new Set((d.npcs||[]).map(x=>x.id)),withArea=new Set((d.areas||[]).map(a=>a.loc)),seen=new Set(),sprites=new Map();
+ const rect=(r,p,need=['x','y','w','h'])=>{if(!has(r,need))e.push(p+'ต้องมี '+need.join(',')+' เป็นตัวเลข')};
  for(const a of d.areas||[]){const p='area '+a.id+': ';if(!locs.has(a.loc))e.push(p+'ไม่มีสถานที่ '+a.loc);if(seen.has(a.loc))e.push(p+'สถานที่ '+a.loc+' มีหลาย area');seen.add(a.loc);
   if(!(num(a.width)&&a.width>=576&&num(a.height)&&a.height>=324))e.push(p+'width>=576 height>=324');if(!(a.spawn&&num(a.spawn.x)))e.push(p+'ต้องมี spawn.x');
   (a.solids||[]).forEach(r=>rect(r,p+'solid '));(a.platforms||[]).forEach(r=>rect(r,p+'platform ',['x','y','w']));if(!(a.solids||[]).length)e.push(p+'ต้องมีพื้นอย่างน้อยหนึ่งชิ้น');
-  for(const x of a.doors||[]){if(!locs.has(x.to))e.push(p+'ประตูไปสถานที่ที่ไม่มี '+x.to);if(!num(x.x))e.push(p+'ประตูต้องมี x')}
-  for(const s of a.spawns||[]){if(!en.has(s.enemy))e.push(p+'ไม่มีศัตรู '+s.enemy);if(!(num(s.x1)&&num(s.x2)&&s.x2>s.x1))e.push(p+'spawn x1<x2');e.push(...R().validateEffects(s.reward).map(y=>p+'reward: '+y))}
-  for(const q of a.talkEvents||[])if(!ev.has(q))e.push(p+'ไม่มีเหตุการณ์ '+q);
-  if(assets)for(const k of(a.layers||[]).concat(a.tileset||[]))if(!assets.defs.has(def.assetNs+'.'+k))e.push(p+'ไม่มี asset '+def.assetNs+'.'+k)}
+  for(const x of a.doors||[]){if(!num(x.x))e.push(p+'ประตูต้องมี x');if(!locs.has(x.to))e.push(p+'ประตูไปสถานที่ที่ไม่มี '+x.to);else if(!withArea.has(x.to))e.push(p+'ประตูไป '+x.to+' ซึ่งยังไม่มี area');
+   else if(x.arrive&&!(((d.areas.find(b=>b.loc===x.to)||{}).arrivals||{})[x.arrive]))e.push(p+'ประตูไป '+x.to+' ไม่มีจุดมาถึง '+x.arrive)}
+  for(const s of a.spawns||[]){if(!en.has(s.enemy))e.push(p+'ไม่มีศัตรู '+s.enemy);if(!(num(s.x1)&&num(s.x2)&&s.x2>s.x1))e.push(p+'spawn x1<x2');e.push(...R().validateEffects(s.reward).map(y=>p+'reward: '+y));
+   if(typeof s.sprite!=='string')e.push(p+'spawn ต้องระบุ sprite');else sprites.set(ns+'.'+s.sprite,NEED.foe)}
+  // เหตุการณ์จากการคุยมีเจ้าของเป็น NPC รายตัว: {npc,event}
+  for(const t of a.talkEvents||[]){if(!t||!np.has(t.npc))e.push(p+'talkEvents: ไม่มี NPC '+(t&&t.npc));if(!t||!ev.has(t.event))e.push(p+'ไม่มีเหตุการณ์ '+(t&&t.event))}
+  if((a.npcSpots||[]).some(s=>!num(s.x)))e.push(p+'npcSpots ต้องมี x');
+  for(const g of['m','f']){sprites.set(SPRITE.player(g),NEED.player);sprites.set(SPRITE.npc(ns,g),NEED.npc)}
+  if(assets){for(const k of a.layers||[])if(!assets.defs.has(ns+'.'+k))e.push(p+'ไม่มี asset '+ns+'.'+k);
+   const t=assets.defs.get(ns+'.'+a.tileset);if(!t)e.push(p+'ไม่มี asset '+ns+'.'+a.tileset);else if(!(has(t.tile,['w','h'])&&has(t.tiles,['top','fill','platform'])))e.push(p+'tileset '+t.id+' ต้องมี tile.w,h และ tiles.top,fill,platform')}}
+ if(assets)for(const[id,need]of sprites)e.push(...validateSprite(assets.defs.get(id),need,id));
  return e}
 function install(E){if(E.sv)return E.sv;E.state.register('scene',OWNER,()=>({_v:VERSION,area:null,x:null,facing:1,resolved:[]}));E.worlds.addValidator(def=>validateAreas(def,E.assets));
  const api=E.sv={get:()=>E.state.get('scene'),_m:fn=>E.state.mutate(OWNER,'scene',fn),area:(w,loc)=>{const c=E.worlds.ctx(w);return c?[...c.list('areas').values()].find(a=>a.loc===loc)||null:null},runtime:null};
- // หลังโหลด: พื้นที่ที่ไม่มีแล้ว = กลับค่าเริ่มต้น (ผู้เล่นไปยืนจุดเกิด) · ตัดรายการปราบแล้วที่เก่า
- E.bus.on('game:loaded',()=>{const s=api.get(),p=E.player.get(),a=p.created&&api.area(p.location.world,p.location.loc);if(s.area&&(!a||a.id!==s.area))api._m(x=>{x.area=null;x.x=null});api.runtime=null},{prio:75,owner:OWNER});
- E.bus.on('game:new',()=>{api.runtime=null},{owner:OWNER});
+ // state ถูกแทนที่ทั้งก้อน (โหลดเซฟ/เกมใหม่): ยกเลิก runtime ที่ค้างโดยไม่เขียนอะไร และปล่อย pause ของตัวเอง
+ const drop=()=>{if(api.runtime)api.runtime.abort()};
+ // หลังโหลด: พื้นที่ในเซฟไม่ตรงกับสถานที่ของผู้เล่น = ล้างตำแหน่ง (ผู้เล่นไปยืนจุดเกิด)
+ E.bus.on('game:loaded',()=>{drop();const s=api.get(),p=E.player.get(),a=p.created&&api.area(p.location.world,p.location.loc);if(s.area&&(!a||a.id!==s.area))api._m(x=>{x.area=null;x.x=null})},{prio:75,owner:OWNER});
+ E.bus.on('game:new',drop,{owner:OWNER});
  return api}
 // ---- runtime หนึ่งครั้งที่อยู่ในโหมดสำรวจ ----
 class Explore{
- constructor(E){this.E=E;this.t=0;this.msg=[];this.blocked=false}
- enter(){const E=this.E,p=E.player.get();if(!p.created||!p.alive)throw new Error('ยังไม่มีตัวละครที่มีชีวิต');const a=E.sv.area(p.location.world,p.location.loc);if(!a)throw new Error('สถานที่นี้ยังไม่มีฉาก side-view');
-  E.loop.pause('explore');E.sv.runtime=this;this.load();return this}
- exit(){this.settle('retreat');this.flush();this.E.loop.resume('explore');if(this.E.sv.runtime===this)this.E.sv.runtime=null}
+ constructor(E){this.E=E;this.t=0;this.msg=[];this.blocked=false;this.active=false;this.dmg=0;this.talk=null;this.atk=ATTACK;this.view={w:576,h:324}}
+ // ขนาดมุมกล้อง (หน่วยพิกเซลโลก) · view ปรับได้ เช่นมือถือแนวตั้งใช้มุมแคบลงแต่ขยายใหญ่ขึ้น · เปลี่ยนแล้วกล้องจัดผู้เล่นไว้กลางจอ
+ setView(w,h=324){this.view={w,h};if(this.me)this.cam=AW.sv.camera({x:this.me.x+this.me.w/2-w/2},this.me,this.world,this.view);return this}
+ // HP ที่แสดง = HP จริงของผู้เล่น - ความเสียหายในฉากที่ยังไม่ปิดยอด · เหตุการณ์/ระบบอื่นเปลี่ยน player.hp ได้โดยไม่ถูกเขียนทับ
+ get hp(){return this.E.player.get().hp-this.dmg}
+ set hp(v){this.dmg=this.E.player.get().hp-v}
+ get maxHp(){return this.E.player.maxHp()}
+ enter(){const E=this.E,p=E.player.get();if(this.active||E.sv.runtime)throw new Error('กำลังสำรวจอยู่แล้ว');if(!p.created||!p.alive)throw new Error('ยังไม่มีตัวละครที่มีชีวิต');
+  if(!E.sv.area(p.location.world,p.location.loc))throw new Error('สถานที่นี้ยังไม่มีฉาก side-view');
+  E.loop.pause(PAUSE);this.active=true;E.sv.runtime=this;try{this.load()}catch(err){this.abort();throw err}return this}
+ // ปล่อย pause ของตัวเองครั้งเดียว (เรียกซ้ำไม่มีผล) · ไม่ resume ถ้าไม่ใช่ runtime ที่ถือ pause อยู่
+ _release(){if(!this.active)return false;this.active=false;if(this.E.sv.runtime===this){this.E.sv.runtime=null;this.E.loop.resume(PAUSE)}return true}
+ exit(){if(!this.active)return false;if(this.E.player.get().alive){this.settle('retreat');this.flush()}return this._release()}
+ abort(){this.dmg=0;return this._release()}
  // โหลดพื้นที่ของสถานที่ปัจจุบัน · arrive = ชื่อจุดมาถึงจากประตู
  load(arrive){const E=this.E,p=E.player.get(),w=p.location.world,a=E.sv.area(w,p.location.loc);if(!a)throw new Error('สถานที่นี้ยังไม่มีฉาก side-view');
-  this.w=w;this.a=a;this.world={width:a.width,height:a.height,solids:a.solids,platforms:a.platforms||[]};const s=E.sv.get();
-  const x=arrive&&a.arrivals&&a.arrivals[arrive]?a.arrivals[arrive].x:s.area===a.id&&num(s.x)?s.x:a.spawn.x;
-  this.me=Object.assign({x,y:this.groundY(x,BODY)-BODY.h,vx:0,vy:0,ground:true,facing:s.area===a.id?s.facing||1:1,attack:0,hurt:0,inv:0,cd:0,dead:false,hit:new Set()},BODY);
-  this.hp=p.hp;this.maxHp=E.player.maxHp();this.rng=new AW.core.Rng(E.state.get('meta').seed+'|sv|'+a.id+'|'+E.loop.month);
-  this.cam={x:0,y:0};this.cam=AW.sv.camera({x:Math.max(0,x-288)},this.me,this.world);this.placeNpcs();this.spawn();
+  this.w=w;this.a=a;this.ns=E.worlds.ctx(w).def.assetNs;this.world={width:a.width,height:a.height,solids:a.solids,platforms:a.platforms||[]};this.dmg=0;const s=E.sv.get();
+  const x=arrive&&a.arrivals&&a.arrivals[arrive]?a.arrivals[arrive].x:s.area===a.id&&num(s.x)?s.x:a.spawn.x,sprite=SPRITE.player(p.gender),box=this.box(sprite);
+  this.me=Object.assign({sprite,x,y:this.groundY(x,box)-box.h,vx:0,vy:0,ground:true,facing:s.area===a.id?s.facing||1:1,attack:0,swing:0,hurt:0,inv:0,cd:0,dead:false,hit:new Set()},box);
+  // จังหวะโจมตีมาจาก metadata ของท่า attack: ยาว frames/fps วินาที · โดนในช่วงเฟรม hit
+  const an=((E.assets.defs.get(sprite)||{}).anims||{}).attack;this.atk=an&&an.hit?{dur:an.frames/an.fps,t0:an.hit[0]/an.fps,t1:(an.hit[1]+1)/an.fps}:ATTACK;
+  this.rng=new AW.core.Rng(E.state.get('meta').seed+'|sv|'+a.id+'|'+E.loop.month);
+  this.cam=AW.sv.camera({x:Math.max(0,x-this.view.w/2)},this.me,this.world,this.view);this.placeNpcs();this.spawn();
   if(s.area!==a.id||arrive)this.flush(true);return this}
+ // กล่องชนมาจาก bbox ใน metadata ของ sprite (แยกจากขนาดภาพ)
+ box(id){const d=this.E.assets.defs.get(id);return d&&has(d.bbox,['w','h'])?{w:d.bbox.w,h:d.bbox.h}:{w:BODY.w,h:BODY.h}}
  groundY(x,b){let y=this.world.height;for(const s of this.world.solids)if(x+b.w>s.x&&x<s.x+s.w&&s.y<y)y=s.y;return y}
- // NPC ตามตารางเวลาจริง: ใครอยู่สถานที่นี้ตอนนี้ (ช่วงเวลาตาม AP) ยืนที่ npcSpots ตามลำดับ
- placeNpcs(){const E=this.E,here=E.npcs.at(this.w,this.a.loc).filter(n=>n.alive);this._ap=E.player.get().ap;
-  this.npcs=here.slice(0,(this.a.npcSpots||[]).length).map((n,i)=>({id:n.id,name:n.name,gender:n.gender,x:this.a.npcSpots[i].x,y:this.groundY(this.a.npcSpots[i].x,BODY)-BODY.h,w:BODY.w,h:BODY.h,facing:-1}))}
+ // NPC ตามตารางเวลาจริง: ทุกคนที่อยู่สถานที่นี้ตอนนี้ (ช่วงเวลาตาม AP) · เจ้าของเหตุการณ์คุยได้จุดยืนที่ออกแบบไว้ก่อน ที่เหลือกระจายตามความกว้างโดยเว้นประตู
+ placeNpcs(){const E=this.E,a=this.a;this._ap=E.player.get().ap;const own=new Set((a.talkEvents||[]).map(t=>this.w+'.'+t.npc)),here=E.npcs.at(this.w,a.loc).filter(n=>n.alive),
+   list=here.filter(n=>own.has(n.id)).concat(here.filter(n=>!own.has(n.id))),spots=(a.npcSpots||[]).map(s=>s.x),free=[];
+  for(let x=80;x<=a.width-80;x+=36)if(!a.doors.some(d=>Math.abs(d.x-x)<REACH+16)&&!spots.some(s=>Math.abs(s-x)<30))free.push(x);
+  const extra=Math.max(0,list.length-spots.length);
+  this.npcs=list.map((n,i)=>{const j=i-spots.length,x=j<0?spots[i]:free.length?free[Math.floor((j+0.5)*free.length/extra)]:a.spawn.x,sprite=SPRITE.npc(this.ns,n.gender),b=this.box(sprite);
+   return{id:n.id,name:n.name,gender:n.gender,sprite,x,y:this.groundY(x,b)-b.h,w:b.w,h:b.h,facing:-1}})}
  key(sp){return this.a.id+'|'+this.E.loop.month+'|'+sp.id}
- spawn(){const E=this.E,done=new Set(E.sv.get().resolved);this.foes=(this.a.spawns||[]).filter(sp=>!done.has(this.key(sp))).map(sp=>{const e=E.combat.enemy(this.w,sp.enemy),hp=Math.round(e.hp||e.power*3);
-  return Object.assign({sp,key:this.key(sp),name:e.name,power:e.power,armor:e.armor||0,hp,max:hp,x:(sp.x1+sp.x2)/2,y:this.groundY((sp.x1+sp.x2)/2,ENEMY)-ENEMY.h,vx:0,dir:1,state:'patrol',wind:0,cd:0,hurt:0,dead:false},ENEMY)})}
+ spawn(){const E=this.E,done=new Set(E.sv.get().resolved);this.foes=(this.a.spawns||[]).filter(sp=>!done.has(this.key(sp))).map(sp=>{const e=E.combat.enemy(this.w,sp.enemy),hp=Math.round(e.hp||e.power*3),sprite=this.ns+'.'+sp.sprite,b=this.box(sprite),x=(sp.x1+sp.x2)/2;
+  return Object.assign({sp,sprite,key:this.key(sp),name:e.name,power:e.power,armor:e.armor||0,hp,max:hp,x,y:this.groundY(x,b)-b.h,vx:0,vy:0,ground:true,dir:1,state:'patrol',wind:0,cd:0,hurt:0,dead:false,engaged:false},b)})}
  // ---- หนึ่ง fixed step ----
  step(inp={}){const E=this.E;this.t++;
   // หยุดระหว่างมีเหตุการณ์ค้าง การต่อสู้แบบเลือกท่า หรือ UI เปิดหน้าต่างทับ
-  if(E.events.pending()||E.combat.session()||this.blocked||!E.player.get().alive)return 'blocked';
+  if(!this.active||E.events.pending()||E.combat.session()||this.blocked||!E.player.get().alive)return 'blocked';
   if(E.player.get().ap!==this._ap)this.placeNpcs();
-  const K=AW.sv.K,me=this.me;let b=AW.sv.step(me,inp,this.world);Object.assign(me,b);
-  if(me.fell){me.fell=false;me.x=this.a.spawn.x;me.y=this.groundY(me.x,BODY)-BODY.h;me.vy=0}
-  for(const k of['attack','hurt','inv','cd'])me[k]=Math.max(0,me[k]-K.dt);
-  if(inp.attackPressed&&me.cd<=0&&!me.hurt){me.attack=0.32;me.cd=0.42;me.hit=new Set()}
-  // หน้าต่างโดน (frame 3-4 ของท่าโจมตี): 0.20-0.10 วินาทีก่อนจบท่า
-  if(me.attack>0.1&&me.attack<0.22){const box={x:me.facing>0?me.x+me.w:me.x-34,y:me.y+8,w:34,h:28};for(const f of this.foes)if(!f.dead&&!me.hit.has(f.key)&&AW.sv.overlap(box,f)){me.hit.add(f.key);this.hitFoe(f)}}
-  for(const f of this.foes)this.foeAI(f);
+  const K=AW.sv.K,me=this.me,A=this.atk;Object.assign(me,AW.sv.step(me,inp,this.world));
+  if(me.fell){me.fell=false;me.x=this.a.spawn.x;me.y=this.groundY(me.x,me)-me.h;me.vy=0}
+  for(const k of['attack','hurt','inv','cd'])me[k]=Math.max(0,me[k]-K.dt);if(me.attack>0)me.swing++;
+  if(inp.attackPressed&&me.cd<=0&&!me.hurt){me.attack=A.dur;me.cd=A.dur+0.1;me.swing=0;me.hit=new Set()}
+  if(this.swinging()){const box={x:me.facing>0?me.x+me.w:me.x-34,y:me.y+8,w:34,h:28};for(const f of this.foes)if(!f.dead&&!me.hit.has(f.key)&&AW.sv.overlap(box,f)){me.hit.add(f.key);this.hitFoe(f)}}
+  const can=!this.fightWhy();for(const f of this.foes)this.foeAI(f,can);
   this.foes=this.foes.filter(f=>!(f.dead&&f.hurt<=0));
-  this.cam=AW.sv.camera(this.cam,me,this.world);
+  this.cam=AW.sv.camera(this.cam,me,this.world,this.view);
   if(inp.interactPressed)return this.interact();
   return 'ok'}
+ // อยู่ในช่วงเฟรมที่ท่าโจมตีโดนเป้า (นับเป็นจำนวน step เต็ม ไม่สะสมทศนิยม)
+ swinging(){const me=this.me,el=me.swing/HZ;return me.attack>0&&el>=this.atk.t0&&el<this.atk.t1}
+ // ---- กติกาเริ่มศึกและรับรางวัล ----
+ // เริ่มศึกได้เมื่อ (เหมือนภารกิจ): ยังมีชีวิต · ไม่บาดเจ็บหนัก (injury < 2) · มี AP >= 1
+ // ศึกเริ่มเมื่อฝ่ายใดฝ่ายหนึ่งตีโดนครั้งแรก = จ่าย 1 AP ต่อศัตรูหนึ่งตัว · เริ่มไม่ได้ = ศัตรูไม่ไล่ ตีไม่เข้า ไม่เสีย AP ไม่ได้รางวัล
+ // รางวัล: เฉพาะศัตรูที่เริ่มศึกแล้ว (จ่าย AP แล้ว) และครั้งเดียวต่อจุดเกิดต่อเดือน · ถอยหรือแพ้ = AP ที่จ่ายไปไม่คืน
+ fightWhy(){const p=this.E.player.get();return !p.alive?'เสียชีวิตแล้ว':p.injury>=2?'บาดเจ็บหนัก ต้องพักก่อน':p.ap<1?'แรงไม่พอเดือนนี้ (AP)':''}
+ engage(f){if(f.engaged)return true;const why=this.fightWhy();if(why){this.say('ต่อสู้ไม่ได้: '+why);return false}this.E.player.spendAp(1);f.engaged=true;this.say(`เริ่มปะทะ${f.name} (AP -1)`);return true}
  // สูตรความเสียหายเดียวกับการต่อสู้แบบเลือกท่า (combat.js): ผู้เล่นตี = HP สูงสุดศัตรู x 0.22 x (พลังเรา/พลังศัตรู)^0.8 · ศัตรูตี = HP เรา x 0.18 x (พลังศัตรู/พลังเรา)^0.8
  power(){return this.E.combat.profile(this.w).power}
- hitFoe(f){const d=Math.max(1,Math.round(f.max*0.22*Math.pow(this.power()/Math.max(1,f.power),0.8)*(0.85+this.rng.next()*0.3)*(1-f.armor)));
+ hitFoe(f){if(!this.engage(f))return;const d=Math.max(1,Math.round(f.max*0.22*Math.pow(this.power()/Math.max(1,f.power),0.8)*(0.85+this.rng.next()*0.3)*(1-f.armor)));
   f.hp=Math.max(0,f.hp-d);f.hurt=0.2;f.vx=this.me.facing*120;this.say(`${f.name} -${d}`);if(f.hp<=0)this.kill(f)}
- foeAI(f){const K=AW.sv.K,me=this.me;f.hurt=Math.max(0,f.hurt-K.dt);f.cd=Math.max(0,f.cd-K.dt);if(f.dead)return;
-  const dx=(me.x+me.w/2)-(f.x+f.w/2),near=Math.abs(dx)<160&&Math.abs(me.y-f.y)<80;
-  if(f.wind>0){f.wind-=K.dt;if(f.wind<=0){const box={x:f.dir>0?f.x+f.w:f.x-30,y:f.y,w:30,h:f.h};if(AW.sv.overlap(box,me)&&me.inv<=0)this.hurtMe(f);f.cd=1.1}return}
-  if(f.hurt>0){f.x+=f.vx*K.dt;f.vx*=0.85}
-  else if(near){f.dir=Math.sign(dx)||f.dir;if(Math.abs(dx)<40&&f.cd<=0){f.wind=0.5;f.state='windup'}else{f.x+=f.dir*70*K.dt;f.state='chase'}}
-  else{f.state='patrol';f.x+=f.dir*40*K.dt;if(f.x<f.sp.x1)f.dir=1;if(f.x>f.sp.x2)f.dir=-1}
-  f.x=Math.max(0,Math.min(this.world.width-f.w,f.x))}
- hurtMe(f){const d=Math.max(1,Math.round(this.maxHp*0.18*Math.pow(f.power/Math.max(1,this.power()),0.8)*(0.85+this.rng.next()*0.3)));this.hp-=d;this.me.hurt=0.3;this.me.inv=0.8;this.me.vx=f.dir*160;this.me.vy=-160;this.say(`โดน ${f.name} -${d}`);
+ foeAI(f,can){const K=AW.sv.K,me=this.me;f.hurt=Math.max(0,f.hurt-K.dt);f.cd=Math.max(0,f.cd-K.dt);let dir=0;FOE_K.speed=PATROL;
+  if(!f.dead){const dx=(me.x+me.w/2)-(f.x+f.w/2),near=(f.engaged||can)&&Math.abs(dx)<160&&Math.abs(me.y-f.y)<80;
+   if(f.wind>0){f.wind-=K.dt;if(f.wind<=0){const box={x:f.dir>0?f.x+f.w:f.x-30,y:f.y,w:30,h:f.h};if(AW.sv.overlap(box,me)&&me.inv<=0&&this.engage(f))this.hurtMe(f);f.cd=1.1}}
+   else if(f.hurt>0){}// กระเด็น: ไม่เดิน ปล่อยให้แรงเสียดทานหยุด
+   else if(near){f.dir=Math.sign(dx)||f.dir;if(Math.abs(dx)<40&&f.cd<=0){f.wind=0.5;f.state='windup'}else{dir=f.dir;FOE_K.speed=CHASE;f.state='chase'}}
+   else{f.state='patrol';if(f.x<=f.sp.x1)f.dir=1;else if(f.x>=f.sp.x2)f.dir=-1;dir=f.dir}}
+  const x0=f.x;Object.assign(f,AW.sv.step(f,{left:dir<0,right:dir>0},this.world,FOE_K));
+  if(dir&&f.state==='patrol'&&Math.abs(f.x-x0)<0.01)f.dir=-dir}// ชนสิ่งกีดขวางระหว่างเดินตรวจ: กลับตัว
+ hurtMe(f){const d=Math.max(1,Math.round(this.maxHp*0.18*Math.pow(f.power/Math.max(1,this.power()),0.8)*(0.85+this.rng.next()*0.3)));this.dmg+=d;this.me.hurt=0.3;this.me.inv=0.8;this.me.vx=f.dir*160;this.me.vy=-160;this.say(`โดน ${f.name} -${d}`);
   if(this.hp<=0)this.lose(f)}
  // ---- ผลการต่อสู้ผ่าน combat.apply (API เดิม) ครั้งเดียวต่อเหตุการณ์ · กฎความตายเดิม: ความเสี่ยงปกติไม่ตาย ----
  report(outcome,f,extra={}){return Object.assign({mode:'action',source:{kind:'sideview',area:this.a.id,key:f?f.key:null},win:outcome==='win',outcome,risk:'normal',enemy:f?f.sp.enemy:null,enemyName:f?f.name:'',
   hpAfter:Math.max(1,Math.round(this.hp)),injury:0,critical:false,dead:false,party:[],skillUse:{},lines:this.msg.slice(-6)},extra)}
- kill(f){const E=this.E;f.dead=true;f.hurt=0.4;
-  // บันทึกว่าปราบแล้วก่อนให้รางวัล: โหลดเซฟ/กลับเข้าพื้นที่ไม่ได้รางวัลซ้ำ
-  E.sv._m(s=>{s.resolved=s.resolved.concat(f.key).slice(-MAX_RESOLVED)});
-  E.combat.apply(this.report('win',f,{injury:this.hp<this.maxHp*0.25?1:0}));const run=()=>R().apply(f.sp.reward||[],E.view(this.w)),lines=E.economy?E.economy.as('sideview',run):run();this.hp=E.player.get().hp;
+ // ส่งรายงานเข้าระบบเดิม: ล้างยอด dmg ก่อน เพราะ combat.apply เป็นผู้ตั้ง player.hp = hpAfter
+ _apply(rep){this.dmg=0;return this.E.combat.apply(rep)}
+ kill(f){const E=this.E,m=E.loop.month;f.dead=true;f.hurt=0.4;
+  // บันทึกว่าปราบแล้วก่อนให้รางวัล: โหลดเซฟ/กลับเข้าพื้นที่ไม่ได้รางวัลซ้ำ · key ของเดือนก่อน ๆ ไม่มีผลแล้ว ตัดทิ้ง
+  E.sv._m(s=>{s.resolved=s.resolved.filter(k=>+k.split('|')[1]===m).concat(f.key)});
+  this._apply(this.report('win',f,{injury:this.hp<this.maxHp*0.25?1:0}));const run=()=>R().apply(f.sp.reward||[],E.view(this.w)),lines=E.economy?E.economy.as('sideview',run):run();
   this.say(`ปราบ${f.name}แล้ว`+(lines.length?' ('+lines.join(', ')+')':''));E.events.log(`สู้กับ${f.name}ที่${this.a.name}: ชนะ`)}
- lose(f){const E=this.E;E.combat.apply(this.report('lose',f,{hpAfter:1,injury:3}));this.hp=E.player.get().hp;this.say('ท่านล้มลง ต้องถอยออกมาพักฟื้น');E.events.log(`สู้กับ${f.name}ที่${this.a.name}: แพ้ (บาดเจ็บ)`);
-  const sp=this.a.spawn.x;Object.assign(this.me,{x:sp,y:this.groundY(sp,BODY)-BODY.h,vx:0,vy:0,inv:2});for(const g of this.foes){g.hp=g.max;g.wind=0}}
- // HP ระหว่างสำรวจต่างจากของผู้เล่น (โดนตีแล้วยังไม่จบศึก) = บันทึกเป็นการถอยหนี ก่อนเปลี่ยนพื้นที่/เซฟ/ออก
- settle(outcome='retreat'){const E=this.E;if(Math.round(this.hp)===E.player.get().hp)return false;E.combat.apply(this.report(outcome,null));this.hp=E.player.get().hp;return true}
+ lose(f){const E=this.E;this._apply(this.report('lose',f,{hpAfter:1,injury:3}));this.say('ท่านล้มลง ต้องถอยออกมาพักฟื้น');E.events.log(`สู้กับ${f.name}ที่${this.a.name}: แพ้ (บาดเจ็บ)`);
+  const sp=this.a.spawn.x;Object.assign(this.me,{x:sp,y:this.groundY(sp,this.me)-this.me.h,vx:0,vy:0,inv:2});for(const g of this.foes){g.hp=g.max;g.wind=0;g.engaged=false}}
+ // มีความเสียหายจากศึกค้างอยู่ (โดนตีแล้วยังไม่จบศึก) = บันทึกเป็นการถอยหนีครั้งเดียว ก่อนเปลี่ยนพื้นที่/เซฟ/ออก
+ // ไม่มีความเสียหายค้าง หรือผู้เล่นตายแล้ว = ไม่ส่งอะไร (ไม่มี combat:done ที่ไม่ได้มาจากศึกจริง)
+ settle(outcome='retreat'){if(this.dmg<=0||!this.E.player.get().alive){this.dmg=0;return false}this._apply(this.report(outcome,null));return true}
  flush(force){const s=this.E.sv.get(),x=Math.round(this.me.x),f=this.me.facing;if(!force&&s.area===this.a.id&&s.x===x&&s.facing===f)return false;this.E.sv._m(z=>{z.area=this.a.id;z.x=x;z.facing=f});return true}
  say(t){this.msg.push(t);if(this.msg.length>30)this.msg.shift()}
- // ---- ปฏิสัมพันธ์ (กด E) ----
+ // ---- ปฏิสัมพันธ์ (กด E): ประตูก่อน ไม่งั้น NPC ที่ใกล้ที่สุด ----
  nearby(){const me=this.me,cx=me.x+me.w/2,d=this.a.doors.find(x=>Math.abs(x.x-cx)<REACH);if(d)return{kind:'door',door:d,label:d.label};
-  const n=this.npcs.find(x=>Math.abs(x.x+x.w/2-cx)<REACH);if(n)return{kind:'npc',npc:n.id,label:'คุยกับ'+n.name};return null}
+  let n=null,best=REACH;for(const x of this.npcs){const dist=Math.abs(x.x+x.w/2-cx);if(dist<best){best=dist;n=x}}return n?{kind:'npc',npc:n.id,label:'คุยกับ'+n.name}:null}
  interact(){const t=this.nearby();if(!t)return 'none';if(t.kind==='door')return this.useDoor(t.door);this.talk=t.npc;return 'talk'}
- // ตัวเลือกคุยกับ NPC: การกระทำความสัมพันธ์จริง + เหตุการณ์ของพื้นที่ที่เข้าเงื่อนไขตอนนี้
+ // ตัวเลือกคุยกับ NPC: การกระทำความสัมพันธ์จริง + เหตุการณ์ที่ NPC คนนี้เป็นเจ้าของและเข้าเงื่อนไขตอนนี้
  talkOptions(q=this.talk){const E=this.E;if(!q)return[];const opts=E.rels.actions(q).map(a=>({kind:'rel',id:a.id,name:a.name,why:a.why||''}));
-  for(const ev of this.a.talkEvents||[])if(E.events.eligible(ev))opts.push({kind:'event',id:ev,name:E.events.def(ev).title,why:''});return opts}
- choose(opt,q=this.talk){const E=this.E;this.talk=null;if(opt.kind==='rel')return E.rels.interact(q,opt.id);if(opt.kind==='event')return E.events.present(opt.id,q);throw new Error('ตัวเลือกไม่รู้จัก')}
- useDoor(d){const E=this.E;this.settle('retreat');this.flush();try{E.player.moveTo(d.to)}catch(e){this.say(e.message);return 'locked:'+e.message}
-  if(!E.sv.area(this.w,d.to))return 'left';this.load(d.arrive);return 'door'}
+  for(const t of this.a.talkEvents||[])if(this.w+'.'+t.npc===q&&E.events.eligible(t.event))opts.push({kind:'event',id:t.event,name:E.events.def(t.event).title,why:''});return opts}
+ choose(opt,q=this.talk){const E=this.E;this.talk=null;if(!this.npcs.some(n=>n.id===q))throw new Error('คนนี้ไม่ได้อยู่ที่นี่');
+  const o=this.talkOptions(q).find(x=>x.kind===opt.kind&&x.id===opt.id);if(!o)throw new Error('ตัวเลือกนี้ใช้กับคนนี้ไม่ได้');
+  return o.kind==='rel'?E.rels.interact(q,o.id):E.events.present(o.id,q)}
+ // ประตู: ไปได้เฉพาะสถานที่ที่มี area และผ่านเงื่อนไขเข้าสถานที่เดิม · ตรวจก่อน แล้วจึงปิดยอดและย้าย
+ useDoor(d){const E=this.E,l=E.worlds.ctx(this.w).locations.get(d.to),no=m=>{this.say(m);return 'locked:'+m};
+  if(!l||!E.sv.area(this.w,d.to))return no('ยังไม่มีฉากของสถานที่นั้น');if(!E.player.canEnter(d.to))return no('ยังเข้า'+l.name+'ไม่ได้');
+  this.settle('retreat');this.flush();try{E.player.moveTo(d.to)}catch(e){return no(e.message)}
+  this.load(d.arrive);return 'door'}
 }
-SV.validateAreas=validateAreas;SV.install=install;SV.Explore=Explore;SV.BODY=BODY;SV.ENEMY=ENEMY;
+SV.validateAreas=validateAreas;SV.validateSprite=validateSprite;SV.install=install;SV.Explore=Explore;SV.BODY=BODY;SV.SPRITE=SPRITE;SV.NEED=NEED;
 })(globalThis.AW);
 
 // ==== data/assets/manifest.js ====
@@ -2252,16 +2342,19 @@ AW.data.assets.push(
  {id:'hunter.portrait.best_friend',world:'hunter',kind:'portrait',w:240,h:320,src:null,license:null,note:'ฮาจุน · รูปลักษณ์ยังไม่ได้กำหนดในข้อมูล ต้องอนุมัติก่อนสร้าง'});
 // Phase 7B.3 side-view: sprite/tileset ใหม่ เป็น placeholder (ยังไม่ยืนยันสิทธิ์ภาพ game3/a จึงไม่ใช้) · เปลี่ยนเป็นไฟล์จริงได้ด้วยการใส่ src/license เท่านั้น
 // frame = ขนาดเฟรมในไฟล์ · anchor = จุดเท้า (วางตรงพื้น) · bbox = กล่องชนในเฟรม (แยกจากขนาดภาพ) · anims: แถวในแผ่น จำนวนเฟรม fps วนซ้ำ
+// ทุกค่าถูกใช้จริง: runtime ใช้ bbox.w,h เป็นกล่องชน และ anims.attack (frames/fps, hit) เป็นจังหวะโจมตี · view ใช้ frame/anchor/anims(row,frames,fps,loop) ตัดเฟรม · sheet ใช้ตรวจขนาดไฟล์
 // ภาพเก่า 80x64 / 128px ใส่ได้ด้วย frame/anchor/bbox ของมันเอง เมื่อยืนยัน license แล้วเท่านั้น
 const ANIMS={idle:{row:0,frames:4,fps:6,loop:true},walk:{row:1,frames:6,fps:10,loop:true},jump:{row:2,frames:2,fps:8,loop:false},fall:{row:3,frames:2,fps:8,loop:true},
  attack:{row:4,frames:5,fps:16,loop:false,hit:[2,3]},hurt:{row:5,frames:2,fps:10,loop:false},death:{row:6,frames:5,fps:8,loop:false}};
+const {jump:_j,fall:_f,...GROUND_ANIMS}=ANIMS;// ศัตรูเดินพื้น: ไม่มีท่ากระโดด/ตก (view ใช้ idle แทน)
 const SV=(id,world,note,o={})=>Object.assign({id,world,kind:'sv',w:64,h:64,src:null,license:null,note,frame:{w:64,h:64},anchor:{x:32,y:63},bbox:{x:22,y:20,w:20,h:44},anims:ANIMS,sheet:{cols:6,rows:7}},o);
+// tileset: แผ่น cols x rows ช่อง · tiles = หมายเลขช่อง (นับซ้ายไปขวา บนลงล่าง) ที่ view ใช้จริง: top = ผิวบนของพื้น · fill = เนื้อพื้นใต้ผิว · platform = แผ่นทางเดียว
+const TILE=(id,note)=>({id,world:'hunter',kind:'tile',w:16,h:16,src:null,license:null,note,tile:{w:16,h:16},sheet:{cols:8,rows:2},tiles:{top:0,fill:8,platform:1}});
 AW.data.assets.push(
  SV('shared.sv.player_m','shared','ตัวเอกชาย side-view'),SV('shared.sv.player_f','shared','ตัวเอกหญิง side-view'),
  SV('hunter.sv.npc_m','hunter','NPC ชายทั่วไป (รวมฮาจุนจนกว่าจะมีรูปลักษณ์อนุมัติ)'),SV('hunter.sv.npc_f','hunter','NPC หญิงทั่วไป'),
- SV('hunter.sv.goblin','hunter','ก๊อบลิน side-view (ศัตรู hunter.goblins)',{bbox:{x:17,y:34,w:30,h:30},anims:Object.assign({},ANIMS,{jump:undefined,fall:undefined})}),
- {id:'hunter.tile.street',world:'hunter',kind:'tile',w:16,h:16,src:null,license:null,note:'ถนน/ทางเท้า โรงเรียนและเมือง',tile:{w:16,h:16},cols:8},
- {id:'hunter.tile.gate',world:'hunter',kind:'tile',w:16,h:16,src:null,license:null,note:'พื้นหินแตกในย่านเกต',tile:{w:16,h:16},cols:8});
+ SV('hunter.sv.goblin','hunter','ก๊อบลิน side-view (ศัตรู hunter.goblins)',{bbox:{x:17,y:34,w:30,h:30},anims:GROUND_ANIMS}),
+ TILE('hunter.tile.street','ถนน/ทางเท้า โรงเรียนและเมือง'),TILE('hunter.tile.gate','พื้นหินแตกในย่านเกต'));
 for(const d of AW.data.assets){const type=KIND_TYPE[d.kind]||'ui',std=STD[type],name=d.id.split('.').slice(2).join('.');
  Object.assign(d,{type,std,priority:PILOT.includes(d.id)?'P0':UI_NOW.has(d.id)?'P1':std.decision||d.world==='murim'?'P3':'P2',
   status:d.src?'real':PILOT.includes(d.id)?'planned':'placeholder',version:0,
@@ -3357,7 +3450,9 @@ H.events=H.events.concat([
 // ==== data/worlds/hunter/areas.js ====
 // Hunter World: ผังพื้นที่ side-view (Phase 7B.3) · หนึ่ง area ต่อหนึ่ง location (loc) · พิกัดพิกเซลจอเสมือน 576x324
 // ประตูเรียก player.moveTo จึงเคารพเงื่อนไขเข้าสถานที่เดิม: โรงเรียนเข้าได้เฉพาะยังไม่ตื่นพลัง · ย่านเกตต้องลงทะเบียนฮันเตอร์
-// NPC ไม่ได้ผูกกับพื้นที่: ใครอยู่ที่นี่ตามตารางเวลาจริง (npcs.at) จะยืนที่ npcSpots ตามลำดับ
+// NPC ไม่ได้ผูกกับพื้นที่: ทุกคนที่อยู่ที่นี่ตามตารางเวลาจริง (npcs.at) ถูกวางในฉาก · npcSpots = จุดยืนที่ออกแบบไว้ (เจ้าของ talkEvents ได้ก่อน) ที่เหลือกระจายอัตโนมัติ
+// talkEvents: เหตุการณ์จากการคุย มีเจ้าของเป็น NPC รายตัว {npc,event} จึงขึ้นเฉพาะตอนคุยกับคนนั้น
+// ประตูต้องไปสถานที่ที่มี area เท่านั้น (ตัวตรวจปฏิเสธตอนลงทะเบียน) · spawns: sprite = asset ของศัตรู (ต่อท้าย assetNs)
 (function(AW){
 const H=AW.data.parts.hunter,G=296;// ระดับพื้น
 H.areas=[
@@ -3365,18 +3460,18 @@ H.areas=[
   solids:[{x:0,y:G,w:1600,h:28}],platforms:[{x:520,y:236,w:120},{x:700,y:196,w:96}],
   doors:[{id:'to_city',x:1520,to:'city',label:'ไปย่านใจกลางเมือง',arrive:'from_school'}],
   arrivals:{from_city:{x:1480}},npcSpots:[{x:860},{x:1040},{x:1200}],
-  talkEvents:['hunter.friend_gate_clip'],src:'new (Phase 7B.3)'},
+  talkEvents:[{npc:'best_friend',event:'hunter.friend_gate_clip'}],src:'new (Phase 7B.3)'},
  {id:'city',loc:'city',name:'ถนนย่านใจกลางเมือง',width:1920,height:324,spawn:{x:160},tileset:'tile.street',layers:['bg.city_day'],
   solids:[{x:0,y:G,w:1920,h:28},{x:980,y:G-36,w:56,h:36}],platforms:[{x:1100,y:220,w:140}],
   doors:[{id:'to_school',x:60,to:'school',label:'ไปหน้าโรงเรียน',arrive:'from_city'},{id:'to_gate',x:1840,to:'gate_zone',label:'ไปย่านเกต',arrive:'from_city'}],
   arrivals:{from_school:{x:120},from_gate:{x:1780}},npcSpots:[{x:520},{x:700},{x:1400},{x:1560}],
-  talkEvents:['hunter.friend_gate_clip'],src:'new (Phase 7B.3)'},
+  talkEvents:[{npc:'best_friend',event:'hunter.friend_gate_clip'}],src:'new (Phase 7B.3)'},
  {id:'gate_zone',loc:'gate_zone',name:'แนวรั้วย่านเกต',width:1760,height:324,spawn:{x:120},tileset:'tile.gate',layers:['bg.gate_blue'],
   solids:[{x:0,y:G,w:1760,h:28},{x:640,y:G-28,w:40,h:28}],platforms:[{x:900,y:228,w:160},{x:1120,y:190,w:110}],
   doors:[{id:'to_city',x:60,to:'city',label:'กลับย่านใจกลางเมือง',arrive:'from_gate'}],
   arrivals:{from_city:{x:120}},npcSpots:[{x:300}],
-  // ก็อบลิน: เกิดใหม่ทุกเดือน สูงสุด 2 ตัว · รางวัลต่อตัวได้ครั้งเดียว (บันทึกใน slice scene)
-  spawns:[{id:'gob_a',enemy:'goblins',x1:780,x2:1080,reward:[{exp:12}]},{id:'gob_b',enemy:'goblins',x1:1300,x2:1640,reward:[{exp:12}]}],src:'new (Phase 7B.3)'}];
+  // ก็อบลิน: เกิดใหม่ทุกเดือน สูงสุด 2 ตัว · เริ่มศึก = 1 AP ต่อตัว และต้องไม่บาดเจ็บหนัก · รางวัลต่อตัวได้ครั้งเดียว (บันทึกใน slice scene)
+  spawns:[{id:'gob_a',enemy:'goblins',sprite:'sv.goblin',x1:780,x2:1080,reward:[{exp:50}]},{id:'gob_b',enemy:'goblins',sprite:'sv.goblin',x1:1300,x2:1640,reward:[{exp:50}]}],src:'new (Phase 7B.3)'}];
 })(globalThis.AW);
 
 // ==== data/worlds/hunter/world.js ====
@@ -3764,101 +3859,143 @@ page('settings',{title:'ระบบ',keepInFocus:true,render(E){const dev=AW.ui
 // ==== src/ui/sv_view.js ====
 // Side-view view (Phase 7B.3): canvas 576x324 (ขยายแบบ pixel) · HUD · ปุ่มสัมผัส · หน้าต่างคุย/เหตุการณ์
 // วาดและรับ input เท่านั้น · กติกาทั้งหมดอยู่ใน AW.sv.Explore (src/sideview) ซึ่งเรียก API ระบบเดิม
-// ภาพ: ถ้า asset ใน Asset Registry เป็นไฟล์จริง (มี license) วาดจากแผ่น sprite ตาม metadata · ไม่งั้นวาด placeholder แบบแบนพร้อมป้ายกำกับ
+// ภาพ: asset ใน Asset Registry ที่เป็นไฟล์จริง (มี license) และโหลดสำเร็จ วาดตาม metadata · ยังไม่มี/โหลดไม่ได้/ขนาดแผ่นผิด = placeholder แบบแบน (ลูปวาดไม่หยุด)
 (function(AW){
 'use strict';
 const U=AW.ui.u,$=U.$,esc=U.esc,VW=576,VH=324,DT=1000/60;
+// มือถือแนวตั้ง: มุมกล้องแคบลง (กว้างอย่างน้อย MINW พิกเซลโลก) แต่ขยายใหญ่ขึ้น · ขยายเป็นจำนวนเต็มของพิกเซลจอจริง (pixel perfect) · ไม่ยืดภาพ
+const MINW=216,TOUCH='(hover:none),(pointer:coarse),(max-width:900px)';
 const KEYMAP={ArrowLeft:'left',KeyA:'left',ArrowRight:'right',KeyD:'right',ArrowUp:'jump',KeyW:'jump',Space:'jump',ArrowDown:'drop',KeyS:'drop',KeyJ:'attack',KeyK:'attack',KeyE:'interact'};
-const V={rt:null,raf:0,acc:0,last:0,held:new Set(),press:new Set(),panel:null,t:0,frames:0,ms:0};
+const V={vw:VW,scale:0,portrait:false,rt:null,raf:0,acc:0,last:0,held:new Set(),press:new Set(),panel:null,frames:0,ms:0,calls:0,anim:new WeakMap(),sheet:new WeakMap(),warned:new Set()};
 const E=()=>AW.engine;
 // ---- input: ค้าง (held) + เพิ่งกด (press ใช้ครั้งเดียวต่อ fixed step แรก) ----
 function input(){const h=V.held,p=V.press,i={left:h.has('left'),right:h.has('right'),jump:h.has('jump'),drop:h.has('drop'),jumpPressed:p.has('jump'),attackPressed:p.has('attack'),interactPressed:p.has('interact')};p.clear();return i}
 function down(a){if(!V.held.has(a))V.press.add(a);V.held.add(a)}
 function up(a){V.held.delete(a)}
-function onKey(e){if(!V.rt)return;if(e.code==='Escape'||e.key==='Escape'){e.preventDefault();e.stopImmediatePropagation();if(e.type==='keydown')esc_();return}
- const a=KEYMAP[e.code];if(!a)return;if(e.target&&/INPUT|TEXTAREA|SELECT/.test(e.target.tagName))return;e.preventDefault();e.stopImmediatePropagation();
- if(V.panel&&e.type==='keydown'){if(a==='interact'&&V.panel.kind!=='talk')closePanel();return}e.type==='keydown'?down(a):up(a)}
-function esc_(){if(V.panel&&V.panel.kind!=='event')closePanel();else if(!E().events.pending())close()}
+function onKey(e){if(!V.rt)return;const dn=e.type==='keydown';
+ if(e.code==='Escape'||e.key==='Escape'){e.preventDefault();e.stopImmediatePropagation();if(dn&&!e.repeat)esc_();return}
+ const a=KEYMAP[e.code];if(!a)return;if(e.target&&/INPUT|TEXTAREA|SELECT/.test(e.target.tagName))return;
+ // หน้าต่างเปิดอยู่: Space/Enter/Tab เป็นของปุ่มใน dialog (ไม่ดักไว้) · E ปิดหน้าต่างผลลัพธ์
+ if(V.panel){if(a==='interact'){e.preventDefault();e.stopImmediatePropagation();if(dn&&!e.repeat&&V.panel.kind==='result')closePanel()}if(!dn)up(a);return}
+ e.preventDefault();e.stopImmediatePropagation();
+ // กดค้าง (key repeat) นับเป็นค้างเท่านั้น ไม่นับเป็นกดใหม่: E ค้างหลังปิดหน้าต่างไม่เปิดซ้ำ
+ if(!dn)up(a);else if(e.repeat)V.held.add(a);else down(a)}
+function esc_(){if(V.panel){closePanel();return}if(!E().events.pending())close()}
 // ---- เปิด/ปิด ----
-function open(){const e=E();try{V.rt=new AW.sv.Explore(e).enter()}catch(x){U.toast('ทำไม่ได้: '+x.message,'bad');return false}
- let el=$('#sv');if(!el){el=document.createElement('div');el.id='sv';document.body.appendChild(el)}
- el.innerHTML=`<div class="sv-wrap" role="application" aria-label="ฉากสำรวจ side-view"><canvas id="svc" width="${VW}" height="${VH}"></canvas>
-  <div class="sv-hud" id="svhud"></div><div class="sv-prompt" id="svprompt"></div><div class="sv-log" id="svlog" aria-live="polite"></div>
-  <div class="sv-top"><button class="sm" data-sv="save" title="เซฟตำแหน่งและสถานะ">เซฟ</button><button class="sm" data-sv="exit" title="กลับหน้าหลัก (Esc)">✕ ออก</button></div>
-  <div class="sv-touch" aria-hidden="true"><div class="pad"><button data-k="left">◀</button><button data-k="right">▶</button><button data-k="drop">▼</button></div>
-  <div class="pad"><button data-k="interact">E</button><button data-k="attack">⚔</button><button data-k="jump">▲</button></div></div>
-  <div class="sv-panel" id="svpanel"></div></div>`;
- el.hidden=false;document.body.classList.add('sv-on');V.held.clear();V.press.clear();V.panel=null;V.acc=0;V.last=0;wire(el);sync();draw();V.raf=requestAnimationFrame(frame);return true}
-function close(){const rt=V.rt;V.rt=null;cancelAnimationFrame(V.raf);const el=$('#sv');if(el){el.hidden=true;el.innerHTML=''}document.body.classList.remove('sv-on');
- if(rt&&E().sv.runtime===rt)rt.exit();AW.ui.go('dashboard');AW.ui.update(true)}
-let wired=false;
-function wire(el){
- // ปุ่มสัมผัส: pointer events (นิ้วหลายนิ้วพร้อมกันได้) · ปล่อยนอกปุ่มก็นับว่าปล่อย
- el.querySelectorAll('[data-k]').forEach(b=>{const k=b.dataset.k,on=e=>{e.preventDefault();b.classList.add('on');if(V.panel){if(k==='interact'&&V.panel.kind!=='talk')closePanel();return}down(k)},off=e=>{e.preventDefault();b.classList.remove('on');up(k)};
-  b.addEventListener('pointerdown',on);b.addEventListener('pointerup',off);b.addEventListener('pointercancel',off);b.addEventListener('pointerleave',off)});
- el.addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;const d=b.dataset;
+// #sv ถูกสร้างครั้งเดียวและผูก click ครั้งเดียว (เปิด/ปิดฉากกี่รอบก็มี listener ชุดเดียว)
+function root(){let el=$('#sv');if(el)return el;el=document.createElement('div');el.id='sv';el.hidden=true;document.body.appendChild(el);
+ el.addEventListener('click',e=>{if(!V.rt)return;const b=e.target.closest('button');if(!b||b.disabled)return;const d=b.dataset;
   if(d.sv==='exit'){close();return}if(d.sv==='save'){saveHere(0);return}
   if(d.opt!==undefined){choose(+d.opt);return}if(d.ans!==undefined){answer(+d.ans);return}if(d.close!==undefined){closePanel();return}});
- if(!wired){wired=true;window.addEventListener('keydown',onKey,true);window.addEventListener('keyup',onKey,true);window.addEventListener('blur',()=>V.held.clear())}}
-// เซฟ: ปิดยอดการต่อสู้ที่ค้าง (HP) และเขียนตำแหน่งก่อน แล้วใช้ saveTo เดิม
-function sync(){const rt=V.rt;if(rt){rt.settle('retreat');rt.flush()}}
+ window.addEventListener('keydown',onKey,true);window.addEventListener('keyup',onKey,true);window.addEventListener('blur',()=>V.held.clear());
+ window.addEventListener('resize',()=>{if(V.rt)fit()});return el}
+const PAD=(side,keys)=>`<div class="sv-touch ${side}" aria-hidden="true">${keys.map(([k,t])=>`<button data-k="${k}" tabindex="-1">${t}</button>`).join('')}</div>`;
+function open(){if(V.rt)return true;const e=E();let rt;try{rt=new AW.sv.Explore(e).enter()}catch(x){U.toast('ทำไม่ได้: '+x.message,'bad');return false}
+ const el=root();V.rt=rt;
+ el.innerHTML=`<div class="sv-stage">${PAD('l',[['left','◀'],['right','▶'],['drop','▼']])}
+  <div class="sv-wrap" id="svwrap" role="application" aria-label="ฉากสำรวจ side-view" tabindex="-1"><canvas id="svc" width="${VW}" height="${VH}"></canvas></div>
+  <div class="sv-hud" id="svhud"></div>
+  <div class="sv-top"><button class="sm" data-sv="save" title="เซฟตำแหน่งและสถานะลงช่อง 0">เซฟ</button><button class="sm" data-sv="exit" title="กลับหน้าหลัก (Esc)">✕ ออก</button></div>
+  <div class="sv-msg"><div class="sv-prompt" id="svprompt"></div><div class="sv-log" id="svlog" aria-live="polite"></div></div>
+  ${PAD('r',[['interact','E'],['attack','⚔'],['jump','▲']])}</div><div class="sv-panel" id="svpanel"></div>`;
+ // ปุ่มสัมผัส: pointer events (หลายนิ้วพร้อมกันได้) · ปล่อยนอกปุ่มก็นับว่าปล่อย · ปุ่มถูกสร้างใหม่ทุกครั้งที่เปิด listener จึงไม่สะสม
+ el.querySelectorAll('[data-k]').forEach(b=>{const k=b.dataset.k,on=ev=>{ev.preventDefault();b.classList.add('on');if(V.panel){if(k==='interact'&&V.panel.kind==='result')closePanel();return}down(k)},off=ev=>{ev.preventDefault();b.classList.remove('on');up(k)};
+  b.addEventListener('pointerdown',on);b.addEventListener('pointerup',off);b.addEventListener('pointercancel',off);b.addEventListener('pointerleave',off)});
+ // หน้าเกมด้านหลังรับ focus/คลิกไม่ได้ระหว่างอยู่ในฉาก (Tab ไม่หลุดไปกดเมนู/โหลดเซฟ)
+ const app=$('#app');if(app)app.inert=true;el.hidden=false;document.body.classList.add('sv-on');$('#svwrap').focus();
+ V.held.clear();V.press.clear();V.panel=null;V.acc=0;V.last=0;fit();V.raf=requestAnimationFrame(frame);return true}
+// จัดขนาดฉากตามจอ: แนวตั้งบนจอสัมผัส = HUD แถวบน · ภาพเกม · ข้อความ · ปุ่ม (ไม่ซ้อนกัน) · แนวนอน/เดสก์ท็อป = แบบเดิม (มุมกล้อง 576 กว้างเต็มที่)
+// แนวตั้ง: scale = ใหญ่สุดที่ทั้งความสูงที่เหลือและความกว้าง MINW พอดี ปัดลงให้ scale x devicePixelRatio เป็นจำนวนเต็ม · มุมกล้อง = ความกว้างจอ / scale (ไม่เกิน 576)
+function fit(){const el=$('#sv'),st=el&&el.querySelector('.sv-stage'),wrap=$('#svwrap'),cv=$('#svc');if(!V.rt||!wrap)return;
+ const W=innerWidth,H=innerHeight,portrait=H>=W&&matchMedia(TOUCH).matches;el.classList.toggle('sv-portrait',portrait);V.portrait=portrait;let vw=VW;
+ if(portrait){wrap.style.width=wrap.style.height='';const cs=getComputedStyle(el),pad=parseFloat(cs.paddingTop)+parseFloat(cs.paddingBottom),
+   rest=st.getBoundingClientRect().height-wrap.getBoundingClientRect().height,dpr=devicePixelRatio||1;
+  let s=Math.min((H-pad-rest)/VH,W/MINW);s=Math.max(1,Math.floor(s*dpr))/dpr;vw=Math.min(VW,Math.floor(W/s));
+  wrap.style.width=vw*s+'px';wrap.style.height=VH*s+'px';V.scale=s}
+ else{wrap.style.width=wrap.style.height='';V.scale=wrap.getBoundingClientRect().width/VW}
+ if(cv.width!==vw)cv.width=vw;V.vw=vw;V.rt.setView(vw,VH);draw();placePanel()}
+// หน้าต่างคุยเริ่มใต้ HUD/ปุ่มเซฟ เสมอ จึงไม่ทับข้อมูลบนสุด
+function placePanel(){const el=$('#sv'),h=$('#svhud'),t=el&&el.querySelector('.sv-top');if(!h||!t)return;const top=Math.max(h.getBoundingClientRect().bottom,t.getBoundingClientRect().bottom)-el.getBoundingClientRect().top+8;
+ if(V.top!==top){V.top=top;el.style.setProperty('--svtop',Math.round(top)+'px')}}
+// ปิดฉาก: หยุดลูปวาด คืนหน้าเกม · exit ของ runtime ถูกเรียกเฉพาะเมื่อ runtime ยังทำงาน (ถ้าถูกยกเลิกเพราะโหลดเซฟ/เกมใหม่ จะไม่เขียนอะไรเพิ่ม)
+function close(){const rt=V.rt;if(!rt)return false;V.rt=null;cancelAnimationFrame(V.raf);V.raf=0;V.panel=null;V.held.clear();V.press.clear();
+ const el=$('#sv');if(el){el.hidden=true;el.innerHTML='';el.classList.remove('sv-portrait')}V.vw=VW;V.portrait=false;document.body.classList.remove('sv-on');const app=$('#app');if(app)app.inert=false;
+ if(rt.active)rt.exit();AW.ui.go('dashboard');AW.ui.update(true);const b=$('#svgo button');if(b)b.focus();return true}
+// เซฟ: ปิดยอดการต่อสู้ที่ค้างและเขียนตำแหน่งก่อน แล้วใช้ saveTo เดิม
+function sync(){const rt=V.rt;if(rt&&rt.active){rt.settle('retreat');rt.flush()}}
 function saveHere(slot){try{sync();E().saveTo(slot);U.toast('เซฟช่อง '+slot+' แล้ว (ตำแหน่ง: '+V.rt.a.name+')','good')}catch(x){U.toast('เซฟไม่ได้: '+x.message,'bad')}}
-// ---- loop: fixed step 60 Hz + accumulator · หยุดเดินเมื่อมีหน้าต่างเปิด ----
-function frame(ts){if(!V.rt)return;const e=E();if(e.sv.runtime!==V.rt||!e.player.get().alive){close();return}
+// ---- loop: fixed step 60 Hz + accumulator · หยุดเดินเมื่อมีหน้าต่างเปิด · ไม่จองเฟรมถัดไปหลังปิดฉาก ----
+function frame(ts){V.calls++;if(!V.rt)return;const e=E();if(e.sv.runtime!==V.rt||!e.player.get().alive){close();return}
  if(!V.last)V.last=ts;V.acc=Math.min(V.acc+(ts-V.last),250);V.last=ts;const t0=performance.now();let n=0;
- while(V.acc>=DT){V.acc-=DT;if(!V.panel)stepOnce();n++}if(n){draw();V.frames++;V.ms+=performance.now()-t0}V.raf=requestAnimationFrame(frame)}
+ while(V.acc>=DT&&V.rt){V.acc-=DT;if(!V.panel)stepOnce();n++}
+ if(n&&V.rt){paint();V.frames++;V.ms+=performance.now()-t0}if(V.rt)V.raf=requestAnimationFrame(frame)}
+// วาดหนึ่งเฟรม: ข้อผิดพลาดตอนวาดถูกรายงานครั้งเดียวต่อข้อความ และไม่ทำให้ลูปหยุด
+function paint(){try{draw()}catch(x){const m=String(x&&x.message||x);if(!V.warned.has(m)){V.warned.add(m);E().debug.error('side-view draw: '+m)}}}
 function stepOnce(){const rt=V.rt,r=rt.step(input());if(r==='talk')openTalk();else if(r==='door'){U.toast('มาถึง '+rt.a.name);V.held.clear()}
- else if(r==='left'){close();return}else if(typeof r==='string'&&r.startsWith('locked:'))U.toast(r.slice(7),'bad');
+ else if(typeof r==='string'&&r.startsWith('locked:'))U.toast(r.slice(7),'bad');
  if(E().events.pending()&&!V.panel)V.panel={kind:'event'}}
 // ทดสอบอัตโนมัติ: เดิน n เฟรมด้วย input ที่กำหนด (ไม่รอ requestAnimationFrame)
 function advance(n=1,inp={}){for(let i=0;i<n&&V.rt;i++){for(const k of['left','right','jump','drop'])inp[k]?V.held.add(k):V.held.delete(k);if(i===0)for(const k of['jump','attack','interact'])if(inp[k+'Pressed'])V.press.add(k);if(!V.panel)stepOnce()}V.held.clear();if(V.rt)draw();return V.rt}
 // ---- หน้าต่างคุย / เหตุการณ์ / ผลลัพธ์ ----
-function openTalk(){const rt=V.rt,n=E().npcs.get(rt.talk);V.panel={kind:'talk',npc:rt.talk,opts:rt.talkOptions()};V.held.clear();
- if(!n){V.panel=null;return}draw()}
+function openTalk(){const rt=V.rt,n=E().npcs.get(rt.talk);V.held.clear();if(!n){rt.talk=null;return}V.panel={kind:'talk',npc:rt.talk,opts:rt.talkOptions()}}
 function choose(i){const rt=V.rt,P=V.panel;if(!P||P.kind!=='talk')return;const o=P.opts[i];if(!o||o.why)return;
- try{const r=rt.choose(o,P.npc);V.panel=o.kind==='event'?{kind:'event'}:{kind:'result',r}}catch(x){V.panel={kind:'result',r:{title:'ทำไม่ได้',text:x.message,success:false}}}draw()}
-function answer(i){try{const r=E().events.answer(i);V.panel=r&&r.text?{kind:'result',r}:null}catch(x){U.toast('ทำไม่ได้: '+x.message,'bad')}if(E().events.pending())V.panel={kind:'event'};draw()}
-function closePanel(){if(V.panel&&V.panel.kind==='event'&&E().events.pending())return;if(V.panel&&V.panel.kind==='talk')V.rt.talk=null;V.panel=null;V.held.clear();draw()}
+ try{const r=rt.choose(o,P.npc);V.panel=o.kind==='event'?{kind:'event'}:{kind:'result',r}}catch(x){V.panel={kind:'result',r:{title:'ทำไม่ได้',text:x.message,success:false}}}paint()}
+function answer(i){const P=V.panel;if(!P||P.kind!=='event'||!E().events.pending())return;
+ try{const r=E().events.answer(i);V.panel=r&&r.text?{kind:'result',r}:null}catch(x){U.toast('ทำไม่ได้: '+x.message,'bad')}if(E().events.pending())V.panel={kind:'event'};paint()}
+function closePanel(){if(V.panel&&V.panel.kind==='event'&&E().events.pending())return;if(V.panel&&V.panel.kind==='talk'&&V.rt)V.rt.talk=null;V.panel=null;V.held.clear();V.press.clear();const w=$('#svwrap');if(w)w.focus();paint()}
 function panelHtml(){const P=V.panel,e=E();if(!P)return'';
- if(P.kind==='talk'){const n=e.npcs.get(P.npc);return `<div class="dialog sv-dlg" role="dialog" aria-label="คุยกับ ${esc(n.name)}"><h3>${esc(n.name)}</h3><div class="actions">${P.opts.map((o,i)=>`<button data-opt="${i}" ${o.why?'disabled':''} title="${esc(o.why)}">${esc(o.name)}${o.kind==='event'?' ★':''}${o.why?` <small>(${esc(o.why)})</small>`:''}</button>`).join('')}<button class="ghost" data-close>ไว้ก่อน</button></div></div>`}
- if(P.kind==='event'){const p=e.events.pending();if(!p)return'';const who=p.who&&e.npcs.get(p.who);return `<div class="dialog sv-dlg" role="dialog" aria-label="${esc(p.def.title)}"><h3>${esc(p.def.title)}</h3><p>${esc(e.events.fmt(p.def.text||'',p.who))}</p>
+ if(P.kind==='talk'){const n=e.npcs.get(P.npc);return `<div class="dialog sv-dlg" role="dialog" aria-modal="true" aria-label="คุยกับ ${esc(n.name)}"><h3>${esc(n.name)}</h3><div class="actions">${P.opts.map((o,i)=>`<button data-opt="${i}" ${o.why?'disabled':''} title="${esc(o.why)}">${esc(o.name)}${o.kind==='event'?' ★':''}${o.why?` <small>(${esc(o.why)})</small>`:''}</button>`).join('')}<button class="ghost" data-close>ไว้ก่อน</button></div></div>`}
+ if(P.kind==='event'){const p=e.events.pending();if(!p)return'';const who=p.who&&e.npcs.get(p.who);return `<div class="dialog sv-dlg" role="dialog" aria-modal="true" aria-label="${esc(p.def.title)}"><h3>${esc(p.def.title)}</h3><p>${esc(e.events.fmt(p.def.text||'',p.who))}</p>
   <div class="actions">${e.events.choices().map(c=>`<button data-ans="${c.i}" ${c.ok?'':'disabled'}>${esc(c.text)}${c.chance!=null&&c.chance<1?` <small>(${Math.round(c.chance*100)}%)</small>`:''}</button>`).join('')}</div>${who?`<small class="dim">กับ ${esc(who.name)}</small>`:''}</div>`}
- const r=P.r||{};return `<div class="dialog sv-dlg" role="dialog"><h3>${esc(r.title||'ผลลัพธ์')}</h3><p class="${r.success===false?'bad':''}">${esc(r.text||'')}</p>${(r.effects||[]).length?`<p><small>${esc(r.effects.join(' · '))}</small></p>`:''}<button class="pri" data-close>ตกลง (E)</button></div>`}
-// ---- วาด ----
+ const r=P.r||{};return `<div class="dialog sv-dlg" role="dialog" aria-modal="true"><h3>${esc(r.title||'ผลลัพธ์')}</h3><p class="${r.success===false?'bad':''}">${esc(r.text||'')}</p>${(r.effects||[]).length?`<p><small>${esc(r.effects.join(' · '))}</small></p>`:''}<button class="pri" data-close>ตกลง (E)</button></div>`}
+// ---- ภาพจริงจาก Asset Registry ----
+// คืนภาพเมื่อ: registry บอกว่าใช้ได้ (มี src+license) · pipeline โหลดสำเร็จ · ภาพถอดรหัสได้ · แผ่นใหญ่พอสำหรับเฟรมที่ metadata อ้าง · ไม่งั้นคืน null = วาด placeholder
+function realImg(e,id,needW,needH){if(!AW.ui.assets.ready(id))return null;const im=e.assets.get(id);if(!(im&&im.complete&&im.naturalWidth>0))return null;
+ let ok=V.sheet.get(im);if(ok===undefined){ok=im.naturalWidth>=needW&&im.naturalHeight>=needH;V.sheet.set(im,ok);if(!ok)e.debug.error(`asset ${id}: แผ่นภาพ ${im.naturalWidth}x${im.naturalHeight} เล็กกว่าที่ metadata ต้องการ ${needW}x${needH} ใช้ placeholder แทน`)}
+ return ok?im:null}
+// ขนาดแผ่นขั้นต่ำที่ท่าทั้งหมดใน metadata อ้างถึง (คำนวณครั้งเดียวต่อ asset)
+const NEEDC=new Map(),sheetNeed=d=>{let n=NEEDC.get(d.id);if(!n){let c=1,r=1;for(const a of Object.values(d.anims)){c=Math.max(c,a.frames);r=Math.max(r,a.row+1)}n=[c*d.frame.w,r*d.frame.h];NEEDC.set(d.id,n)}return n};
 const PAL={school:['#9fd3ff','#cfe9ff','#6f8fa8','#c9b38a'],city:['#7fb2e8','#b7d3f0','#555f78','#8d8f99'],gate_zone:['#1a2350','#2e3a7a','#2a2f44','#4b4f63']};
-function draw(){const rt=V.rt,c=$('#svc');if(!rt||!c)return;const g=c.getContext('2d'),e=E(),a=rt.a,cam=rt.cam,pal=PAL[a.id]||PAL.city,ns=e.worlds.ctx(rt.w).def.assetNs;V.t++;g.imageSmoothingEnabled=false;
+// พื้นและแพลตฟอร์มจาก tileset: ช่อง top/fill/platform ตาม metadata · วาดเฉพาะช่องที่อยู่ในจอ
+function ground(g,e,a,cam,pal,id){const d=e.assets.defs.get(id),sh=d&&d.sheet,im=d&&d.tile&&d.tiles&&sh?realImg(e,id,sh.cols*d.tile.w,sh.rows*d.tile.h):null;
+ if(!im){for(const s of a.solids){g.fillStyle=pal[3];g.fillRect(s.x,s.y,s.w,s.h);g.fillStyle='rgba(0,0,0,.18)';for(let x=s.x;x<s.x+s.w;x+=16)g.fillRect(x,s.y,1,s.h);g.fillStyle='rgba(255,255,255,.25)';g.fillRect(s.x,s.y,s.w,2)}
+  for(const p of a.platforms||[]){g.fillStyle=pal[3];g.fillRect(p.x,p.y,p.w,6);g.fillStyle='rgba(0,0,0,.3)';g.fillRect(p.x,p.y+6,p.w,2)}
+  g.fillStyle='rgba(255,59,154,.8)';g.font='8px monospace';g.fillText('PLACEHOLDER '+id,Math.max(4,cam.x+4),318);return false}
+ const VW=V.vw,tw=d.tile.w,th=d.tile.h,T=d.tiles,row=(i,x0,x1,y,hMax)=>{const sx=(i%sh.cols)*tw,sy=Math.floor(i/sh.cols)*th;for(let x=x0+Math.max(0,Math.floor((cam.x-x0)/tw))*tw;x<x1&&x<cam.x+VW;x+=tw){const w=Math.min(tw,x1-x),h=Math.min(th,hMax);g.drawImage(im,sx,sy,w,h,x,y,w,h)}};
+ for(const s of a.solids)for(let y=s.y;y<s.y+s.h;y+=th)row(y===s.y?T.top:T.fill,s.x,s.x+s.w,y,s.y+s.h-y);
+ for(const p of a.platforms||[])row(T.platform,p.x,p.x+p.w,p.y,th);return true}
+// ---- วาด ----
+function draw(){const rt=V.rt,c=$('#svc');if(!rt||!c)return;const g=c.getContext('2d'),e=E(),a=rt.a,cam=rt.cam,pal=PAL[a.id]||PAL.city,ns=rt.ns;g.imageSmoothingEnabled=false;
  // ฉากหลัง: layer ไกล -> ใกล้ (parallax) · ไฟล์จริงถ้ามี ไม่งั้นท้องฟ้า+ตึกแบน
- const sky=g.createLinearGradient(0,0,0,VH);sky.addColorStop(0,pal[0]);sky.addColorStop(1,pal[1]);g.fillStyle=sky;g.fillRect(0,0,VW,VH);
- (a.layers||[]).slice().reverse().forEach((k,li)=>{const id=ns+'.'+k,f=0.2+li*0.25,ox=-cam.x*f;if(e.assets.status(id)==='real'){const im=e.assets.get(id);if(im.complete!==false){const w=VW*1.2;for(let x=ox%w;x<VW;x+=w)g.drawImage(im,x,0,w,VH)}return}
+ const VW=V.vw,sky=g.createLinearGradient(0,0,0,VH);sky.addColorStop(0,pal[0]);sky.addColorStop(1,pal[1]);g.fillStyle=sky;g.fillRect(0,0,VW,VH);
+ (a.layers||[]).slice().reverse().forEach((k,li)=>{const id=ns+'.'+k,f=0.2+li*0.25,ox=-cam.x*f,im=realImg(e,id,1,1);if(im){const w=VW*1.2;for(let x=ox%w;x<VW;x+=w)g.drawImage(im,x,0,w,VH);return}
   g.fillStyle=li?pal[2]+'cc':pal[2]+'88';for(let i=0;i<40;i++){const bw=60+(i*37)%70,bh=60+(i*53)%(110+li*40),x=ox+i*(bw+30)*(1+li*0.3);if(x>VW||x+bw<0)continue;g.fillRect(Math.round(x),296-bh-(li?0:30),bw,bh+(li?0:30))}});
- g.save();g.translate(-cam.x,-cam.y);
- // พื้น/แพลตฟอร์ม (tileset)
- const tile=ns+'.'+a.tileset,real=e.assets.status(tile)==='real';
- for(const s of a.solids){g.fillStyle=pal[3];g.fillRect(s.x,s.y,s.w,s.h);g.fillStyle='rgba(0,0,0,.18)';for(let x=s.x;x<s.x+s.w;x+=16)g.fillRect(x,s.y,1,s.h);g.fillStyle='rgba(255,255,255,.25)';g.fillRect(s.x,s.y,s.w,2)}
- for(const p of a.platforms||[]){g.fillStyle=pal[3];g.fillRect(p.x,p.y,p.w,6);g.fillStyle='rgba(0,0,0,.3)';g.fillRect(p.x,p.y+6,p.w,2)}
- if(!real){g.fillStyle='rgba(255,59,154,.8)';g.font='8px monospace';g.fillText('PLACEHOLDER '+tile,Math.max(4,cam.x+4),318)}
+ g.save();g.translate(-cam.x,-cam.y);ground(g,e,a,cam,pal,ns+'.'+a.tileset);
  // ประตู
  for(const d of a.doors){const lock=!e.player.canEnter(d.to);g.fillStyle=lock?'#5a2a35':'#2d6b8f';g.fillRect(d.x-14,256,28,40);g.fillStyle=lock?'#ff5c6c':'#4cc3ff';g.fillRect(d.x-14,256,28,3);g.font='9px sans-serif';g.textAlign='center';g.fillStyle='#fff';g.fillText(d.label+(lock?' (ล็อก)':''),d.x,250);g.textAlign='left'}
- // NPC · ศัตรู · ผู้เล่น
- for(const n of rt.npcs)sprite(g,e,n.gender==='f'?'hunter.sv.npc_f':'hunter.sv.npc_m',n,'idle','#8fd18f',n.name);
- for(const f of rt.foes){sprite(g,e,'hunter.sv.goblin',f,f.dead?'death':f.hurt>0?'hurt':f.wind>0?'attack':'walk','#7fbf3f','',f.dir);
+ // NPC ทุกคนในพื้นที่ (วาดเฉพาะที่อยู่ในจอ) · คนเยอะ: แสดงชื่อเฉพาะคนที่อยู่ใกล้ผู้เล่น
+ const me=rt.me,mx=me.x+me.w/2,few=rt.npcs.length<=6;
+ for(const n of rt.npcs){if(n.x+n.w<cam.x-8||n.x>cam.x+VW+8)continue;sprite(g,e,n,'idle','#8fd18f',few||Math.abs(n.x+n.w/2-mx)<70?n.name:'',n.facing)}
+ for(const f of rt.foes){sprite(g,e,f,f.dead?'death':f.hurt>0?'hurt':f.wind>0?'attack':Math.abs(f.vx)>5?'walk':'idle','#7fbf3f','',f.dir);
   if(!f.dead){g.fillStyle='#000a';g.fillRect(f.x,f.y-8,f.w,4);g.fillStyle='#ff5c6c';g.fillRect(f.x,f.y-8,f.w*f.hp/f.max,4);if(f.wind>0){g.fillStyle='#ffd34d';g.fillText('!',f.x+f.w/2-2,f.y-12)}}}
- const me=rt.me,pid=e.player.get().gender==='f'?'shared.sv.player_f':'shared.sv.player_m';if(!(me.inv>0&&V.t%6<3))sprite(g,e,pid,me,AW.sv.animOf(me),'#4cc3ff','',me.facing);
- if(me.attack>0.1&&me.attack<0.22){g.fillStyle='rgba(255,255,255,.7)';g.fillRect(me.facing>0?me.x+me.w:me.x-34,me.y+16,34,4)}
+ if(!(me.inv>0&&rt.t%6<3))sprite(g,e,me,AW.sv.animOf(me),'#4cc3ff','',me.facing);
+ if(rt.swinging()){g.fillStyle='rgba(255,255,255,.7)';g.fillRect(me.facing>0?me.x+me.w:me.x-34,me.y+16,34,4)}
  g.restore();hud()}
-// sprite: ไฟล์จริง = ตัดเฟรมตาม metadata (frame/anchor/anims) · placeholder = กล่องตาม bbox + ป้ายท่า
-function sprite(g,e,id,b,anim,col,label,facing=-1){const d=e.assets.defs.get(id),fx=b.x+b.w/2,fy=b.y+b.h;
- if(d&&e.assets.status(id)==='real'){const im=e.assets.get(id),an=(d.anims||{})[anim]||(d.anims||{}).idle,fr=Math.floor(V.t/60*an.fps)%an.frames;g.save();g.translate(Math.round(fx),Math.round(fy));if(facing<0)g.scale(-1,1);
-  g.drawImage(im,fr*d.frame.w,an.row*d.frame.h,d.frame.w,d.frame.h,-d.anchor.x,-d.anchor.y,d.frame.w,d.frame.h);g.restore()}
+// sprite: ไฟล์จริง = ตัดเฟรมตาม metadata (frame/anchor/anims) จุดเท้าของเฟรมวางที่กึ่งกลางล่างของกล่องชน · placeholder = กล่องตามกล่องชน
+// เวลาแอนิเมชันนับจาก step ของ runtime ตั้งแต่เปลี่ยนท่า: ท่าวน (loop) วนซ้ำ · ท่าไม่วนเล่นจากเฟรมแรกแล้วค้างเฟรมสุดท้าย
+function sprite(g,e,b,anim,col,label,facing=-1){const id=b.sprite,d=e.assets.defs.get(id),fx=b.x+b.w/2,fy=b.y+b.h,rt=V.rt;let st=V.anim.get(b);if(!st||st.a!==anim){st={a:anim,t:rt.t};V.anim.set(b,st)}
+ const need=d&&d.frame&&d.anims?sheetNeed(d):null,im=need?realImg(e,id,need[0],need[1]):null;
+ if(im){const an=d.anims[anim]||d.anims.idle,el=(rt.t-st.t)/60,k=Math.floor(el*an.fps),fr=an.loop?k%an.frames:Math.min(an.frames-1,k);g.save();g.translate(Math.round(fx),Math.round(fy));if(facing<0)g.scale(-1,1);
+  g.drawImage(im,fr*d.frame.w,an.row*d.frame.h,d.frame.w,d.frame.h,-d.anchor.x,-(d.anchor.y+1),d.frame.w,d.frame.h);g.restore()}
  else{const sq=anim==='jump'?3:anim==='fall'?-2:0;g.fillStyle=anim==='hurt'?'#ff5c6c':anim==='death'?'#555':col;g.fillRect(Math.round(b.x)-sq/2,Math.round(b.y)+sq,b.w+sq,b.h-sq);
   g.fillStyle='#0b0f1a';g.fillRect(Math.round(fx+(facing>0?3:-6)),Math.round(b.y)+8,3,3)}
  if(label){g.font='9px sans-serif';g.textAlign='center';g.fillStyle='#fff';g.fillText(label,fx,b.y-4);g.textAlign='left'}}
-function hud(){const rt=V.rt,e=E(),p=e.player.get(),slot=U.SLOT[e.npcs.clock(rt.w).slot],near=rt.nearby();
- const h=$('#svhud');if(h){const html=`<div class="sv-name">${esc(rt.a.name)} <small>${esc(slot)}</small></div><div class="sv-bars"><span>HP ${Math.max(0,Math.round(rt.hp))}/${rt.maxHp}</span>${U.bar('hp',rt.hp,rt.maxHp)}<span>AP ${p.ap}</span><span class="sv-ap">${'◆'.repeat(Math.max(0,p.ap))}${'◇'.repeat(Math.max(0,3-p.ap))}</span></div>`;if(h.__h!==html){h.innerHTML=html;h.__h=html}}
+function hud(){const rt=V.rt,e=E(),p=e.player.get(),slot=U.SLOT[e.npcs.clock(rt.w).slot],near=rt.nearby(),hp=Math.max(0,Math.round(rt.hp)),mx=rt.maxHp,why=rt.foes.length?rt.fightWhy():'';
+ const h=$('#svhud');if(h){const html=`<div class="sv-name">${esc(rt.a.name)} <small>${esc(slot)}</small></div><div class="sv-bars"><span>HP ${hp}/${mx}</span>${U.bar('hp',hp,mx)}<span>AP ${p.ap}</span><span class="sv-ap">${'◆'.repeat(Math.max(0,p.ap))}${'◇'.repeat(Math.max(0,3-p.ap))}</span></div>${why?`<div class="sv-warn">ต่อสู้ไม่ได้: ${esc(why)}</div>`:''}`;if(h.__h!==html){h.innerHTML=html;h.__h=html;placePanel()}}
  const pr=$('#svprompt');if(pr){const t=V.panel?'':near?`[E] ${near.label}`:'';if(pr.textContent!==t)pr.textContent=t}
  const lg=$('#svlog');if(lg){const t=rt.msg.slice(-3).join(' · ');if(lg.textContent!==t)lg.textContent=t}
  const pn=$('#svpanel');if(pn){const html=panelHtml();if(pn.__h!==html){pn.innerHTML=html;pn.__h=html;const f=pn.querySelector('button:not([disabled])');if(f)f.focus()}}}
-AW.ui.sv={open,close,advance,sync,active:()=>!!V.rt,rt:()=>V.rt,panel:()=>V.panel,stats:()=>({frames:V.frames,ms:V.ms})};
+AW.ui.sv={open,close,advance,sync,fit,active:()=>!!V.rt,rt:()=>V.rt,panel:()=>V.panel,stats:()=>({frames:V.frames,ms:V.ms,calls:V.calls}),layout:()=>({portrait:V.portrait,view:V.vw,scale:V.scale})};
 })(globalThis.AW);
 
 // ==== src/ui/app.js ====

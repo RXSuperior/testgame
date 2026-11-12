@@ -8,6 +8,16 @@
 - School and gate zone are not directly connected: their existing entry rules exclude each other, so the route goes through the city.
 - No changes to src/core, the combat contract, the mission validator or the save format.
 
+### Bug fix and stabilization (after code audit, not committed yet)
+- HP has one source of truth (`player.hp`); the scene no longer overwrites HP or sends combat reports without a fight.
+- One click listener for the scene; load or new game during a scene no longer freezes time; the game page behind the scene is inert.
+- Talk events belong to one NPC. Every NPC at the location is shown.
+- Fights: 1 AP per goblin, blocked by heavy injury like missions, reward only for a started fight. Goblins collide with blocks.
+- Missing or wrong-size art falls back to placeholders without stopping the loop; real tilesets are drawn; sprite metadata is validated and used.
+- Touch pads never overlap the game image. Space and Enter work in dialogs.
+- Phase 6 save fixture added. Details: docs/phase7b3/BUGFIX_REPORT.md
+- Goblins in the side-view scene give 50 EXP each for 1 AP (was 12). The goblin hunt mission is unchanged.
+
 ## Phase 7B.1 — Art Bible & asset pipeline preparation (2026-11-12)
 - Art Bible (Premium Korean Manhwa RPG), asset standards, inventory generated from code (93 assets), pilot plan with prompts for 10 images, list of art still needed.
 - Asset metadata on the existing registry entries, browser loader (missing/dimension checks, fallback, preload, lazy loading), `tools/assets.js` check and inventory tool, and the build copies referenced files.

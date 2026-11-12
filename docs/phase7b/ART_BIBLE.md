@@ -224,6 +224,12 @@ Used for everything the player controls or fights in side-view. Portraits and cu
 ### Tilesets
 - Tile 16x16. Ground tiles tile seamlessly left-right. Top edge 2 px lighter.
 - Hunter: `hunter.tile.street` (school, city), `hunter.tile.gate` (gate zone).
+- Sheet: 8 columns x 2 rows (128x32 px). The game uses three cells, named in the asset metadata (`tiles`): cell 0 = ground surface (`top`), cell 8 = ground body under the surface (`fill`), cell 1 = one-way platform (`platform`). Other cells are free for later use.
+
+### Metadata is the contract
+- The game reads `frame`, `anchor`, `bbox`, `anims` (row, frames, fps, loop, hit) and `sheet` from the asset entry. The collision box is `bbox`, the attack timing is the `attack` animation, and the file size must be `frame x sheet`.
+- `anchor` must be the bottom-centre of `bbox`. The game refuses to start a world whose sprite metadata is missing or inconsistent.
+- A file that fails to load, or is smaller than its metadata says, is replaced by the placeholder at run time and reported in the debug log.
 
 ### Pixel RPG HUD
 - Top-left framed panel: area name, time slot, HP bar, AP diamonds. 2 px border, hard drop shadow, no blur.
