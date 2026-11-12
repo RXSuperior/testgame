@@ -1,0 +1,87 @@
+# Changelog
+
+## Phase 7B.3 — Side-view vertical slice (2026-11-12)
+- Playable side-view for school street, city street and gate zone: walk, jump, one-way platforms, collision, camera follow, doors through `player.moveTo`.
+- NPCs from the real schedule, talk with E (relations actions and area events), real-time combat with one goblin type through `combat.apply`, reward once per spawn per month.
+- HUD (HP, AP, time slot), in-scene save of area and position, Esc back to Dashboard, touch controls.
+- Pixel gameplay standard in the Art Bible (64x64 frame, foot anchor, separate bbox, 7 animations); 7 new placeholder assets. No game3/a images.
+- School and gate zone are not directly connected: their existing entry rules exclude each other, so the route goes through the city.
+- No changes to src/core, the combat contract, the mission validator or the save format.
+
+### Bug fix and stabilization (after code audit, not committed yet)
+- HP has one source of truth (`player.hp`); the scene no longer overwrites HP or sends combat reports without a fight.
+- One click listener for the scene; load or new game during a scene no longer freezes time; the game page behind the scene is inert.
+- Talk events belong to one NPC. Every NPC at the location is shown.
+- Fights: 1 AP per goblin, blocked by heavy injury like missions, reward only for a started fight. Goblins collide with blocks.
+- Missing or wrong-size art falls back to placeholders without stopping the loop; real tilesets are drawn; sprite metadata is validated and used.
+- Touch pads never overlap the game image. Space and Enter work in dialogs.
+- Phase 6 save fixture added. Details: docs/phase7b3/BUGFIX_REPORT.md
+- Goblins in the side-view scene give 50 EXP each for 1 AP (was 12). The goblin hunt mission is unchanged.
+
+## Phase 7B.1 — Art Bible & asset pipeline preparation (2026-11-12)
+- Art Bible (Premium Korean Manhwa RPG), asset standards, inventory generated from code (93 assets), pilot plan with prompts for 10 images, list of art still needed.
+- Asset metadata on the existing registry entries, browser loader (missing/dimension checks, fallback, preload, lazy loading), `tools/assets.js` check and inventory tool, and the build copies referenced files.
+- No images generated. No changes to src/core, src/systems, world data or saves.
+
+## Phase 7A.1 — Responsive polish (2026-11-12)
+- Two-row header below 1366 px (stats wrap without overlapping), measured header height for sticky sidebars, icon-rail sidebar at 768–1023 px, tighter mobile header.
+- New `tests/responsive.py`: 8 widths × 17 pages (overflow, overlap, header covering content, working buttons, console errors).
+- UI only. No changes to src/core, src/systems, data or the save format.
+
+## Phase 7A — Complete UI/UX Overhaul (2026-11-11)
+- New game UI replaces the test shell: sticky header, left menu, 17 pages, right panel, special screens (combat, dungeon, events, NPC dialogue, gate travel).
+- Location Scene component (16:9) with themed placeholders. Real art plugs in through the asset manifest.
+- Responsive: desktop, tablet, mobile (bottom nav and drawer). Toasts, confirm modal, tooltips, loading and empty states. Debug only in developer mode.
+- No changes to src/core, src/systems, data or the save format.
+
+## Phase 6 — Economy, B-Rank Content & Playstyle Balance (2026-11-11)
+- Economy system: services (once/repeat/plan) priced by rank, gear wear and repair, B upgrades to +5, home upgrades, lifestyle, insurance, guild investment and sponsorship, monthly ledger. No debt: unpaid fees pause the service, safety cash floor.
+- Missions v2: Association merit with tiers and decay, repeat-mission pay cut, solo EXP bonus, party member abilities.
+- B content: 10 enemies (armor, shield, summon, drain, swarm), 11 missions incl. team raid and solo bounty, 2 dungeons (1 hidden), gear, skills, events.
+- Dungeon discoveries and explorer level. Jobs: pay rises with tenure, senior jobs.
+- Tower readiness check and NPC climbing AI (cadence, teams, rest).
+- Added the skill/item data validator that Phase 5 docs described but the code did not have.
+- Phase 2–5 saves load. No changes to src/core.
+
+## Phase 5 — Combat, Party, Dungeon & Progression (2026-11-11)
+- Combat: Auto Resolve and manual turn-based combat share one report shape. Results change the player only through `claim(id)`, once per fight. Fights are seeded and can be saved mid-fight. Risk levels normal/high/lethal with a confirm step, retreat and call-for-help.
+- Death policy: normal fights never kill; high = Critical Condition (Health); lethal only in marked manual events. NPC members are injured, never killed by combat.
+- New systems: Party (existing NPCs, roles, synergy, shares, injuries, conflict), Dungeon (seeded floors, checkpoint, mid-run save), Tower (20 floors, floors 11–20 from a data module, puzzle/choice floors, best floor), Underground (access, reputation, heat, investigation).
+- Player v3: accessory slot, gear rank requirements, upgrades, skill levels. Phase 2/3/4 saves load.
+- Content: skills, gear, 14 new enemies, rank B prep, 5 missions, 4 dungeons, tower events, party events, dark market. The last 6 events2.js events moved (twin event kept as an unresolved hook; contract kill reworked with consequences).
+- No changes to src/core.
+
+## Phase 4 — Character & Life System (2026-11-11)
+- New systems: NPC (data + seeded generation, schedules, LOD simulation), Relationships (directed, 9 types, NPC↔NPC), Family (parents, marriage, children, lineage groundwork), Health (illness, treatment, old age, death, life records), Life (housing, jobs, salary, costs, arrears, social status), Gates (discover/open/travel with cost; Debug travel kept separate).
+- Player v2: karma, traits, alive/death; relationships migrate from Player v1.
+- Rules/Events: `who` binding (`'$who'`), passive one-liners, once-per-person events, trait bonus on checks, many new conditions/effects.
+- Content: events2.js audited (62 + 3), 34 events + 22 one-liners + 3 chains moved; family/romance/life/gate events; karma/traits restored in Phase 3 events.
+- No changes to src/core.
+
+## Phase 3 — Hunter World Vertical Slice (2026-11-11)
+- Player System (shared across worlds), Rules, Rank System, Combat Resolver (auto), Event System (Ask/Answer, data only), Mission System.
+- Hunter World content in data/worlds/hunter: 8 school events and 9 hunter events moved from the old source, plus new main story, 18 actions, 10 missions, ranks E–C with clear promotion rules and exams.
+- Atomic world registration with rollback; GameState.unregister.
+- Per-world state versions + migrate hook; Phase 2 saves load (tested with a real Phase 2 save).
+- Playable UI: character creation, events, locations, actions, missions, journal.
+- docs/MULTIVERSE_POLICY.md, docs/phase3/*.
+
+## Phase 2 — World System & Multiverse Architecture (2026-11-11)
+- World System (src/systems/worlds.js), installed with engine.use(WorldsModule): register and validate worlds, lifecycle hooks, per-world state slices, gate travel, errors from world hooks isolated.
+- Test worlds: hunter (rate 1.0) and fantasy (rate 0.5) with sample locations, NPC, quest, event, gates. Not real content.
+- Core: GameState keeps orphan slices (worlds in a save that are not installed); WorldTime adds removeWorld/has and aborts a failed trip cleanly (gate:abort); world registry requires description, module, config, assetNs, storyNs.
+- Test page shows the world and gate buttons.
+
+## Phase 1.1 — Core Hardening (2026-11-11)
+- State: get() returns a deep-frozen object, so nested objects and arrays are protected too. mutate() edits a copy and freezes it as the new value (copy-on-write). Reads cost nothing; a write clones only that slice. Added state.check() for snapshot structure.
+- Save: one parse() checks JSON, fields, checksum, schema version (rejects newer), body/header match, slice types. Used by load, read, list and import. Import checks everything before writing anything, and backs up an existing slot to `.preimport`. Slot names are validated, and writes outside `mvh1:` are blocked.
+- Multiverse time: new src/core/worldtime.js (engine.time) with local time per world, exact integer remainders, instant and timed gates. Loop.tick(force) lets a timed gate run while the game is paused.
+- Added 'use strict' to state, save, loop, engine, worldtime.
+- Docs: docs/MULTIVERSE_TIME_DESIGN.md.
+- Test fixture fix: the old "missing migration" test save lacked an `at` field, which the stricter check now requires.
+
+## Phase 1 — Core Architecture (2026-11-11)
+- Added engine core: Rng, Bus, GameState, Loop, SaveSystem, Registry, AssetRegistry, Debug, Engine.
+- Added asset manifest for 4 groups (shared, hunter, fantasy, murim), all placeholders.
+- Added Phase 1 test page (src/ui/shell.js), build script, unit and browser tests.
+- Old game untouched. Only change outside this repo: corrected a stale section in game4/docs/phase0/ASSET_AUDIT.md (docs only).
